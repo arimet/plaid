@@ -191,3 +191,10 @@ class GuardProbeTest(unittest.TestCase):
         self.assertTrue(docker.sees_marker("/state", "radarr", run=run))
         self.assertEqual(run.calls[0][-5:], ["-T", "radarr", "test", "-e", "/data/.plaid"])
         self.assertFalse(docker.sees_marker("/state", "radarr", run=FakeRun(1)))
+
+
+class ComposeTimeoutTest(unittest.TestCase):
+    def test_compose_passes_its_timeout(self):
+        run = FakeRun()
+        docker.compose("/state", "up", "-d", run=run, timeout=5)
+        self.assertEqual(run.timeouts, [5])

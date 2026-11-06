@@ -59,7 +59,8 @@ def _cycle(dk, fl, state_dir: str) -> dict | None:
         if removing():  # started from the terminal container, which does not share the lock
             return None
         try:
-            dk.compose(state_dir, *(commands.get(action[0]) or action))
+            # A bind of a disk that just vanished can hang Docker: a stuck call must not stop the guard for good.
+            dk.compose(state_dir, *(commands.get(action[0]) or action), timeout=docker.HELPER_TIMEOUT)
         except DockerError as e:  # the next action, and the next round, may still fix things
             print(f"guard: {action[0]} failed: {e}", file=sys.stderr)
     status = {"disk": disk, "vpn": vpn}

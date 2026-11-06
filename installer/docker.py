@@ -129,8 +129,8 @@ def stack_exists(run: Run = default_run) -> bool:
     return bool(out.strip())
 
 
-def compose(state_dir: str, *args: str, run: Run = default_run) -> subprocess.CompletedProcess:
-    return _check(run, ["docker", "compose", "-p", PROJECT, "-f", f"{state_dir}/compose.json", *args])
+def compose(state_dir: str, *args: str, run: Run = default_run, timeout: float | None = None) -> subprocess.CompletedProcess:
+    return _check(run, ["docker", "compose", "-p", PROJECT, "-f", f"{state_dir}/compose.json", *args], timeout=timeout)
 
 
 def port_busy(port: int, run: Run = default_run) -> bool:

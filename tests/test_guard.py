@@ -91,7 +91,8 @@ class FakeDk:
             self.worker = self.worker_after < 0
         return (self.worker and name == self.WORKER, self.worker, 0)
 
-    def compose(self, state_dir, *args):
+    def compose(self, state_dir, *args, timeout=None):
+        self.timeouts = getattr(self, "timeouts", []) + [timeout]
         self.calls.append(args)
         if self.fail_on and self.fail_on in args:
             raise DockerError("No such container: g1")
@@ -184,3 +185,11 @@ class RemovalRaceTest(unittest.TestCase):
         dk.marker_state = lambda src: seen.append(flow.OPS_LOCK.locked()) or "ok"
         guard.cycle(dk, FakeFlow(), "/state")
         self.assertEqual(seen, [True])
+
+
+class HangTest(unittest.TestCase):
+    def test_every_action_has_a_timeout(self):
+        dk = FakeDk(containers={"radarr": Q()}, blind={"radarr"})
+        guard.cycle(dk, FakeFlow(), "/state")
+        self.assertEqual(len(dk.calls), 2)
+        self.assertTrue(all(t for t in dk.timeouts))

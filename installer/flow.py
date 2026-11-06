@@ -204,21 +204,25 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
 
 GUARD_FILE = "guard.json"
 GUARD_DEFAULT = {"disk": "unknown", "vpn": "off"}  # no alert until the guard has looked
+GUARD_STALE = 150  # seconds: rounds come every 30 s, so an older status means the guard is stuck or gone
 
 
 def guard_status(state_dir: str = STATE_DIR) -> dict:
     """What the guard saw last: {"disk": ok|missing|unconfirmed|unknown, "vpn": off|ok|down}."""
     try:
         with open(os.path.join(state_dir, GUARD_FILE), encoding="utf-8") as f:
-            return {**GUARD_DEFAULT, **json.load(f)}
-    except (OSError, ValueError):
+            saved = json.load(f)
+        if time.time() - float(saved.get("at", 0)) > GUARD_STALE:
+            return dict(GUARD_DEFAULT)
+        return {k: saved.get(k, v) for k, v in GUARD_DEFAULT.items()}
+    except (OSError, ValueError, TypeError, AttributeError):
         return dict(GUARD_DEFAULT)
 
 
 def save_guard_status(status: dict, state_dir: str = STATE_DIR) -> None:
     path = os.path.join(state_dir, GUARD_FILE)
     with open(path + ".tmp", "w", encoding="utf-8") as f:
-        json.dump(status, f)
+        json.dump({**status, "at": time.time()}, f)
     os.replace(path + ".tmp", path)  # the panel and the terminal never read half a file
 
 

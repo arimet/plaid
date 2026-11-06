@@ -346,3 +346,16 @@ class ConfirmDiskSafetyTest(unittest.TestCase):
         dk.write_marker = fail
         with tempfile.TemporaryDirectory() as d:
             self.assertFalse(flow.confirm_disk(settings(), dk=dk, state_dir=d))
+
+
+class StaleGuardStatusTest(unittest.TestCase):
+    def test_old_status_is_not_shown(self):
+        # The guard is stuck or its container is gone: an old "ok" must not stand for the present.
+        import time
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "guard.json"), "w") as f:
+                json.dump({"disk": "missing", "vpn": "down", "at": time.time() - 600}, f)
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off"})
+            with open(os.path.join(d, "guard.json"), "w") as f:
+                json.dump({"disk": "missing", "vpn": "down"}, f)  # no time: unknown age
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off"})
