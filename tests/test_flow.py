@@ -45,6 +45,9 @@ class FakeDocker:
     def has_device(self, path):
         return path in self.devices
 
+    def host_has_tailscale(self):
+        return False
+
     def ensure_data_dirs(self, src, puid, pgid):
         self.calls.append(("ensure", src))
 
@@ -110,7 +113,7 @@ class FlowTest(unittest.TestCase):
         self.assertTrue(self.events[-1].done)
         self.assertEqual(flow.load_settings(self.state), settings())
         self.assertTrue(flow.is_complete(self.state))
-        for name in ("compose.json", ".env", "settings.json"):
+        for name in ("compose.json", "settings.json"):
             self.assertTrue(os.path.exists(os.path.join(self.state, name)), name)
 
     def test_install_vpn_timeout(self):
@@ -167,7 +170,7 @@ class FlowTest(unittest.TestCase):
     def test_pack_state_roundtrip(self):
         self.install(settings(), FakeDocker())
         files = json.loads(base64.b64decode(flow.pack_state(self.state)))
-        self.assertEqual(set(files), {"compose.json", ".env", "settings.json"})
+        self.assertEqual(set(files), {"compose.json", "settings.json"})
 
 
 if __name__ == "__main__":
@@ -183,3 +186,26 @@ class ArchTest(unittest.TestCase):
         self.assertEqual(seen, {"dri": False})
         with open(os.path.join(state, "compose.json")) as f:
             self.assertNotIn("devices", json.load(f)["services"]["jellyfin"])
+
+
+class TailscaleFlowTest(unittest.TestCase):
+    def test_refused_when_host_already_runs_tailscale(self):
+        dk = FakeDocker()
+        dk.host_tailscale = True
+        dk.host_has_tailscale = lambda: True
+        found = flow.preflight(settings(tailscale_key="tskey-auth-x"), dk=dk)
+        self.assertEqual(found, ["err_tailscale_exists"])
+
+    def test_not_checked_without_key(self):
+        dk = FakeDocker()
+        dk.host_has_tailscale = lambda: True
+        self.assertNotIn("err_tailscale_exists", flow.preflight(settings(), dk=dk))
+
+    def test_worker_logs_out_before_removal(self):
+        state = tempfile.mkdtemp()
+        flow.install(settings(tailscale_key="tskey-auth-x"), lambda p: None, dk=FakeDocker(), state_dir=state,
+                     vpn_wait=0, arch="x86_64", configure=lambda *a, **k: {})
+        dk = FakeDocker()
+        flow.uninstall_worker(flow.pack_state(state), remove_media=False, dk=dk, work_dir=tempfile.mkdtemp())
+        logout = ("compose", "exec", "-T", "tailscale", "tailscale", "logout")
+        self.assertLess(dk.calls.index(logout), dk.calls.index(("compose", "down", "-v", "--rmi", "all", "--remove-orphans")))

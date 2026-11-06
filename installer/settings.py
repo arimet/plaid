@@ -7,8 +7,8 @@ import posixpath
 from dataclasses import asdict, dataclass, field
 
 LANGS = ("en", "fr")
-# Parents that hold everyone's data: never a stack folder, never wiped.
-_SHARED_ROOTS = {"/", "/users", "/home", "/volume1", "/mnt", "/srv", "/media", "/opt", "/var", "/root"}
+# Second-level folders that are whole disks or other people's homes (/Volumes/Disk, /mnt/usb, /home/other).
+_DISK_PARENTS = {"volumes", "mnt", "media", "home", "users"}
 
 
 @dataclass
@@ -24,6 +24,7 @@ class Settings:
     pgid: int = 1000
     home: str = ""
     platform: str = "linux"  # linux | mac | windows | synology
+    tailscale_key: str = ""  # optional: joins the machine to the user's tailnet (Linux and Synology)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -48,13 +49,14 @@ def is_absolute(path: str) -> bool:
 
 
 def is_dangerous_path(path: str, home: str) -> bool:
-    """True for a root, a shared parent, or the home folder (and its parents)."""
+    """True for anything that may hold more than the stack: a root or top-level folder (/etc, /volume2),
+    a whole disk or another home (/Volumes/Disk, /mnt/usb, /home/other), or the home folder and its parents."""
     p = _norm(path)
+    parts = [x for x in (p[2:] if _is_windows(path) else p).split("/") if x]
     if _is_windows(path):
-        drive_rest = p[2:]
-        if drive_rest in ("", "/", "/users"):
+        if not parts or (parts[0] == "users" and len(parts) <= 2):
             return True
-    elif p in _SHARED_ROOTS:
+    elif len(parts) <= 1 or (len(parts) == 2 and parts[0] in _DISK_PARENTS):
         return True
     if home:
         h = _norm(home)
@@ -83,4 +85,6 @@ def validate(s: Settings) -> list[str]:
             errors.append("err_vpn_provider")
         elif any(not s.vpn_fields.get(f, "").strip() for f in provider.fields):
             errors.append("err_vpn_fields")
+    if s.tailscale_key and not s.tailscale_key.strip().startswith("tskey-"):
+        errors.append("err_tailscale_key")
     return errors

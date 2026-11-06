@@ -34,8 +34,8 @@ def scripted(*answers):
 class CliTest(unittest.TestCase):
     def test_cli_install(self):
         flow, out = FakeFlow(), []
-        # folder (default), username, password x2, provider 1 = protonvpn, its key, time zone (default)
-        code = cli.run_install(scripted("", "zoe", "longenough", "longenough", "1", "key", ""), out.append, flow, ENV, "en")
+        # folder (default), username, password x2, provider 1 = protonvpn, its key, no Tailscale, time zone (default)
+        code = cli.run_install(scripted("", "zoe", "longenough", "longenough", "1", "key", "", ""), out.append, flow, ENV, "en")
         self.assertEqual(code, 0)
         self.assertEqual(flow.got, Settings(data_dir="/home/zoe/Plaid", username="zoe", password="longenough",
                                             vpn_provider="protonvpn", vpn_fields={"WIREGUARD_PRIVATE_KEY": "key"},
@@ -45,7 +45,7 @@ class CliTest(unittest.TestCase):
 
     def test_cli_warning_declined(self):
         flow, out = FakeFlow(found=["warn_no_vpn"]), []
-        code = cli.run_install(scripted("", "zoe", "longenough", "longenough", "0", "", ""), out.append, flow, ENV, "en")
+        code = cli.run_install(scripted("", "zoe", "longenough", "longenough", "0", "", "", ""), out.append, flow, ENV, "en")
         self.assertEqual(code, 1)
         self.assertIsNone(flow.got)
 
@@ -68,3 +68,12 @@ class CliTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TailscaleCliTest(unittest.TestCase):
+    def test_asks_key_on_linux(self):
+        flow = FakeFlow()
+        code = cli.run_install(scripted("", "zoe", "longenough", "longenough", "0", "tskey-auth-x", "", "y"),
+                               [].append, flow, ENV, "en")
+        self.assertEqual(code, 0)
+        self.assertEqual(flow.got.tailscale_key, "tskey-auth-x")

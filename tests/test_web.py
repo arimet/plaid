@@ -145,7 +145,7 @@ class WebTest(unittest.TestCase):
         _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
         _, _, html = self.req("GET", "/", headers={"Cookie": headers["Set-Cookie"].split(";")[0]})
         self.assertIn("L’installation s’est arrêtée", html)
-        self.assertNotIn(":8096", html)
+        self.assertNotIn('class="app"', html)  # no app links (texts JSON may mention ports)
         self.assertIn('name="remove_media"', html)
 
     def test_reload_during_install_shows_progress(self):
@@ -170,3 +170,30 @@ class WebTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TailscaleWebTest(WebTest):
+    def test_field_on_linux_only(self):
+        self.start(FakeFlow())
+        _, _, html = self.req("GET", "/?lang=fr")
+        self.assertIn('id="tailscale_key"', html)
+        self.assertIn("login.tailscale.com", html)
+
+    def test_no_field_on_mac(self):
+        self.server = web.make_server(0, FakeFlow(), dict(ENV, HOST_PLATFORM="mac"))
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        self.port = self.server.server_address[1]
+        _, _, html = self.req("GET", "/?lang=fr")
+        self.assertNotIn('id="tailscale_key"', html)
+
+    def test_panel_shows_remote_addresses(self):
+        s = settings()
+        s.tailscale_key = "tskey-auth-x"
+        self.start(FakeFlow(installed=s))
+        form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
+        _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
+        _, _, html = self.req("GET", "/", headers={"Cookie": headers["Set-Cookie"].split(";")[0]})
+        self.assertIn("http://plaid:8096", html)
+        self.assertNotIn("tskey-auth-x", html)

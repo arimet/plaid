@@ -39,8 +39,7 @@ class DockerTest(unittest.TestCase):
     def test_compose_args(self):
         run = FakeRun()
         docker.compose("/state", "up", "-d", run=run)
-        self.assertEqual(run.calls[0], ["docker", "compose", "-p", "arrstack", "-f", "/state/compose.json",
-                                        "--env-file", "/state/.env", "up", "-d"])
+        self.assertEqual(run.calls[0], ["docker", "compose", "-p", "arrstack", "-f", "/state/compose.json", "up", "-d"])
 
     def test_error_carries_stderr(self):
         with self.assertRaises(docker.DockerError) as ctx:
@@ -108,3 +107,12 @@ class TimeoutTest(unittest.TestCase):
         result = docker.default_run([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.5)
         self.assertEqual(result.returncode, 124)
         self.assertIn("timed out", result.stderr)
+
+
+class HostTailscaleTest(unittest.TestCase):
+    def test_detects_tailscale_interface_on_host_network(self):
+        run = FakeRun(0)
+        self.assertTrue(docker.host_has_tailscale(run=run))
+        self.assertIn("--network", run.calls[0])
+        self.assertIn("/sys/class/net/tailscale0", run.calls[0])
+        self.assertFalse(docker.host_has_tailscale(run=FakeRun(1)))

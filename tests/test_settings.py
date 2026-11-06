@@ -51,3 +51,35 @@ class RoundtripTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TailscaleSettingsTest(unittest.TestCase):
+    def test_key_format(self):
+        self.assertEqual(validate(make(tailscale_key="abc")), ["err_tailscale_key"])
+        self.assertEqual(validate(make(tailscale_key="tskey-auth-k1-xyz")), [])
+        self.assertEqual(validate(make(tailscale_key="")), [])
+
+    def test_roundtrip_keeps_key(self):
+        s = make(tailscale_key="tskey-auth-k1-xyz")
+        self.assertEqual(Settings.from_json(s.to_json()).tailscale_key, "tskey-auth-k1-xyz")
+
+    def test_old_state_without_key_still_loads(self):
+        import json
+        data = json.loads(make().to_json())
+        data.pop("tailscale_key")
+        self.assertEqual(Settings.from_json(json.dumps(data)).tailscale_key, "")
+
+
+class WholeDiskTest(unittest.TestCase):
+    # Review finding: exact-name checks let a whole disk through, which "Remove + media" would then wipe.
+    def test_disk_roots_are_dangerous(self):
+        for path in ["/Volumes/Disk", "/volume2", "/mnt/usb", "/media/disk", "/etc", "/usr", "/boot",
+                     "/home/other", "/Users/other", "/Volumes/Disk/", "/data/x/.."]:
+            self.assertTrue(is_dangerous_path(path, HOME), path)
+        for path in ["D:\\", "C:\\Users\\Other"]:
+            self.assertTrue(is_dangerous_path(path, WIN_HOME), path)
+
+    def test_folders_on_disks_are_fine(self):
+        for path in ["/Volumes/Disk/Plaid", "/volume2/Plaid", "/mnt/usb/plaid", "/srv/plaid", "/data/plaid"]:
+            self.assertFalse(is_dangerous_path(path, HOME), path)
+        self.assertFalse(is_dangerous_path("D:\\Plaid", WIN_HOME))

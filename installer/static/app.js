@@ -14,6 +14,7 @@
   if (form) {
     const sections = $$("section[data-step]", form);
     const next = $("#next"), back = $("#back");
+    const LAST = Number(form.dataset.last);  // question steps; the confirmation comes after
     let step = 1, provider = "protonvpn", warningsShown = false;
     $("#timezone").value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
@@ -21,9 +22,9 @@
       step = n;
       sections.forEach((s) => (s.hidden = Number(s.dataset.step) !== n));
       $$(".st", $("#stitches")).forEach((st, i) => (st.className = "st" + (i + 1 < n ? " on" : i + 1 === n ? " now" : "")));
-      $("#stepof").textContent = fmt(T.step_of, {n: Math.min(n, 3), total: 3});
+      $("#stepof").textContent = fmt(T.step_of, {n: Math.min(n, LAST), total: LAST});
       back.hidden = n === 1;
-      next.textContent = n === 4 ? T.btn_continue_anyway : n === 3 ? T.btn_install : T.btn_next;
+      next.textContent = n > LAST ? T.btn_continue_anyway : n === LAST ? T.btn_install : T.btn_next;
       weave(8 + (n - 1) * 10);
       const first = $("input:not([type=hidden]), button.chip[aria-checked=true]", sections[n - 1]);
       if (first) first.focus({preventScroll: true});
@@ -40,7 +41,7 @@
       return {
         data_dir: $("#data_dir").value, username: $("#username").value, password: $("#password").value,
         vpn_provider: provider || null, vpn_fields: provider ? fields : {}, timezone: $("#timezone").value,
-        lang: document.documentElement.lang,
+        lang: document.documentElement.lang, tailscale_key: $("#tailscale_key") ? $("#tailscale_key").value : "",
       };
     };
 
@@ -68,8 +69,9 @@
     pick(chips.find((c) => c.getAttribute("aria-checked") === "true"));
 
     const where = {err_dangerous_path: "data_dir", err_path_absolute: "data_dir", err_username: "username",
-                   err_password_short: "password", err_vpn_fields: "vpn", err_vpn_provider: "vpn"};
-    const stepOf = {data_dir: 1, username: 2, password: 2, vpn: 3};
+                   err_password_short: "password", err_vpn_fields: "vpn", err_vpn_provider: "vpn",
+                   err_tailscale_key: "tailscale", err_tailscale_exists: "tailscale"};
+    const stepOf = {data_dir: 1, username: 2, password: 2, vpn: 3, tailscale: 4};
 
     const check = async () => {
       const res = await post("/api/preflight", values());
@@ -78,13 +80,13 @@
         const first = data.errors[0];
         const slot = where[first.key];
         if (slot) { show(stepOf[slot]); data.errors.forEach((e) => fail(where[e.key] || "vpn", e.text)); }
-        else { renderNotes(data.errors, true); show(4); next.hidden = true; }
+        else { renderNotes(data.errors, true); show(LAST + 1); next.hidden = true; }
         return false;
       }
       if (data.warnings.length && !warningsShown) {
         renderNotes(data.warnings, false);
         warningsShown = true;
-        show(4);
+        show(LAST + 1);
         return false;
       }
       return true;
@@ -110,16 +112,16 @@
       }
       if (step === 3 && provider && $$(`.vpn-fields[data-for="${CSS.escape(provider)}"] input`).some((i) => !i.value.trim()))
         return fail("vpn", T.err_vpn_fields);
-      if (step < 3) return show(step + 1);
+      if (step < LAST) return show(step + 1);
       next.disabled = true;
       try {
-        if (step === 3 && !(await check())) return;
+        if (step === LAST && !(await check())) return;
         await install();
       } finally {
         next.disabled = false;
       }
     });
-    back.addEventListener("click", () => { clearErrors(); next.hidden = false; show(step === 4 ? 3 : step - 1); });
+    back.addEventListener("click", () => { clearErrors(); next.hidden = false; show(step - 1); });
     form.addEventListener("submit", (e) => { e.preventDefault(); next.click(); });
     form.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); next.click(); } });
 

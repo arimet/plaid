@@ -9,7 +9,7 @@ from installer.flow import Progress
 from installer.i18n import APP_NAMES, t
 from installer.settings import validate
 from installer.vpn import PROVIDERS
-from installer.web import default_data_dir, settings_from
+from installer.web import REMOTE_PLATFORMS, default_data_dir, settings_from
 
 Ask = Callable[[str], str]
 Out = Callable[[str], None]
@@ -39,6 +39,12 @@ def run_install(inp: Ask, out: Out, flow, env: dict, lang: str, secret: Ask | No
     data["vpn_provider"] = provider
     data["vpn_fields"] = {f: secret(f"{t(lang, 'vpnf_' + f.lower())}: ") for f in PROVIDERS[provider].fields} \
         if provider else {}
+    if env.get("HOST_PLATFORM", "linux") in REMOTE_PLATFORMS:
+        out("")
+        out(f"{t(lang, 'field_remote')}: {t(lang, 'remote_help')}")
+        for n, step in enumerate(t(lang, "remote_steps").split("|"), 1):
+            out(f"  {n}. {step}")
+        data["tailscale_key"] = secret(f"{t(lang, 'field_tailscale_key')} {t(lang, 'cli_skip')}: ").strip()
     tz = env.get("TZ", "UTC")
     data["timezone"] = inp(f"{t(lang, 'field_timezone')} [{tz}]: ").strip() or tz
 
@@ -74,6 +80,11 @@ def run_install(inp: Ask, out: Out, flow, env: dict, lang: str, secret: Ask | No
     out(t(lang, "prowlarr_default"))
     for step in t(lang, "prowlarr_steps").split("|"):
         out(f"  - {step}")
+    if s.tailscale_key:
+        out("")
+        out(t(lang, "remote_done_title"))
+        for step in t(lang, "remote_done_steps").split("|"):
+            out(f"  - {step}")
     return 0
 
 

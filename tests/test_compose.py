@@ -5,10 +5,10 @@ import subprocess
 import tempfile
 import unittest
 
-from installer.compose import PORTS, SERVICES, render_compose, render_env
+from installer.compose import PORTS, SERVICES, render_compose
 from installer.settings import Settings
 
-SECRET_KEY = "k'ey\"$x é"
+SECRET_KEY = "k'ey\"$x é\\"  # ends with a backslash: broke the old .env quoting
 
 
 def make(vpn=True, password="p@ss \"$x\" é"):
@@ -38,10 +38,15 @@ class ComposeTest(unittest.TestCase):
             self.assertIn(svc, c["services"])
             self.assertIn(f"{PORTS[svc]}:{PORTS[svc]}", c["services"][svc]["ports"])
 
-    def test_no_secret_in_compose(self):
-        text = json.dumps(render_compose(make(), "/srv/arr", has_dri=False), ensure_ascii=False)
-        self.assertNotIn(SECRET_KEY, text)
-        self.assertNotIn(make().password, text)
+    def test_secrets_escaped_for_compose(self):
+        env = render_compose(make(), "/srv/arr", has_dri=False)["services"]["gluetun"]["environment"]
+        self.assertEqual(env["WIREGUARD_PRIVATE_KEY"], SECRET_KEY.replace("$", "$$"))
+
+    def test_pasted_key_is_stripped(self):
+        s = make()
+        s.vpn_fields = {"WIREGUARD_PRIVATE_KEY": "  abc= \n"}
+        env = render_compose(s, "/d", has_dri=False)["services"]["gluetun"]["environment"]
+        self.assertEqual(env["WIREGUARD_PRIVATE_KEY"], "abc=")
 
     def test_labels_and_volumes(self):
         c = render_compose(make(), "/srv/arr", has_dri=False)
@@ -69,20 +74,36 @@ class ComposeTest(unittest.TestCase):
         self.assertEqual(c["services"]["radarr"]["environment"]["PUID"], "1001")
 
     @unittest.skipUnless(shutil.which("docker"), "docker missing")
-    def test_env_quoting(self):
+    def test_compose_reads_secrets_intact(self):
         s = make()
+        s.tailscale_key = "tskey-auth-$1"
         with tempfile.TemporaryDirectory() as d:
             with open(os.path.join(d, "compose.json"), "w") as f:
                 json.dump(render_compose(s, "/d", has_dri=False), f)
-            with open(os.path.join(d, ".env"), "w") as f:
-                f.write(render_env(s))
-            out = subprocess.run(["docker", "compose", "-p", "t", "-f", "compose.json", "--env-file", ".env",
-                                  "config", "--format", "json"], cwd=d, capture_output=True, text=True)
+            out = subprocess.run(["docker", "compose", "-p", "t", "-f", "compose.json", "config", "--format", "json"],
+                                 cwd=d, capture_output=True, text=True)
             self.assertEqual(out.returncode, 0, out.stderr)
-            env = json.loads(out.stdout)["services"]["gluetun"]["environment"]
+            services = json.loads(out.stdout)["services"]
             # `config` prints a compose file, where a literal "$" is written "$$".
-            self.assertEqual(env["WIREGUARD_PRIVATE_KEY"].replace("$$", "$"), SECRET_KEY)
+            self.assertEqual(services["gluetun"]["environment"]["WIREGUARD_PRIVATE_KEY"].replace("$$", "$"), SECRET_KEY)
+            self.assertEqual(services["tailscale"]["environment"]["TS_AUTHKEY"].replace("$$", "$"), "tskey-auth-$1")
 
 
-if __name__ == "__main__":
-    unittest.main()
+class TailscaleComposeTest(unittest.TestCase):
+    KEY = "tskey-auth-k1-secret"
+
+    def test_service_joins_host_network(self):
+        s = make()
+        s.tailscale_key = self.KEY
+        c = render_compose(s, "/d", has_dri=False)
+        ts = c["services"]["tailscale"]
+        self.assertEqual(ts["network_mode"], "host")
+        self.assertEqual(ts["environment"]["TS_AUTHKEY"], self.KEY)
+        self.assertEqual(ts["environment"]["TS_HOSTNAME"], "plaid")
+        self.assertIn("tailscale-state:/var/lib/tailscale", ts["volumes"])
+        self.assertEqual(c["volumes"]["tailscale-state"]["labels"]["io.arr-installer"], "1")
+
+    def test_absent_without_key(self):
+        c = render_compose(make(), "/d", has_dri=False)
+        self.assertNotIn("tailscale", c["services"])
+        self.assertNotIn("tailscale-state", c["volumes"])

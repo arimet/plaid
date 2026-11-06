@@ -7,7 +7,7 @@ import unittest
 import urllib.request
 
 from installer import apps, docker
-from installer.compose import PORTS, render_compose, render_env
+from installer.compose import PORTS, render_compose
 from installer.settings import Settings
 
 LIVE = os.environ.get("ARR_LIVE") == "1"
@@ -31,8 +31,6 @@ class LinksTest(unittest.TestCase):
         cls.state = tempfile.mkdtemp()
         with open(f"{cls.state}/compose.json", "w") as f:
             json.dump(render_compose(cls.s, cls.s.data_dir, has_dri=False), f)
-        with open(f"{cls.state}/.env", "w") as f:
-            f.write(render_env(cls.s))
         docker.ensure_data_dirs(cls.s.data_dir, cls.s.puid, cls.s.pgid)
         docker.compose(cls.state, "up", "-d")
 

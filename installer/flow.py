@@ -11,14 +11,14 @@ from dataclasses import dataclass
 from typing import Callable
 
 from installer import apps, docker
-from installer.compose import PORTS, render_compose, render_env
+from installer.compose import PORTS, render_compose
 from installer.docker import DockerError
 from installer.settings import Settings, validate
 
 STATE_DIR = os.environ.get("ARR_STATE_DIR", "/state")
 STATE_VOLUME = "arr-installer-state"
 INSTALLER_NAME = "arr-installer"
-STATE_FILES = ("compose.json", ".env", "settings.json")
+STATE_FILES = ("compose.json", "settings.json")
 VPN_WAIT = 180
 
 
@@ -60,8 +60,10 @@ def preflight(s: Settings, dk=docker) -> list[str]:
         return errors
     if dk.stack_exists():
         return ["err_stack_exists"]
-    if s.vpn_provider and s.platform in ("linux", "synology") and not dk.has_device("/dev/net/tun"):
+    if (s.vpn_provider or s.tailscale_key) and s.platform in ("linux", "synology") and not dk.has_device("/dev/net/tun"):
         return ["err_no_tun"]
+    if s.tailscale_key and dk.host_has_tailscale():
+        return ["err_tailscale_exists"]
     found = [f"err_port_busy:{port}" for port in PORTS.values() if dk.port_busy(port)]
     try:
         empty, _ = dk.dir_state(dk.host_path(s.data_dir, s.platform))
@@ -77,7 +79,7 @@ def preflight(s: Settings, dk=docker) -> list[str]:
 def _write_state(s: Settings, state_dir: str, data_source: str, has_dri: bool) -> None:
     os.makedirs(state_dir, exist_ok=True)
     files = {"compose.json": json.dumps(render_compose(s, data_source, has_dri), indent=1, ensure_ascii=False),
-             ".env": render_env(s), "settings.json": s.to_json()}
+             "settings.json": s.to_json()}
     for name, text in files.items():
         path = os.path.join(state_dir, name)
         with open(path, "w", encoding="utf-8") as f:
@@ -176,6 +178,11 @@ def uninstall_worker(payload: str, remove_media: bool, dk=docker, work_dir: str 
     for name, text in files.items():
         with open(os.path.join(work_dir, name), "w", encoding="utf-8") as f:
             f.write(text)
+    if "compose.json" in files and '"tailscale"' in files["compose.json"]:
+        try:  # take the machine off the user's tailnet before deleting its state
+            dk.compose(work_dir, "exec", "-T", "tailscale", "tailscale", "logout")
+        except docker.DockerError:
+            pass
     if "compose.json" in files:
         dk.compose(work_dir, "down", "-v", "--rmi", "all", "--remove-orphans")
     s = Settings.from_json(files["settings.json"]) if "settings.json" in files else None

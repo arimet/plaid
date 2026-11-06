@@ -1,4 +1,4 @@
-"""Builds the stack's compose.json and .env from the wizard's answers."""
+"""Builds the stack's compose.json from the wizard's answers."""
 from __future__ import annotations
 
 from installer.settings import Settings
@@ -18,6 +18,7 @@ IMAGES = {
     "prowlarr": "lscr.io/linuxserver/prowlarr:latest",
     "bazarr": "lscr.io/linuxserver/bazarr:latest",
     "gluetun": "qmcgaw/gluetun:latest",
+    "tailscale": "tailscale/tailscale:latest",
 }
 CONFIG_DIR = {"seerr": "/app/config"}  # linuxserver images all use /config
 
@@ -48,10 +49,9 @@ def render_compose(s: Settings, data_source: str, has_dri: bool) -> dict:
     if has_dri:
         services["jellyfin"]["devices"] = ["/dev/dri:/dev/dri"]
     if s.vpn_provider:
-        secrets = set(PROVIDERS[s.vpn_provider].fields)
-        env = {k: (f"${{{k}}}" if k in secrets else v)
-               for k, v in gluetun_env(s.vpn_provider, s.vpn_fields, s.timezone).items()}
-        # gluetun reads {{PORTS}} itself; compose must not see a lone "$" anywhere.
+        # Values go straight into compose.json (0600, next to settings.json): JSON keeps quotes, backslashes
+        # and accents; "$" is doubled so compose does not interpolate it. gluetun reads {{PORTS}} itself.
+        env = {k: _literal(v) for k, v in gluetun_env(s.vpn_provider, s.vpn_fields, s.timezone).items()}
         services["gluetun"] = {
             "image": IMAGES["gluetun"], "cap_add": ["NET_ADMIN"], "devices": ["/dev/net/tun:/dev/net/tun"],
             "environment": env, "ports": services["qbittorrent"].pop("ports"),
@@ -59,20 +59,20 @@ def render_compose(s: Settings, data_source: str, has_dri: bool) -> dict:
         }
         services["qbittorrent"]["network_mode"] = "service:gluetun"
         services["qbittorrent"]["depends_on"] = ["gluetun"]
-    return {
-        "services": services,
-        "volumes": {f"{svc}-config": {"labels": dict(LABELS)} for svc in SERVICES},
-        "networks": {"default": {"labels": dict(LABELS)}},
-    }
+    volumes = {f"{svc}-config": {"labels": dict(LABELS)} for svc in SERVICES}
+    if s.tailscale_key:
+        # On the host network, the whole machine joins the tailnet as "plaid": every app answers
+        # at http://plaid:<port> from the user's other Tailscale devices.
+        services["tailscale"] = {
+            "image": IMAGES["tailscale"], "network_mode": "host", "cap_add": ["NET_ADMIN", "NET_RAW"],
+            "devices": ["/dev/net/tun:/dev/net/tun"], "volumes": ["tailscale-state:/var/lib/tailscale"],
+            "environment": {"TS_AUTHKEY": _literal(s.tailscale_key.strip()), "TS_HOSTNAME": "plaid",
+                            "TS_STATE_DIR": "/var/lib/tailscale", "TS_USERSPACE": "false"},
+            "restart": "unless-stopped", "labels": dict(LABELS),
+        }
+        volumes["tailscale-state"] = {"labels": dict(LABELS)}
+    return {"services": services, "volumes": volumes, "networks": {"default": {"labels": dict(LABELS)}}}
 
 
-def _quote(value: str) -> str:
-    # Compose .env single quotes are literal except for \' (verified with `docker compose config`).
-    # ponytail: a value ending in a backslash would break; VPN keys never do.
-    return "'" + value.replace("'", "\\'") + "'"
-
-
-def render_env(s: Settings) -> str:
-    if not s.vpn_provider:
-        return ""
-    return "".join(f"{k}={_quote(s.vpn_fields[k])}\n" for k in PROVIDERS[s.vpn_provider].fields)
+def _literal(value: str) -> str:
+    return value.replace("$", "$$")

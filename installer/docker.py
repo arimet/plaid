@@ -80,8 +80,7 @@ def stack_exists(run: Run = default_run) -> bool:
 
 
 def compose(state_dir: str, *args: str, run: Run = default_run) -> subprocess.CompletedProcess:
-    return _check(run, ["docker", "compose", "-p", PROJECT, "-f", f"{state_dir}/compose.json",
-                        "--env-file", f"{state_dir}/.env", *args])
+    return _check(run, ["docker", "compose", "-p", PROJECT, "-f", f"{state_dir}/compose.json", *args])
 
 
 def port_busy(port: int, run: Run = default_run) -> bool:
@@ -89,6 +88,12 @@ def port_busy(port: int, run: Run = default_run) -> bool:
     by compose's 'port is already allocated' error."""
     out = _check(run, ["docker", "ps", "-q", "--filter", f"publish={port}"]).stdout
     return bool(out.strip())
+
+
+def host_has_tailscale(run: Run = default_run) -> bool:
+    """True when the host already runs Tailscale: a second tailscaled on the host network would clash."""
+    return run(["docker", "run", "--rm", "--network", "host", HELPER,
+                "test", "-e", "/sys/class/net/tailscale0"]).returncode == 0
 
 
 def has_device(path: str, run: Run = default_run) -> bool:

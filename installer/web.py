@@ -91,8 +91,27 @@ def default_data_dir(env: dict) -> str:
     return DEFAULT_DIRS.get(platform, "{home}/Plaid").format(home=env.get("HOST_HOME", ""))
 
 
+REMOTE_PLATFORMS = ("linux", "synology")  # Docker Desktop cannot put a container on the host network
+
+
+def steps_html(lang: str, key: str) -> str:
+    return "<ol>" + "".join(f"<li>{E(step)}</li>" for step in t(lang, key).split("|")) + "</ol>"
+
+
 def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True) -> str:
     default_dir = default_data_dir(env)
+    remote = env.get("HOST_PLATFORM", "linux") in REMOTE_PLATFORMS
+    last = 4 if remote else 3
+    remote_section = f"""
+<section data-step="4" hidden>
+  <h1>{E(t(lang, "field_remote"))}</h1>
+  <p class="lead">{E(t(lang, "remote_help"))}</p>
+  <div class="tip">{steps_html(lang, "remote_steps")}
+  <p><a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener">login.tailscale.com</a></p></div>
+  <div class="field"><label class="l" for="tailscale_key">{E(t(lang, "field_tailscale_key"))}</label>
+  <input class="input" id="tailscale_key" type="password" autocomplete="off" spellcheck="false" placeholder="tskey-auth-…">
+  <p class="ferr" data-err="tailscale"></p></div>
+</section>""" if remote else ""
     chips = "".join(
         f'<button type="button" class="chip" role="radio" aria-checked="{str(pid == "protonvpn").lower()}" '
         f'data-provider="{E(pid)}" data-pf="{int(p.port_forwarding)}"><span class="sw" style="--c:{PROVIDER_COLORS[pid]}">'
@@ -112,8 +131,8 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
     warn_icon = ('<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5l8 14H1z" '
                  'fill="var(--gold)"/><path d="M9 6.5v4.5M9 12.6v1.4" stroke="#1b1a22" stroke-width="2"/></svg>')
     body = f"""
-<form id="wizard" novalidate>
-<div class="stitches" id="stitches" aria-live="polite"><span class="st now"></span><span class="st"></span><span class="st"></span>
+<form id="wizard" novalidate data-last="{last}">
+<div class="stitches" id="stitches" aria-live="polite">{'<span class="st"></span>' * last}
 <span id="stepof"></span></div>
 
 <section data-step="1" class="field-group">
@@ -145,8 +164,8 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
   <div class="note warn" id="pf-no" hidden>{warn_icon}<span>{E(t(lang, "vpn_pf_no"))}</span></div>
   <p class="ferr" data-err="vpn"></p>
 </section>
-
-<section data-step="4" hidden>
+{remote_section}
+<section data-step="{last + 1}" hidden>
   <h1>{E(t(lang, "confirm_title"))}</h1>
   <div id="warnings" class="field-group"></div>
 </section>
@@ -175,11 +194,18 @@ def panel_page(lang: str, s: Settings, host: str, media_size: int, complete: boo
     steps = "".join(f"<li>{E(step)}</li>" for step in t(lang, "prowlarr_steps").split("|"))
     autostart = (f'<p class="note warn">{E(t(lang, "autostart_hint"))}</p>'
                  if s.platform in ("mac", "windows") else "")
+    if s.tailscale_key:
+        remote = f'<div class="tip"><h2>{E(t(lang, "remote_done_title"))}</h2>{steps_html(lang, "remote_done_steps")}</div>'
+    elif s.platform in ("mac", "windows"):
+        remote = f'<div class="tip"><h2>{E(t(lang, "remote_done_title"))}</h2>{steps_html(lang, "remote_desktop_steps")}</div>'
+    else:
+        remote = ""
     if complete:
         top = f"""<h1>{E(t(lang, "done_title"))}</h1>
   <p class="lead">{E(t(lang, "done_lead"))} {t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
   <div class="apps">{apps}</div>
   {autostart}
+  {remote}
   <div class="tip"><h2>{E(t(lang, "prowlarr_title"))}</h2><p>{E(t(lang, "prowlarr_default"))}</p><ol>{steps}</ol>
   <p>{E(t(lang, "prowlarr_cloudflare"))} <a href="https://wiki.servarr.com/prowlarr/indexers" target="_blank" rel="noopener">{E(t(lang, "prowlarr_docs"))}</a></p></div>
   <hr class="sep">"""
@@ -222,7 +248,9 @@ def settings_from(data: dict, env: dict) -> Settings:
         vpn_fields={str(k): str(v) for k, v in (data.get("vpn_fields") or {}).items()} if provider else {},
         timezone=str(data.get("timezone") or "UTC"), lang=data.get("lang") if data.get("lang") in T else "en",
         puid=int(env.get("PUID", 1000)), pgid=int(env.get("PGID", 1000)),
-        home=env.get("HOST_HOME", ""), platform=env.get("HOST_PLATFORM", "linux"))
+        home=env.get("HOST_HOME", ""), platform=env.get("HOST_PLATFORM", "linux"),
+        tailscale_key=str(data.get("tailscale_key") or "").strip()
+        if env.get("HOST_PLATFORM", "linux") in REMOTE_PLATFORMS else "")
 
 
 def make_handler(state: State):
