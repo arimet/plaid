@@ -216,7 +216,7 @@ def guard_notes(lang: str, s: Settings, status: dict) -> list[tuple[str, str, bo
 def guard_html(lang: str, s: Settings, status: dict) -> str:
     button = (f'<form method="post" action="/api/confirm-disk"><button class="btn" type="submit">'
               f'{E(t(lang, "guard_disk_confirm"))}</button></form>')
-    return "".join(f'<div class="note warn"><div><b>{E(title)}</b><br>{E(text)}{button if confirm else ""}</div></div>'
+    return "".join(f'<div class="note alert"><div><b>{E(title)}</b><br>{E(text)}{button if confirm else ""}</div></div>'
                    for title, text, confirm in guard_notes(lang, s, status))
 
 
@@ -241,9 +241,12 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
         return subpage(lang, body, back=False, menu=False)
     autostart = (f'<p class="note warn">{E(t(lang, "autostart_hint"))}</p>'
                  if s.platform in ("mac", "windows") else "")
-    body = f"""<h1>{E(t(lang, "done_title"))}</h1>
+    # With the disk gone the apps that read it are stopped: neither "ready" nor "running" holds then.
+    stopped = (status or {}).get("disk") in ("missing", "unconfirmed")
+    title, lead = ("panel_title", "") if stopped else ("done_title", E(t(lang, "done_lead")) + " ")
+    body = f"""<h1>{E(t(lang, title))}</h1>
   {guard_html(lang, s, status or {})}
-  <p class="lead">{E(t(lang, "done_lead"))} {t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
+  <p class="lead">{lead}{t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
   {apps}
   {autostart}"""
     return subpage(lang, body, back=False)

@@ -124,6 +124,12 @@ label.l{font:700 14px/1.2 Nunito,sans-serif;color:var(--text)}
 .note.warn{color:var(--text)}
 .note.warn::before{content:"";flex:none;width:8px;height:8px;margin-top:7px;border-radius:50%;background:var(--warn)}
 .note svg{flex:none;margin-top:1px}
+/* Something stopped working: the same inset well, tinted and ringed with the danger red. */
+.note.alert{color:var(--text);background:color-mix(in srgb,var(--danger) 7%,var(--surface));
+  box-shadow:var(--inset),0 0 0 1.5px color-mix(in srgb,var(--danger) 40%,transparent)}
+.note.alert::before{content:"";flex:none;width:8px;height:8px;margin-top:7px;border-radius:50%;background:var(--danger)}
+.note.alert b{color:var(--danger-text)}
+.note form{margin-top:12px}
 
 /* ----------------------------------------------------------------- buttons */
 .foot{width:100%;max-width:560px;margin:0 auto;padding:22px 16px 26px;display:flex;gap:14px}

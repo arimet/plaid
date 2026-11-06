@@ -403,13 +403,24 @@ class GuardWebTest(WebTest):
         self.assertIn("<b>Ce dossier contient-il vos médias ?</b>", html)
         self.assertIn('action="/api/confirm-disk"', html)
 
+    def test_alerts_use_the_alert_style(self):
+        self.assertIn('<div class="note alert"><div><b>Disque des médias introuvable</b>', self.open_panel(disk="missing"))
+
+    def test_stopped_apps_are_not_called_ready(self):
+        html = self.open_panel(disk="missing")
+        self.assertIn("<h1>Votre stack</h1>", html)
+        self.assertNotIn('<p class="lead">Vos sept applis tournent', html)
+        self.server.shutdown()
+        html = self.open_panel(vpn="down")  # downloads wait, but every app runs
+        self.assertIn("<h1>Tout est prêt</h1>", html)
+
     def test_panel_warns_when_vpn_down(self):
         self.assertIn("<b>VPN déconnecté</b>", self.open_panel(vpn="down"))
 
     def test_panel_quiet_when_all_ok(self):
         for status in ({"disk": "ok", "vpn": "off"}, {"disk": "unknown", "vpn": "ok"}):
             html = self.open_panel(**status)
-            self.assertNotIn('<div class="note warn"><div><b>', html)  # texts also sit in the page's JSON
+            self.assertNotIn('<div class="note alert"><div><b>', html)  # texts also sit in the page's JSON
             self.server.shutdown()
 
     def test_confirm_disk_route(self):
