@@ -90,7 +90,7 @@ class ComposeTest(unittest.TestCase):
 
 
 class TailscaleComposeTest(unittest.TestCase):
-    KEY = "tskey-auth-k1-secret"
+    KEY = "tskey-auth-fake"
 
     def test_service_joins_host_network(self):
         s = make()

@@ -56,12 +56,12 @@ if __name__ == "__main__":
 class TailscaleSettingsTest(unittest.TestCase):
     def test_key_format(self):
         self.assertEqual(validate(make(tailscale_key="abc")), ["err_tailscale_key"])
-        self.assertEqual(validate(make(tailscale_key="tskey-auth-k1-xyz")), [])
+        self.assertEqual(validate(make(tailscale_key="tskey-auth-fake")), [])
         self.assertEqual(validate(make(tailscale_key="")), [])
 
     def test_roundtrip_keeps_key(self):
-        s = make(tailscale_key="tskey-auth-k1-xyz")
-        self.assertEqual(Settings.from_json(s.to_json()).tailscale_key, "tskey-auth-k1-xyz")
+        s = make(tailscale_key="tskey-auth-fake")
+        self.assertEqual(Settings.from_json(s.to_json()).tailscale_key, "tskey-auth-fake")
 
     def test_old_state_without_key_still_loads(self):
         import json
