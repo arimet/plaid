@@ -216,3 +216,33 @@ class MinorFixesDockerTest(unittest.TestCase):
                       [c("run", True, "True"), c("old", False), c("real", True)]):
             got = docker.stack_containers(run=FakeRun(0, json.dumps(order)))
             self.assertEqual(got["gluetun"]["id"], "real")
+
+
+class SettingsProbeTest(unittest.TestCase):
+    def test_folder_state(self):
+        for out, code, err, want in (("library\n", 0, "", "library"), ("empty\n", 0, "", "empty"),
+                                     ("other\n", 0, "", "other"),
+                                     ("", 125, "bind source path does not exist: /media/usb", "missing"),
+                                     ("", 125, "boom", "unknown")):
+            run = FakeRun(code, out, err)
+            self.assertEqual(docker.folder_state("/srv/new", run=run), want)
+        self.assertIn("type=bind,src=/srv/new,dst=/m,readonly", run.calls[0])
+
+    def test_folder_state_timeout(self):
+        run = FakeRun(124, "", "timed out")
+        self.assertEqual(docker.folder_state("/srv/new", run=run), "unknown")
+        self.assertEqual(run.calls[1][:3], ["docker", "rm", "-f"])
+
+    def test_ensure_data_dirs_never_creates_the_folder(self):
+        run = FakeRun()
+        docker.ensure_data_dirs("/srv/arr", 1000, 1000, run=run, create=False)
+        self.assertIn("type=bind,src=/srv/arr,dst=/m", run.calls[0])
+        self.assertNotIn("-v", run.calls[0])
+        docker.ensure_data_dirs("/srv/arr", 1000, 1000, run=run)  # the install makes the folder it was given
+        self.assertIn("/srv/arr:/m", run.calls[1])
+
+    def test_run_detached_volumes(self):
+        run = FakeRun()
+        docker.run_detached("img", ["--apply-worker"], {}, docker.APPLY_WORKER, run=run, volumes=("plaid-state:/state",))
+        self.assertIn("plaid-state:/state", run.calls[0])
+        self.assertIn("plaid-apply", run.calls[0])

@@ -63,10 +63,13 @@ def dir_state(src: str, run: Run = default_run) -> tuple[bool, int]:
     return count == "0", int(kib) * 1024
 
 
-def ensure_data_dirs(src: str, puid: int, pgid: int, run: Run = default_run) -> None:
+def ensure_data_dirs(src: str, puid: int, pgid: int, run: Run = default_run, create: bool = True) -> None:
+    """The stack's folders and the guard's marker. `create=False` fails on a missing folder instead of making
+    one: a settings change must not mark the empty mount point of a disk that is not plugged in."""
     dirs = " ".join(f"/m/{d}" for d in ("torrents/movies", "torrents/tv", "media/movies", "media/tv"))
     owned = "/m /m/torrents /m/media " + dirs
-    _check(run, ["docker", "run", "--rm", "-v", f"{src}:/m", HELPER, "sh", "-c",
+    mount = ["-v", f"{src}:/m"] if create else ["--mount", f"type=bind,src={src},dst=/m"]
+    _check(run, ["docker", "run", "--rm", *mount, HELPER, "sh", "-c",
                  f"mkdir -p {dirs} && chown {puid}:{pgid} {owned} && touch /m/{MARKER}"], timeout=HELPER_TIMEOUT)
 
 
@@ -76,17 +79,29 @@ _MARKER_SCRIPT = (f'if [ -e /m/{MARKER} ]; then echo ok; elif [ -n "$(ls -A /m)"
                   'else echo missing; fi')
 
 
-def marker_state(src: str, run: Run = default_run) -> str:
-    """"ok", "missing" (folder gone or empty), "unconfirmed" (files but no marker) or "unknown" (probe failed)."""
+def _probe(src: str, script: str, run: Run) -> str:
+    """What `script` prints about the folder mounted read-only at /m; "missing" when the folder does not exist,
+    "unknown" when the probe failed."""
     name = f"plaid-probe-{uuid.uuid4().hex[:8]}"
     result = run(["docker", "run", "--rm", "--name", name, "--mount", f"type=bind,src={src},dst=/m,readonly",
-                  HELPER, "sh", "-c", _MARKER_SCRIPT], timeout=PROBE_TIMEOUT)
+                  HELPER, "sh", "-c", script], timeout=PROBE_TIMEOUT)
     if result.returncode == 0:
         return result.stdout.strip()
     if result.returncode == 124:  # timed out: the probe may sit in "Created" forever
         run(["docker", "rm", "-f", name])
         return "unknown"
     return "missing" if "does not exist" in (result.stderr or "") else "unknown"
+
+
+def marker_state(src: str, run: Run = default_run) -> str:
+    """"ok", "missing" (folder gone or empty), "unconfirmed" (files but no marker) or "unknown" (probe failed)."""
+    return _probe(src, _MARKER_SCRIPT, run)
+
+
+def folder_state(src: str, run: Run = default_run) -> str:
+    """For a new media folder: "library" (media/ and torrents/), "empty", "other", "missing" or "unknown"."""
+    return _probe(src, 'if [ -d /m/media ] && [ -d /m/torrents ]; then echo library; '
+                       'elif [ -z "$(ls -A /m)" ]; then echo empty; else echo other; fi', run)
 
 
 def write_marker(src: str, run: Run = default_run) -> None:
@@ -176,10 +191,15 @@ def own_image(run: Run = default_run) -> str:
 WORKER = "plaid-uninstall"
 
 
-def run_detached(image: str, args: list, env: dict, name: str, run: Run = default_run) -> None:
+APPLY_WORKER = "plaid-apply"
+
+
+def run_detached(image: str, args: list, env: dict, name: str, run: Run = default_run,
+                 volumes: tuple[str, ...] = ()) -> None:
     """No --rm: a worker that fails stays, so the panel can show its logs. On success the reaper deletes it."""
     env_args = [a for k, v in env.items() for a in ("-e", f"{k}={v}")]
-    _check(run, ["docker", "run", "-d", "--name", name, "-v", SOCKET, *env_args, image, *args])
+    vol_args = [a for v in volumes for a in ("-v", v)]
+    _check(run, ["docker", "run", "-d", "--name", name, "-v", SOCKET, *vol_args, *env_args, image, *args])
 
 
 def container_state(name: str, run: Run = default_run) -> tuple[bool, bool, int]:
