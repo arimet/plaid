@@ -86,11 +86,13 @@ def page(lang: str, body: str, *, cloth: str = "", p: int = 100, foot: str = "",
 </body></html>"""
 
 
-def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True) -> str:
-    home = env.get("HOST_HOME", "")
+def default_data_dir(env: dict) -> str:
     platform = env.get("HOST_PLATFORM", "linux")
-    sep = "\\" if platform == "windows" else "/"
-    default_dir = DEFAULT_DIRS.get(platform, "{home}" + sep + "Plaid").format(home=home)
+    return DEFAULT_DIRS.get(platform, "{home}/Plaid").format(home=env.get("HOST_HOME", ""))
+
+
+def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True) -> str:
+    default_dir = default_data_dir(env)
     chips = "".join(
         f'<button type="button" class="chip" role="radio" aria-checked="{str(pid == "protonvpn").lower()}" '
         f'data-provider="{E(pid)}" data-pf="{int(p.port_forwarding)}"><span class="sw" style="--c:{PROVIDER_COLORS[pid]}">'
