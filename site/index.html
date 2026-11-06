@@ -115,17 +115,35 @@ html[data-lang="fr"] [data-l="en"],html:not([data-lang="fr"]) [data-l="fr"]{disp
 
 /* ----------------------------------------------------------------- sections */
 section{padding:clamp(72px,10vw,120px) 0 0}
-.head{max-width:640px;margin-bottom:40px}
+.head{max-width:680px;margin:0 auto 40px;text-align:center}
 .head p{margin-top:14px;font-size:1.05rem}
 .apps{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}
 .app{display:flex;gap:18px;align-items:flex-start;padding:26px;border-radius:var(--r-lg);box-shadow:var(--raised);background:var(--surface)}
 .app img{width:44px;height:44px;flex:none}
 .app p{font-size:15px;margin-top:6px}
-.behind{display:flex;flex-wrap:wrap;gap:14px;margin-top:28px}
+.behind{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;margin-top:28px}
 .chip{display:flex;align-items:center;gap:10px;padding:12px 18px 12px 12px;border-radius:var(--pill);box-shadow:var(--flat);background:var(--surface);font-size:15px}
 .chip img{width:26px;height:26px}
 .chip b{color:var(--text);font-weight:600}
-.flow{margin-top:28px;padding:20px 24px;border-radius:var(--r-lg);box-shadow:var(--inset);font-size:15px;max-width:780px}
+/* apps are buttons: pressed in with a teal name when their card is open */
+button.app,button.chip{border:0;font:inherit;color:inherit;text-align:left;cursor:pointer;
+  transition:box-shadow var(--press),transform var(--press)}
+button.app:hover,button.chip:hover{transform:translateY(-2px)}
+button.app[aria-pressed="true"],button.chip[aria-pressed="true"]{box-shadow:var(--inset);transform:none}
+button.app[aria-pressed="true"] h3,button.chip[aria-pressed="true"] b{color:var(--accent-text)}
+.appinfo{margin-top:28px}
+.appinfo article{display:grid;grid-template-columns:56px 1fr;gap:22px;padding:clamp(22px,4vw,34px);border-radius:var(--r-xl);
+  box-shadow:var(--raised);background:var(--surface);animation:rise .35s ease}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+.appinfo h3{font-size:1.5rem}
+.appinfo .role{font:600 15px/1 Inter,sans-serif;color:var(--accent-text);margin-left:6px}
+.appinfo p{margin-top:10px;max-width:68ch}
+.appinfo dl{display:grid;grid-template-columns:auto 1fr;gap:8px 18px;margin:20px 0 22px;padding:18px 20px;border-radius:var(--r-lg);
+  box-shadow:var(--inset);font-size:15px}
+.appinfo dt{font-weight:600;color:var(--text)}
+.appinfo dd{margin:0}
+@media (max-width:620px){.appinfo article{grid-template-columns:1fr}.appinfo dl{grid-template-columns:1fr}.appinfo dd{margin-bottom:6px}}
+.flow{margin-top:28px;padding:20px 24px;border-radius:var(--r-lg);box-shadow:var(--inset);font-size:15px;max-width:780px;margin-inline:auto}
 
 .how{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;counter-reset:n}
 .how li{list-style:none;padding:28px;border-radius:var(--r-lg);box-shadow:var(--raised);background:var(--surface)}
@@ -133,12 +151,13 @@ section{padding:clamp(72px,10vw,120px) 0 0}
   box-shadow:var(--inset);font:800 18px/1 Nunito,sans-serif;color:var(--accent-text);margin-bottom:18px}
 .how p{font-size:15px;margin-top:8px}
 
-.tabs{display:inline-flex;gap:10px;padding:8px;border-radius:var(--pill);box-shadow:var(--inset);flex-wrap:wrap}
+.tabs{display:flex;width:fit-content;margin:0 auto;justify-content:center;gap:10px;padding:8px;border-radius:var(--pill);box-shadow:var(--inset);flex-wrap:wrap}
 .tabs button{border:0;background:transparent;color:var(--text-2);font:700 15px/1 Inter,sans-serif;padding:12px 20px;border-radius:var(--pill);cursor:pointer;
   transition:box-shadow var(--press),color var(--smooth)}
 .tabs button[aria-selected="true"]{background:var(--surface);box-shadow:var(--raised);color:var(--accent-text)}
 .panel{margin-top:28px;padding:clamp(24px,4vw,40px);border-radius:var(--r-xl);box-shadow:var(--raised);background:var(--surface);
-  display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start}
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;align-items:start}
+.panel .get{align-self:center;justify-self:center}
 .panel ol{padding-left:20px;display:flex;flex-direction:column;gap:10px}
 .panel li::marker{color:var(--accent-text);font-weight:700}
 .panel .note{font-size:14px;color:var(--muted);margin-top:14px}
@@ -146,7 +165,7 @@ section{padding:clamp(72px,10vw,120px) 0 0}
 .cmd code{flex:1;font:500 14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text);overflow-x:auto;white-space:nowrap;scrollbar-width:none}
 .cmd code::-webkit-scrollbar{display:none}
 
-.faq{display:flex;flex-direction:column;gap:16px;max-width:820px}
+.faq{display:flex;flex-direction:column;gap:16px;max-width:820px;margin:0 auto}
 .faq details{border-radius:var(--r-lg);box-shadow:var(--raised);background:var(--surface);transition:box-shadow var(--smooth)}
 .faq details[open]{box-shadow:var(--flat)}
 .faq summary{list-style:none;cursor:pointer;padding:22px 26px;display:flex;justify-content:space-between;align-items:center;gap:16px;
@@ -209,7 +228,7 @@ section{padding:clamp(72px,10vw,120px) 0 0}
 
 /* ----------------------------------------------------------------- terminal replay
    A real terminal session, played back: the screen is always dark, framed by a raised shell. */
-.term{border-radius:var(--r-xl);box-shadow:var(--raised-lg);background:var(--surface);padding:16px;max-width:860px}
+.term{border-radius:var(--r-xl);box-shadow:var(--raised-lg);background:var(--surface);padding:16px;max-width:860px;margin:0 auto}
 .term-bar{display:flex;align-items:center;gap:8px;padding:4px 8px 14px}
 .term-bar i{width:12px;height:12px;border-radius:50%;box-shadow:var(--flat);background:var(--surface)}
 .term-bar span{margin-left:auto;font:600 12px/1 Inter,sans-serif;color:var(--muted);letter-spacing:.06em}
@@ -234,10 +253,12 @@ footer a{color:var(--text-2)}
 /* ----------------------------------------------------------------- small screens */
 @media (max-width:900px){
   .hero{grid-template-columns:1fr;align-items:start}
-  .apps,.how,.panel{grid-template-columns:1fr}
+  .apps,.how,.panel{grid-template-columns:minmax(0,1fr)}
 }
 @media (max-width:520px){
   .top nav .pill span{display:none}
+  .tabs{width:100%;display:grid;grid-template-columns:auto auto 1fr;gap:6px;border-radius:var(--r-lg)}
+  .tabs button{padding:12px 14px;line-height:1.25;border-radius:var(--r-md)}
   .hero{border-radius:var(--r-lg)}
   .btn{width:100%}
   .big{font-size:52px}
@@ -321,26 +342,135 @@ footer a{color:var(--text-2)}
       <span data-l="fr">Vous en ouvrez deux. Les cinq autres travaillent toutes seules.</span>
     </p>
   </div>
+  <!-- each app opens its own card below: raised when idle, pressed in with a teal name when chosen -->
   <div class="apps">
-    <div class="app">
+    <button type="button" class="app" data-app="jellyfin" aria-controls="appinfo" aria-pressed="true">
       <img src="assets/icons/jellyfin.svg" alt="" width="44" height="44">
       <div><h3>Jellyfin</h3>
         <p><span data-l="en">Your own Netflix: watch on the TV, the phone or the computer. Most smart TVs have a Jellyfin app.</span>
            <span data-l="fr">Votre Netflix à la maison : sur la télé, le téléphone ou l’ordinateur. La plupart des télés connectées ont une appli Jellyfin.</span></p></div>
-    </div>
-    <div class="app">
+    </button>
+    <button type="button" class="app" data-app="seerr" aria-controls="appinfo" aria-pressed="false">
       <img src="assets/icons/seerr.svg" alt="" width="44" height="44">
       <div><h3>Seerr</h3>
         <p><span data-l="en">Search a title, click Request, and it shows up in Jellyfin by itself. The app to give your family.</span>
            <span data-l="fr">Cherchez un titre, cliquez sur Demander : il arrive tout seul dans Jellyfin. L’appli à donner à la famille.</span></p></div>
-    </div>
+    </button>
   </div>
   <div class="behind">
-    <span class="chip"><img src="assets/icons/radarr.svg" alt="" width="26" height="26"><b>Radarr</b><span data-l="en">films</span><span data-l="fr">films</span></span>
-    <span class="chip"><img src="assets/icons/sonarr.svg" alt="" width="26" height="26"><b>Sonarr</b><span data-l="en">series</span><span data-l="fr">séries</span></span>
-    <span class="chip"><img src="assets/icons/qbittorrent.svg" alt="" width="26" height="26"><b>qBittorrent</b><span data-l="en">downloads, through your VPN</span><span data-l="fr">téléchargements, via votre VPN</span></span>
-    <span class="chip"><img src="assets/icons/prowlarr.svg" alt="" width="26" height="26"><b>Prowlarr</b><span data-l="en">trackers</span><span data-l="fr">trackers</span></span>
-    <span class="chip"><img src="assets/icons/bazarr.svg" alt="" width="26" height="26"><b>Bazarr</b><span data-l="en">subtitles</span><span data-l="fr">sous-titres</span></span>
+    <button type="button" class="chip" data-app="radarr" aria-controls="appinfo" aria-pressed="false"><img src="assets/icons/radarr.svg" alt="" width="26" height="26"><b>Radarr</b><span data-l="en">films</span><span data-l="fr">films</span></button>
+    <button type="button" class="chip" data-app="sonarr" aria-controls="appinfo" aria-pressed="false"><img src="assets/icons/sonarr.svg" alt="" width="26" height="26"><b>Sonarr</b><span data-l="en">series</span><span data-l="fr">séries</span></button>
+    <button type="button" class="chip" data-app="qbittorrent" aria-controls="appinfo" aria-pressed="false"><img src="assets/icons/qbittorrent.svg" alt="" width="26" height="26"><b>qBittorrent</b><span data-l="en">downloads, through your VPN</span><span data-l="fr">téléchargements, via votre VPN</span></button>
+    <button type="button" class="chip" data-app="prowlarr" aria-controls="appinfo" aria-pressed="false"><img src="assets/icons/prowlarr.svg" alt="" width="26" height="26"><b>Prowlarr</b><span data-l="en">trackers</span><span data-l="fr">trackers</span></button>
+    <button type="button" class="chip" data-app="bazarr" aria-controls="appinfo" aria-pressed="false"><img src="assets/icons/bazarr.svg" alt="" width="26" height="26"><b>Bazarr</b><span data-l="en">subtitles</span><span data-l="fr">sous-titres</span></button>
+  </div>
+
+  <div class="appinfo" id="appinfo" aria-live="polite">
+    <article data-info="jellyfin">
+      <img src="assets/icons/jellyfin.svg" alt="" width="56" height="56">
+      <div>
+        <h3>Jellyfin <span class="role"><span data-l="en">to watch</span><span data-l="fr">pour regarder</span></span></h3>
+        <p><span data-l="en">Jellyfin turns your films and series into a library with posters, summaries and resume points, like a streaming service that runs on your own machine. It plays on a browser, a phone, a tablet, most smart TVs and TV boxes, and converts a video on the fly when a device cannot read it.</span>
+           <span data-l="fr">Jellyfin range vos films et séries en une bibliothèque avec affiches, résumés et reprise de lecture, comme un service de streaming qui tourne sur votre propre machine. Il se lit dans un navigateur, sur téléphone, tablette, la plupart des télés connectées et des box, et convertit une vidéo à la volée quand un appareil ne sait pas la lire.</span></p>
+        <dl>
+          <dt><span data-l="en">Plaid sets up</span><span data-l="fr">Plaid règle</span></dt>
+          <dd><span data-l="en">Your account, a Films library and a Series library, and a refresh each time something new arrives.</span><span data-l="fr">Votre compte, une bibliothèque Films et une Séries, et une mise à jour à chaque nouvelle arrivée.</span></dd>
+          <dt><span data-l="en">You open it to</span><span data-l="fr">Vous l’ouvrez pour</span></dt>
+          <dd><span data-l="en">Watch. Every evening.</span><span data-l="fr">Regarder. Tous les soirs.</span></dd>
+        </dl>
+        <a class="pill" href="https://jellyfin.org"><span data-l="en">Jellyfin website</span><span data-l="fr">Site de Jellyfin</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+    </article>
+    <article data-info="seerr" hidden>
+      <img src="assets/icons/seerr.svg" alt="" width="56" height="56">
+      <div>
+        <h3>Seerr <span class="role"><span data-l="en">to request</span><span data-l="fr">pour demander</span></span></h3>
+        <p><span data-l="en">Seerr is a catalogue of films and series, trending ones included, with a Request button. Each member of the household signs in with their Jellyfin account, asks for what they want, and follows the request until it is ready to watch.</span>
+           <span data-l="fr">Seerr est un catalogue de films et de séries, nouveautés comprises, avec un bouton Demander. Chaque membre du foyer s’y connecte avec son compte Jellyfin, demande ce qu’il veut et suit sa demande jusqu’à ce qu’elle soit prête à regarder.</span></p>
+        <dl>
+          <dt><span data-l="en">Plaid sets up</span><span data-l="fr">Plaid règle</span></dt>
+          <dd><span data-l="en">The sign-in through Jellyfin, and the link that sends films to Radarr and series to Sonarr.</span><span data-l="fr">La connexion par Jellyfin, et le lien qui envoie les films à Radarr et les séries à Sonarr.</span></dd>
+          <dt><span data-l="en">You open it to</span><span data-l="fr">Vous l’ouvrez pour</span></dt>
+          <dd><span data-l="en">Ask for something new, from the sofa or the bus.</span><span data-l="fr">Demander quelque chose de nouveau, depuis le canapé ou le bus.</span></dd>
+        </dl>
+        <a class="pill" href="https://github.com/seerr-team/seerr"><span data-l="en">Seerr on GitHub</span><span data-l="fr">Seerr sur GitHub</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+    </article>
+    <article data-info="radarr" hidden>
+      <img src="assets/icons/radarr.svg" alt="" width="56" height="56">
+      <div>
+        <h3>Radarr <span class="role"><span data-l="en">for films</span><span data-l="fr">pour les films</span></span></h3>
+        <p><span data-l="en">Radarr keeps the list of films you want. It looks for each one, picks the best version for the quality you set, hands it to qBittorrent, then renames and files it where Jellyfin expects it.</span>
+           <span data-l="fr">Radarr tient la liste des films que vous voulez. Il cherche chacun, choisit la meilleure version selon la qualité réglée, la confie à qBittorrent, puis la renomme et la range là où Jellyfin l’attend.</span></p>
+        <dl>
+          <dt><span data-l="en">Plaid sets up</span><span data-l="fr">Plaid règle</span></dt>
+          <dd><span data-l="en">The films folder, 1080p quality, the link to qBittorrent and the refresh of Jellyfin.</span><span data-l="fr">Le dossier des films, la qualité 1080p, le lien avec qBittorrent et la mise à jour de Jellyfin.</span></dd>
+          <dt><span data-l="en">You open it to</span><span data-l="fr">Vous l’ouvrez pour</span></dt>
+          <dd><span data-l="en">See what is waiting, or change the quality.</span><span data-l="fr">Voir ce qui est en attente, ou changer la qualité.</span></dd>
+        </dl>
+        <a class="pill" href="https://radarr.video"><span data-l="en">Radarr website</span><span data-l="fr">Site de Radarr</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+    </article>
+    <article data-info="sonarr" hidden>
+      <img src="assets/icons/sonarr.svg" alt="" width="56" height="56">
+      <div>
+        <h3>Sonarr <span class="role"><span data-l="en">for series</span><span data-l="fr">pour les séries</span></span></h3>
+        <p><span data-l="en">Sonarr does for series what Radarr does for films, episode by episode. It also follows the series you watch: when a new episode comes out, it fetches it without being asked.</span>
+           <span data-l="fr">Sonarr fait pour les séries ce que Radarr fait pour les films, épisode par épisode. Il suit aussi les séries que vous regardez : quand un nouvel épisode sort, il le récupère sans qu’on le lui demande.</span></p>
+        <dl>
+          <dt><span data-l="en">Plaid sets up</span><span data-l="fr">Plaid règle</span></dt>
+          <dd><span data-l="en">The series folder, 1080p quality, the link to qBittorrent and the refresh of Jellyfin.</span><span data-l="fr">Le dossier des séries, la qualité 1080p, le lien avec qBittorrent et la mise à jour de Jellyfin.</span></dd>
+          <dt><span data-l="en">You open it to</span><span data-l="fr">Vous l’ouvrez pour</span></dt>
+          <dd><span data-l="en">See the coming episodes, or follow a new series.</span><span data-l="fr">Voir les prochains épisodes, ou suivre une nouvelle série.</span></dd>
+        </dl>
+        <a class="pill" href="https://sonarr.tv"><span data-l="en">Sonarr website</span><span data-l="fr">Site de Sonarr</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+    </article>
+    <article data-info="qbittorrent" hidden>
+      <img src="assets/icons/qbittorrent.svg" alt="" width="56" height="56">
+      <div>
+        <h3>qBittorrent <span class="role"><span data-l="en">to download</span><span data-l="fr">pour télécharger</span></span></h3>
+        <p><span data-l="en">qBittorrent does the downloading Radarr and Sonarr ask for. In Plaid, all its traffic goes through your VPN: if the VPN drops, downloads stop instead of going out in the open.</span>
+           <span data-l="fr">qBittorrent fait les téléchargements que Radarr et Sonarr lui demandent. Dans Plaid, tout son trafic passe par votre VPN : si le VPN tombe, les téléchargements s’arrêtent au lieu de partir à découvert.</span></p>
+        <dl>
+          <dt><span data-l="en">Plaid sets up</span><span data-l="fr">Plaid règle</span></dt>
+          <dd><span data-l="en">Your account, the downloads folder, and the port your VPN opens, when it opens one.</span><span data-l="fr">Votre compte, le dossier des téléchargements, et le port ouvert par votre VPN quand il en ouvre un.</span></dd>
+          <dt><span data-l="en">You open it to</span><span data-l="fr">Vous l’ouvrez pour</span></dt>
+          <dd><span data-l="en">Follow a download’s progress.</span><span data-l="fr">Suivre la progression d’un téléchargement.</span></dd>
+        </dl>
+        <a class="pill" href="https://www.qbittorrent.org"><span data-l="en">qBittorrent website</span><span data-l="fr">Site de qBittorrent</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+    </article>
+    <article data-info="prowlarr" hidden>
+      <img src="assets/icons/prowlarr.svg" alt="" width="56" height="56">
+      <div>
+        <h3>Prowlarr <span class="role"><span data-l="en">for trackers</span><span data-l="fr">pour les trackers</span></span></h3>
+        <p><span data-l="en">Prowlarr keeps the list of sites to search. Add a source once, here, and Radarr and Sonarr can all search it. Plaid starts you with Internet Archive, which only lists public-domain works.</span>
+           <span data-l="fr">Prowlarr tient la liste des sites où chercher. On ajoute une source une seule fois, ici, et Radarr comme Sonarr peuvent y chercher. Plaid démarre avec Internet Archive, qui ne liste que des œuvres du domaine public.</span></p>
+        <dl>
+          <dt><span data-l="en">Plaid sets up</span><span data-l="fr">Plaid règle</span></dt>
+          <dd><span data-l="en">The link to Radarr and Sonarr, and Internet Archive as a first source.</span><span data-l="fr">Le lien avec Radarr et Sonarr, et Internet Archive comme première source.</span></dd>
+          <dt><span data-l="en">You open it to</span><span data-l="fr">Vous l’ouvrez pour</span></dt>
+          <dd><span data-l="en">Add a source that needs an account. Public ones can also be added from the Plaid assistant.</span><span data-l="fr">Ajouter une source qui demande un compte. Les sources publiques s’ajoutent aussi depuis l’assistant Plaid.</span></dd>
+        </dl>
+        <a class="pill" href="https://prowlarr.com"><span data-l="en">Prowlarr website</span><span data-l="fr">Site de Prowlarr</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+    </article>
+    <article data-info="bazarr" hidden>
+      <img src="assets/icons/bazarr.svg" alt="" width="56" height="56">
+      <div>
+        <h3>Bazarr <span class="role"><span data-l="en">for subtitles</span><span data-l="fr">pour les sous-titres</span></span></h3>
+        <p><span data-l="en">Bazarr watches what Radarr and Sonarr bring in and fetches subtitles in your language and in English. It then lines them up with the sound, so they appear at the right moment.</span>
+           <span data-l="fr">Bazarr surveille ce que Radarr et Sonarr font entrer et récupère les sous-titres dans votre langue et en anglais. Il les cale ensuite sur le son, pour qu’ils apparaissent au bon moment.</span></p>
+        <dl>
+          <dt><span data-l="en">Plaid sets up</span><span data-l="fr">Plaid règle</span></dt>
+          <dd><span data-l="en">The link to Radarr and Sonarr, your languages and the automatic timing.</span><span data-l="fr">Le lien avec Radarr et Sonarr, vos langues et le calage automatique.</span></dd>
+          <dt><span data-l="en">You open it to</span><span data-l="fr">Vous l’ouvrez pour</span></dt>
+          <dd><span data-l="en">Rarely: to look for a missing subtitle by hand.</span><span data-l="fr">Rarement : pour chercher à la main un sous-titre manquant.</span></dd>
+        </dl>
+        <a class="pill" href="https://www.bazarr.media"><span data-l="en">Bazarr website</span><span data-l="fr">Site de Bazarr</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+    </article>
   </div>
   <p class="flow">
     <span data-l="en">You request a film in Seerr. Radarr looks for it through Prowlarr, qBittorrent downloads it, Bazarr adds subtitles, and it appears in Jellyfin.</span>
@@ -458,7 +588,7 @@ footer a{color:var(--text-2)}
       </ol>
       <p class="note"><span data-l="en">The first time, macOS warns about an unidentified developer: right-click then Open lets it run.</span><span data-l="fr">La première fois, macOS prévient d’un développeur non identifié : clic droit puis Ouvrir permet de le lancer.</span></p>
     </div>
-    <div><a class="btn primary" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-mac.zip">
+    <div class="get"><a class="btn primary" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-mac.zip">
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14"/></svg>
       <span data-l="en">Download for Mac</span><span data-l="fr">Télécharger pour Mac</span></a></div>
   </div>
@@ -472,7 +602,7 @@ footer a{color:var(--text-2)}
       </ol>
       <p class="note"><span data-l="en">If SmartScreen warns you: More info, then Run anyway.</span><span data-l="fr">Si SmartScreen vous prévient : Informations complémentaires, puis Exécuter quand même.</span></p>
     </div>
-    <div><a class="btn primary" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-windows.zip">
+    <div class="get"><a class="btn primary" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-windows.zip">
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14"/></svg>
       <span data-l="en">Download for Windows</span><span data-l="fr">Télécharger pour Windows</span></a></div>
   </div>
@@ -596,6 +726,13 @@ footer a{color:var(--text-2)}
     const tick = () => { n = Math.min(target, n + 2); pct.firstChild.nodeValue = n; if (n < target) setTimeout(tick, 22); };
     setTimeout(tick, 250);
   }
+
+  // Apps: clicking one opens its card below; the chosen one stays pressed.
+  const appButtons = [...document.querySelectorAll("[data-app]")];
+  appButtons.forEach((b) => b.addEventListener("click", () => {
+    appButtons.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    document.querySelectorAll("[data-info]").forEach((a) => (a.hidden = a.dataset.info !== b.dataset.app));
+  }));
 
   // Terminal replay: what `get.sh --cli` really shows, played back once it comes into view.
   const screen = document.getElementById("screen");
