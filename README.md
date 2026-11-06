@@ -249,6 +249,20 @@ No, but without one your internet provider and other peers see what you download
 </details>
 
 <details>
+<summary><b>What if my media disk is unplugged?</b></summary>
+
+Plaid leaves a small hidden file, `.plaid`, in your media folder. Every 30 seconds it checks that the file is there. If the disk is missing, or not mounted yet after a restart, Jellyfin, Radarr, Sonarr, qBittorrent and Bazarr stay stopped, so nothing gets marked as missing or downloaded onto the system disk. The assistant and the terminal menu say so, and the apps start again on their own once the disk is back. If the folder has files but no `.plaid` (a library copied to a new disk, say), Plaid asks you to confirm it is the right folder.
+
+</details>
+
+<details>
+<summary><b>What if the VPN drops?</b></summary>
+
+qBittorrent stops downloading: it only reaches the internet through the VPN, so nothing leaks. The assistant shows "VPN disconnected" until it is back. When the VPN restarts on its own, Plaid restarts qBittorrent with it, so downloads pick up again.
+
+</details>
+
+<details>
 <summary><b>Can I change a setting later?</b></summary>
 
 Plaid installs and removes. To change a setting (new VPN key, other folder), remove the stack and install it again: your media folder can stay. Each app's own settings stay editable in the app.
@@ -270,7 +284,7 @@ No. No 4K profile and no FlareSolverr either, for now.
 
 ## How it works
 
-The assistant is Python (standard library only) running in its own small container, talking to Docker through its socket. It writes one Compose file, starts the seven apps, then links them through their APIs: qBittorrent's API key into Radarr and Sonarr, Prowlarr's trackers synced to both, Jellyfin libraries created and refreshed on import, Seerr signed in through Jellyfin. Removal runs in a detached container, so it can also delete the assistant itself.
+The assistant is Python (standard library only) running in its own small container, talking to Docker through its socket. It writes one Compose file, starts the seven apps, then links them through their APIs: qBittorrent's API key into Radarr and Sonarr, Prowlarr's trackers synced to both, Jellyfin libraries created and refreshed on import, Seerr signed in through Jellyfin. Removal runs in a detached container, so it can also delete the assistant itself. Docker restarts the assistant at boot; the assistant then starts the five apps that read the media folder, once it sees the disk.
 
 <details>
 <summary><b>Development</b></summary>
