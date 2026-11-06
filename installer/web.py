@@ -94,8 +94,9 @@ def page(lang: str, body: str, *, cloth: str = "", p: int = 100, foot: str = "",
 <html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plaid</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/fonts.css">
 <link rel="stylesheet" href="/static/style.css"></head><body>
-<div class="cloth {cloth}" id="cloth" style="--p:{p}%"><div class="woven"></div>
-<a class="brand" href="/"><b>Plaid</b></a><div class="top">{menu}<nav class="lang" aria-label="Language">{links}</nav></div></div>
+<header class="topbar"><a class="brand" href="/"><span class="mark"><img src="/static/favicon.svg" alt="" width="26" height="26"></span><b>Plaid</b></a>
+<div class="top">{menu}<nav class="lang" aria-label="Language">{links}</nav></div></header>
+{f'<div class="track topline" aria-hidden="true"{"" if p >= 40 else " hidden"}><div class="fill" id="weave" style="--w:{p}%"></div></div>' if cloth == "part" else ""}
 <main id="main">{body}</main>{foot}
 <script id="texts" type="application/json">{texts}</script>
 {'<script src="/static/app.js"></script>' if script else ''}

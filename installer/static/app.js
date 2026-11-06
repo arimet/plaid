@@ -3,8 +3,8 @@
   const T = JSON.parse(document.getElementById("texts").textContent);
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
-  const cloth = $("#cloth");
-  const weave = (pct) => cloth && cloth.style.setProperty("--p", pct + "%");
+  const bar = $("#weave");  // the inset progress track under the header
+  const weave = (pct) => bar && bar.style.setProperty("--w", pct + "%");
   const post = (url, body) => fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
                                          body: JSON.stringify(body), credentials: "same-origin"});
   const fmt = (s, params) => s.replace(/\{(\w+)\}/g, (_, k) => params[k] ?? "");
@@ -25,7 +25,6 @@
       $("#stepof").textContent = fmt(T.step_of, {n: Math.min(n, LAST), total: LAST});
       back.hidden = n === 1;
       next.textContent = n > LAST ? T.btn_continue_anyway : n === LAST ? T.btn_install : T.btn_next;
-      weave(8 + (n - 1) * 10);
       const first = $("input:not([type=hidden]), button.chip[aria-checked=true]", sections[n - 1]);
       if (first) first.focus({preventScroll: true});
     };
@@ -131,6 +130,7 @@
       form.hidden = true;
       $("#foot").hidden = true;
       $("#progress").hidden = false;
+      if (bar) bar.parentElement.hidden = false;  // the progress line only shows while installing
       track(Boolean(provider));
     };
     if ($("#progress").dataset.running !== "1") show(1);
@@ -182,6 +182,7 @@
     form.hidden = true;
     $("#foot").hidden = true;
     prog.hidden = false;
+    if (bar) bar.parentElement.hidden = false;
     track(prog.dataset.vpn === "1");
   }
 
@@ -194,7 +195,6 @@
       const res = await post("/api/uninstall", {remove_media: removal.remove_media.checked});
       if (res.status !== 202) return;
       removal.hidden = true;
-      cloth.classList.add("fray");
       const status = $("#uninstall-status");
       status.hidden = false;
       status.textContent = T.uninstall_started;
@@ -214,7 +214,6 @@
           pre.textContent = data.detail;
           status.after(pre);
           removal.hidden = false;
-          cloth.classList.toggle("fray", false);
           return;
         }
         setTimeout(ping, 2000);
