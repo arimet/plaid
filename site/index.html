@@ -209,6 +209,22 @@ footer a{color:var(--text-2)}
 .reveal.is-visible{opacity:1;transform:none}
 .no-js .reveal{opacity:1;transform:none}
 
+/* the parts of a section follow it in one by one (--i is set from their position) */
+@keyframes lift{from{opacity:0;transform:translateY(18px)}}
+.reveal.is-visible :is(.apps,.behind,.how,.faq,.shots,.tabs)>*{animation:lift .6s cubic-bezier(.2,.8,.2,1) backwards;
+  animation-delay:calc(var(--i,0) * 70ms + 120ms)}
+/* the hero settles in on load, the install card floats */
+.hero>div:first-child>*,.hero .live{animation:lift .7s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i,0) * 90ms)}
+.hero .live{--i:5}
+.live-in{animation:float 7s ease-in-out 1s infinite}
+@keyframes float{50%{transform:translateY(-6px)}}
+/* a new tab's panel, an app's card: they rise into place */
+.panel:not([hidden]){animation:rise .4s ease}
+/* screenshots lean in under the pointer */
+.frame{transition:transform .5s cubic-bezier(.2,.8,.2,1),box-shadow .5s ease}
+.frame:hover{transform:translateY(-6px) rotate(-.5deg)}
+.shots figure:nth-child(2) .frame:hover{transform:translateY(-6px) rotate(.5deg)}
+
 /* ----------------------------------------------------------------- small screens */
 @media (max-width:900px){
   .hero{grid-template-columns:1fr;align-items:start}
@@ -223,7 +239,7 @@ footer a{color:var(--text-2)}
   .big{font-size:52px}
 }
 @media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
+  *,*::before,*::after{animation-duration:.01ms !important;animation-delay:0s !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
   .reveal{opacity:1;transform:none}
 }
 </style>
@@ -265,15 +281,15 @@ footer a{color:var(--text-2)}
       <span data-l="fr">Changement d’avis ? Un clic retire tout ce qu’il a installé. Rien ne reste derrière.</span>
     </p>
     <div class="cta">
-      <a class="btn primary" id="get" href="#install">
+      <a class="btn primary" href="#install">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14"/></svg>
-        <span id="get-label"><span data-l="en">Get Plaid</span><span data-l="fr">Obtenir Plaid</span></span>
+        <span data-l="en">Install on a mini PC or a NAS</span><span data-l="fr">Installer sur un mini PC ou un NAS</span>
       </a>
-      <a class="btn soft" href="#install"><span data-l="en">Other systems</span><span data-l="fr">Autres systèmes</span></a>
+      <a class="btn soft" id="get" href="#install"><span id="get-label"><span data-l="en">Mac and Windows</span><span data-l="fr">Mac et Windows</span></span></a>
     </div>
     <p class="small">
-      <span data-l="en">Free and open source · Mac, Windows, Linux, Synology, Raspberry&nbsp;Pi</span>
-      <span data-l="fr">Gratuit et open source · Mac, Windows, Linux, Synology, Raspberry&nbsp;Pi</span>
+      <span data-l="en">Free and open source · Linux, Synology, Raspberry&nbsp;Pi, Mac, Windows</span>
+      <span data-l="fr">Gratuit et open source · Linux, Synology, Raspberry&nbsp;Pi, Mac, Windows</span>
     </p>
   </div>
 
@@ -484,7 +500,7 @@ footer a{color:var(--text-2)}
        <span data-l="fr">Sur un mini PC ou un NAS, une commande pose les mêmes questions, un écran à la fois, aux flèches. Ctrl-C à tout moment laisse la machine comme avant.</span></p>
   </div>
   <div class="term">
-    <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>zoe@mini-pc</span>
+    <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>anthony@mini-pc</span>
       <button class="pill" type="button" id="replay"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg><span data-l="en">Replay</span><span data-l="fr">Rejouer</span></button></div>
     <div class="screen" id="screen" role="img" aria-label="Plaid installing in a terminal"></div>
   </div>
@@ -496,12 +512,26 @@ footer a{color:var(--text-2)}
     <h2><span data-l="en">Install</span><span data-l="fr">Installer</span></h2>
   </div>
   <div class="tabs" role="tablist" aria-label="System">
-    <button type="button" role="tab" id="t-mac" aria-controls="p-mac" aria-selected="true">Mac</button>
+    <button type="button" role="tab" id="t-nas" aria-controls="p-nas" aria-selected="true"><span data-l="en">Linux, mini PC, NAS</span><span data-l="fr">Linux, mini PC, NAS</span></button>
+    <button type="button" role="tab" id="t-mac" aria-controls="p-mac" aria-selected="false">Mac</button>
     <button type="button" role="tab" id="t-win" aria-controls="p-win" aria-selected="false">Windows</button>
-    <button type="button" role="tab" id="t-nas" aria-controls="p-nas" aria-selected="false"><span data-l="en">Linux, mini PC, NAS</span><span data-l="fr">Linux, mini PC, NAS</span></button>
   </div>
 
-  <div class="panel" role="tabpanel" id="p-mac" aria-labelledby="t-mac">
+  <div class="panel" role="tabpanel" id="p-nas" aria-labelledby="t-nas">
+    <div>
+      <p><span data-l="en">Open a terminal on the machine (over SSH for a NAS) and paste:</span><span data-l="fr">Ouvrez un terminal sur la machine (en SSH pour un NAS) et collez :</span></p>
+      <div class="cmd"><code id="cmd">curl -fsSL https://arimet.github.io/plaid/get | sh</code>
+        <button class="pill" type="button" data-copy="cmd"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
+      <p class="note"><span data-l="en">It installs Docker if needed and prints the address of the assistant, to open from any computer on your network.</span><span data-l="fr">Elle installe Docker si besoin et affiche l’adresse de l’assistant, à ouvrir depuis n’importe quel ordinateur du réseau.</span></p>
+    </div>
+    <div>
+      <p><span data-l="en">No browser around? Answer in the terminal:</span><span data-l="fr">Pas de navigateur sous la main ? Répondez dans le terminal :</span></p>
+      <div class="cmd"><code id="cmd-cli">curl -fsSL https://arimet.github.io/plaid/get | sh -s -- --cli</code>
+        <button class="pill" type="button" data-copy="cmd-cli"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
+      <p class="note"><span data-l="en">Synology: install Container Manager from the Package Center first. Raspberry Pi 4 or 5 with Raspberry Pi OS 64-bit works too.</span><span data-l="fr">Synology : installez d’abord Container Manager depuis le centre de paquets. Un Raspberry Pi 4 ou 5 sous Raspberry Pi OS 64 bits marche aussi.</span></p>
+    </div>
+  </div>
+  <div class="panel" role="tabpanel" id="p-mac" aria-labelledby="t-mac" hidden>
     <div>
       <ol>
         <li><span data-l="en">Install <a href="https://www.docker.com/products/docker-desktop/">Docker Desktop</a> and open it once.</span><span data-l="fr">Installez <a href="https://www.docker.com/products/docker-desktop/">Docker Desktop</a> et ouvrez-le une fois.</span></li>
@@ -529,20 +559,6 @@ footer a{color:var(--text-2)}
       <span data-l="en">Download for Windows</span><span data-l="fr">Télécharger pour Windows</span></a></div>
   </div>
 
-  <div class="panel" role="tabpanel" id="p-nas" aria-labelledby="t-nas" hidden>
-    <div>
-      <p><span data-l="en">Open a terminal on the machine (over SSH for a NAS) and paste:</span><span data-l="fr">Ouvrez un terminal sur la machine (en SSH pour un NAS) et collez :</span></p>
-      <div class="cmd"><code id="cmd">curl -fsSL https://arimet.github.io/plaid/get | sh</code>
-        <button class="pill" type="button" data-copy="cmd"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
-      <p class="note"><span data-l="en">It installs Docker if needed and prints the address of the assistant, to open from any computer on your network.</span><span data-l="fr">Elle installe Docker si besoin et affiche l’adresse de l’assistant, à ouvrir depuis n’importe quel ordinateur du réseau.</span></p>
-    </div>
-    <div>
-      <p><span data-l="en">No browser around? Answer in the terminal:</span><span data-l="fr">Pas de navigateur sous la main ? Répondez dans le terminal :</span></p>
-      <div class="cmd"><code id="cmd-cli">curl -fsSL https://arimet.github.io/plaid/get | sh -s -- --cli</code>
-        <button class="pill" type="button" data-copy="cmd-cli"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
-      <p class="note"><span data-l="en">Synology: install Container Manager from the Package Center first. Raspberry Pi 4 or 5 with Raspberry Pi OS 64-bit works too.</span><span data-l="fr">Synology : installez d’abord Container Manager depuis le centre de paquets. Un Raspberry Pi 4 ou 5 sous Raspberry Pi OS 64 bits marche aussi.</span></p>
-    </div>
-  </div>
 </section>
 
 <!-- questions people ask before installing -->
@@ -612,18 +628,16 @@ footer a{color:var(--text-2)}
     });
   });
 
-  // The visitor's system: its tab opens first, and the hero button says what it will do.
+  // Linux stays the first tab: most people install on a machine that stays on.
+  // A Mac or Windows visitor gets their own download as the second hero button.
   const ua = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent;
   const mobile = /android|iphone|ipad/i.test(navigator.userAgent);
-  const os = mobile ? null : /mac/i.test(ua) ? "mac" : /win/i.test(ua) ? "win" : /linux|x11/i.test(ua) ? "nas" : null;
+  const os = mobile ? null : /mac/i.test(ua) ? "mac" : /win/i.test(ua) ? "win" : null;
   if (os) {
-    select(document.getElementById("t-" + os));
-    const label = { mac: ["Download for Mac", "Télécharger pour Mac"], win: ["Download for Windows", "Télécharger pour Windows"],
-                    nas: ["Install on Linux", "Installer sous Linux"] }[os];
+    const label = { mac: ["Download for Mac", "Télécharger pour Mac"], win: ["Download for Windows", "Télécharger pour Windows"] }[os];
     document.getElementById("get-label").innerHTML =
       `<span data-l="en">${label[0]}</span><span data-l="fr">${label[1]}</span>`;
-    const panelLink = document.querySelector(`#p-${os} .btn.primary`);
-    document.getElementById("get").href = panelLink ? panelLink.href : "#install";
+    document.getElementById("get").href = document.querySelector(`#p-${os} .btn.primary`).href;
   }
 
   // Copy buttons.
@@ -663,14 +677,14 @@ footer a{color:var(--text-2)}
           none: "No VPN", pf: "opens a port", hint: "↑↓ to choose · Enter to confirm", install: "Installing",
           steps: ["Preparing", "Creating the folders", "Downloading the apps", "Starting the apps", "Connecting the VPN", "Linking the apps"],
           apps: "qBittorrent set up · Jellyfin set up · Radarr set up · Sonarr set up", ready: "Everything is ready",
-          login: "Sign in to every app with zoe and your password.", daily: "Every day", behind: "Behind the scenes",
+          login: "Sign in to every app with anthony and your password.", daily: "Every day", behind: "Behind the scenes",
           roles: ["Watch", "Request", "Films", "Series", "Downloads", "Trackers", "Subtitles"],
           again: "To see your apps again, add trackers or remove everything, run the same command again." },
     fr: { folder: "Dossier des médias", user: "Identifiant", pw: "Mot de passe", vpn: "VPN", key: "Clé privée WireGuard",
           none: "Pas de VPN", pf: "ouvre un port", hint: "↑↓ pour choisir · Entrée pour valider", install: "Installation",
           steps: ["Préparation", "Création des dossiers", "Téléchargement des applis", "Démarrage des applis", "Connexion du VPN", "Liaison des applis"],
           apps: "qBittorrent réglé · Jellyfin réglé · Radarr réglé · Sonarr réglé", ready: "Tout est prêt",
-          login: "Connectez-vous à chaque appli avec zoe et votre mot de passe.", daily: "Au quotidien", behind: "En coulisses",
+          login: "Connectez-vous à chaque appli avec anthony et votre mot de passe.", daily: "Au quotidien", behind: "En coulisses",
           roles: ["Regarder", "Demander", "Films", "Séries", "Téléchargements", "Trackers", "Sous-titres"],
           again: "Pour revoir vos applis, ajouter des trackers ou tout supprimer, relancez la même commande." },
   };
@@ -685,7 +699,7 @@ footer a{color:var(--text-2)}
     const id = ++run, L = T[html.dataset.lang === "fr" ? "fr" : "en"];
     const alive = () => id === run;
     const show = (h) => { if (alive()) screen.innerHTML = h; };
-    let out = span("p", "zoe@mini-pc ~ % ");
+    let out = span("p", "anthony@mini-pc ~ % ");
     const cmd = "curl -fsSL https://arimet.github.io/plaid/get | sh -s -- --cli";
     for (let i = 0; i <= cmd.length && alive(); i++) {
       show(out + span("c", cmd.slice(0, i)) + '<span class="cursor"></span>');
@@ -695,10 +709,10 @@ footer a{color:var(--text-2)}
     const recap = [];
     const page = (n, title, body) => head(n, 3) + recap.map(([k, v]) => `  ${span("g", "✓")} ${span("d", k + " : ")}${esc(v)}\n`).join("") +
       `\n  ${span("g b", title)}\n\n${body}`;
-    show(page(1, L.folder, `  ${span("b", L.folder)}\n  ${span("g", "›")} /home/zoe/Plaid<span class="cursor"></span>`)); await wait(1400);
-    recap.push([L.folder, "/home/zoe/Plaid"]);
-    show(page(2, L.user + " · " + L.pw, `  ${span("b", L.user)}\n  ${span("g", "✓")} zoe\n  ${span("b", L.pw)}\n  ${span("g", "›")} ••••••••••<span class="cursor"></span>`)); await wait(1500);
-    recap.push([L.user, "zoe"]);
+    show(page(1, L.folder, `  ${span("b", L.folder)}\n  ${span("g", "›")} /home/anthony/Plaid<span class="cursor"></span>`)); await wait(1400);
+    recap.push([L.folder, "/home/anthony/Plaid"]);
+    show(page(2, L.user + " · " + L.pw, `  ${span("b", L.user)}\n  ${span("g", "✓")} anthony\n  ${span("b", L.pw)}\n  ${span("g", "›")} ••••••••••<span class="cursor"></span>`)); await wait(1500);
+    recap.push([L.user, "anthony"]);
     const vpns = ["Proton VPN", "Private Internet Access", "Mullvad", "NordVPN", L.none];
     for (const pos of [0, 1, 0]) {
       show(page(3, L.vpn, vpns.map((v, i) => i === pos ? `  ${span("g b", "❯ ■ " + v)}${i === 0 ? span("d", "  " + L.pf) : ""}` : `    ■ ${esc(v)}`).join("\n") + `\n  ${span("d", L.hint)}`));
@@ -720,7 +734,7 @@ footer a{color:var(--text-2)}
     const row = ([name, port], i) => `  ${span("t", "■")} ${span("b", name.padEnd(13))}${esc(L.roles[i].padEnd(17))}${span("t", "http://192.168.1.20:" + port)}`;
     show(out + span("c", cmd) + "\n\n" + `  ${span("gd b", L.ready)}\n  ${span("g", "✓")} ${esc(L.login)}\n\n  ${span("gd b", L.daily)}\n` +
       urls.slice(0, 2).map(row).join("\n") + `\n\n  ${span("gd b", L.behind)}\n` + urls.slice(2).map((u, i) => row(u, i + 2)).join("\n") +
-      `\n\n  ${span("g", "✓")} ${esc(L.again)}\n\n` + span("p", "zoe@mini-pc ~ % ") + '<span class="cursor"></span>');
+      `\n\n  ${span("g", "✓")} ${esc(L.again)}\n\n` + span("p", "anthony@mini-pc ~ % ") + '<span class="cursor"></span>');
   };
   const restart = () => { screen.innerHTML = ""; play(); };
   new IntersectionObserver((es, obs) => es.forEach((e) => { if (e.isIntersecting) { play(); obs.disconnect(); } }),
@@ -732,6 +746,8 @@ footer a{color:var(--text-2)}
   const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && e.target.classList.add("is-visible")),
                                       { threshold: .12 });
   document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+  document.querySelectorAll(".apps,.behind,.how,.faq,.shots,.tabs,.hero>div:first-child")
+    .forEach((g) => [...g.children].forEach((c, i) => c.style.setProperty("--i", i)));
 })();
 </script>
 </body>
