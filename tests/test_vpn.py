@@ -38,3 +38,17 @@ class GluetunEnvTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NearbyServersTest(unittest.TestCase):
+    # gluetun picks a random server among those that forward ports, worldwide: keep it near the user.
+    def test_countries_from_timezone(self):
+        from installer.vpn import nearby_countries
+        self.assertEqual(nearby_countries("Europe/Paris"), "France,Belgium,Switzerland,Netherlands,Germany")
+        self.assertEqual(nearby_countries("America/New_York"), "United States,Canada")
+        self.assertEqual(nearby_countries("Asia/Tokyo"), "")  # unknown: no filter rather than no server
+
+    def test_env_filters_servers(self):
+        env = gluetun_env("protonvpn", {"WIREGUARD_PRIVATE_KEY": "k"}, "Europe/Paris")
+        self.assertEqual(env["SERVER_COUNTRIES"], "France,Belgium,Switzerland,Netherlands,Germany")
+        self.assertNotIn("SERVER_COUNTRIES", gluetun_env("protonvpn", {"WIREGUARD_PRIVATE_KEY": "k"}, "Asia/Tokyo"))
