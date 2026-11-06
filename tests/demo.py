@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 7700
     platform = sys.argv[2] if len(sys.argv) > 2 else "mac"
-    home = "/home/zoe" if platform == "linux" else "/Users/zoe"
+    home = "/home/anthony" if platform == "linux" else "/Users/anthony"
     env = {"HOST_HOME": home, "HOST_PLATFORM": platform, "PUID": "501", "PGID": "20"}
     flow = DemoFlow()
     if "installed" in sys.argv[3:]:  # straight to the panel; sign in with demo / demo-pass

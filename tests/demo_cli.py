@@ -15,7 +15,7 @@ class Flow(DemoFlow):
 if __name__ == "__main__":
     platform = "linux" if "linux" in sys.argv else "mac"
     lang = "en" if "en" in sys.argv else "fr"
-    home = "/home/zoe" if platform == "linux" else "/Users/zoe"
+    home = "/home/anthony" if platform == "linux" else "/Users/anthony"
     env = {"HOST_HOME": home, "HOST_PLATFORM": platform, "PUID": "501", "PGID": "20", "TZ": "Europe/Paris",
            "HOST_ADDR": "localhost"}
     if "--uninstall" in sys.argv:

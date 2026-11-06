@@ -97,7 +97,7 @@ class RedrawTest(unittest.TestCase):
         out = io.StringIO()
         t = tui.Term(read_key=lambda: "", out=out, color=True)
         t.columns = 20
-        t._draw([t.style("x" * 15, bold=True, fg="green")])
+        t._draw([t.style("x" * 15, bold=True, fg="accent")])
         t._draw(["again"])
         self.assertIn("\x1b[1F", out.getvalue())
 
@@ -142,13 +142,18 @@ class PageTest(unittest.TestCase):
 
 
 class AccentTest(unittest.TestCase):
-    def test_brand_and_titles_in_tartan_colours(self):
+    def test_brand_and_titles_in_the_landing_teal(self):
         t, out = term(color=True)
         t.page("Votre compte", step=(2, 3))
         t.heading("Au quotidien")
         text = out.getvalue()
-        green, gold = t._code("green", 38), t._code("gold", 38)
-        self.assertRegex(text, rf"\x1b\[[0-9;]*{green}m Plaid".replace(" ", ""))
-        self.assertRegex(text, rf"\x1b\[[0-9;]*{green}mVotre compte")
-        self.assertRegex(text, rf"\x1b\[[0-9;]*{gold}mAu quotidien")
-        self.assertRegex(text, rf"\x1b\[[0-9;]*{gold}m\s*·\s*2/3")
+        accent, accent2, grey = t._code("accent", 38), t._code("accent2", 38), t._code("grey", 38)
+        self.assertRegex(text, rf"\x1b\[[0-9;]*{accent}mPlaid")
+        self.assertRegex(text, rf"\x1b\[[0-9;]*{accent}mVotre compte")
+        self.assertRegex(text, rf"\x1b\[[0-9;]*{accent2}mAu quotidien")
+        self.assertRegex(text, rf"\x1b\[[0-9;]*{grey}m\s*·\s*2/3")
+
+    def test_palette_matches_the_landing_and_assistant(self):
+        from installer.tui import PALETTE
+        self.assertEqual(PALETTE["accent"], (0, 168, 201))   # --accent-2 in style.css and the landing
+        self.assertEqual(PALETTE["accent2"], (79, 209, 236))  # the landing terminal's highlight

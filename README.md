@@ -93,8 +93,8 @@ Docker Desktop cannot put a container on your computer's network, so install the
 
 1. Install Tailscale from [tailscale.com/download](https://tailscale.com/download) on this computer and sign in.
 2. Install it on your phone with the same account.
-3. In the Tailscale app on the computer, note its name (for example `zoe-macbook`).
-4. On your phone, open `http://zoe-macbook:8096`. The other apps use their own port.
+3. In the Tailscale app on the computer, note its name (for example `anthony-macbook`).
+4. On your phone, open `http://anthony-macbook:8096`. The other apps use their own port.
 
 ## Keep the same address
 

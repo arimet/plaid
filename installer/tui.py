@@ -10,12 +10,16 @@ import sys
 import textwrap
 from typing import Callable, Iterable
 
-# The tartan, as in the web assistant (installer/static/style.css).
+# The landing page and the web assistant's colours (installer/static/style.css, site/index.html):
+# teal for Plaid itself, a brighter teal for what is happening now, gold for warnings, red for errors.
+# The other hues only mark the apps, like their icons.
 PALETTE = {
-    "green": (30, 91, 69), "red": (184, 36, 47), "gold": (232, 178, 48), "navy": (34, 48, 94),
-    "plum": (107, 45, 92), "teal": (19, 129, 124), "rust": (196, 90, 28), "grey": (140, 136, 150),
+    "accent": (0, 168, 201), "accent2": (79, 209, 236), "gold": (240, 181, 74), "red": (224, 98, 90),
+    "grey": (127, 138, 163),
+    "green": (30, 91, 69), "navy": (34, 48, 94), "plum": (107, 45, 92), "teal": (19, 129, 124), "rust": (196, 90, 28),
 }
-_ANSI_256 = {"green": 29, "red": 124, "gold": 178, "navy": 18, "plum": 89, "teal": 30, "rust": 166, "grey": 245}
+_ANSI_256 = {"accent": 38, "accent2": 81, "gold": 215, "red": 167, "grey": 103,
+             "green": 29, "navy": 18, "plum": 89, "teal": 30, "rust": 166}
 _KEYS = {"\x1b[A": "up", "\x1b[B": "down", "\x1b[C": "right", "\x1b[D": "left", "\x1bOA": "up", "\x1bOB": "down",
          "\x1bOC": "right", "\x1bOD": "left", "\r": "enter", "\n": "enter", "\x7f": "backspace", "\x08": "backspace",
          "\x03": "ctrl-c", "\x04": "ctrl-d", "\x15": "ctrl-u", "\t": "tab"}
@@ -163,21 +167,21 @@ class Term:
             self.write("\x1b[H\x1b[2J")
         self._drawn = 0
         self.line()
-        head = self.style("Plaid", fg="green", bold=True)
+        head = self.style("Plaid", fg="accent", bold=True)
         if step:
-            head += self.style(f"  ·  {step[0]}/{step[1]}", fg="gold")
+            head += self.style(f"  ·  {step[0]}/{step[1]}", fg="grey")
         self.line("  " + head)
         if step:
             n, total = step
-            self.line("  " + "".join(self.style("━━━━━ ", fg="green") if i < n - 1 else
-                                     self.style("━━━━━ ", fg="red") if i == n - 1 else
+            self.line("  " + "".join(self.style("━━━━━ ", fg="accent") if i < n - 1 else
+                                     self.style("━━━━━ ", fg="accent2") if i == n - 1 else
                                      self.style("╍╍╍╍╍ ", dim=True) for i in range(total)))
         for chunk in (self.wrap(intro) if intro else []):
             self.line("  " + self.style(chunk, dim=True))
         for label, value in recap or []:
-            self.line("  " + self.style("✓", fg="green") + " " + self.style(f"{label} : ", dim=True) + value)
+            self.line("  " + self.style("✓", fg="accent") + " " + self.style(f"{label} : ", dim=True) + value)
         self.line()
-        self.line("  " + self.style(title, fg="green", bold=True))
+        self.line("  " + self.style(title, fg="accent", bold=True))
         for chunk in (self.wrap(help) if help else []):
             self.line("  " + self.style(chunk, dim=True))
         self.line()
@@ -189,8 +193,8 @@ class Term:
             raise KeyboardInterrupt
 
     def step(self, n: int, total: int, title: str, help: str = "") -> None:
-        bar = "".join(self.style("━━━━━ ", fg="green") if i < n - 1 else
-                      self.style("━━━━━ ", fg="red") if i == n - 1 else self.style("╍╍╍╍╍ ", dim=True)
+        bar = "".join(self.style("━━━━━ ", fg="accent") if i < n - 1 else
+                      self.style("━━━━━ ", fg="accent2") if i == n - 1 else self.style("╍╍╍╍╍ ", dim=True)
                       for i in range(total))
         self.line()
         self.line("  " + bar + self.style(f" {n}/{total}", dim=True))
@@ -199,7 +203,7 @@ class Term:
             self.line("  " + self.style(chunk, dim=True))
 
     def note(self, text: str, kind: str = "info") -> None:
-        mark, color = {"ok": ("✓", "green"), "warn": ("!", "gold"), "error": ("✗", "red")}.get(kind, ("·", "grey"))
+        mark, color = {"ok": ("✓", "accent"), "warn": ("!", "gold"), "error": ("✗", "red")}.get(kind, ("·", "grey"))
         lines = self.wrap(text, 4)
         self.line("  " + self.style(mark, fg=color, bold=True) + " " + lines[0])
         for chunk in lines[1:]:
@@ -207,17 +211,17 @@ class Term:
 
     def heading(self, text: str) -> None:
         self.line()
-        self.line("  " + self.style(text, fg="gold", bold=True))
+        self.line("  " + self.style(text, fg="accent2", bold=True))
 
     # ------------------------------------------------------------------ questions
     def text(self, label: str, default: str = "", secret: bool = False, validate=None, hint: str = "") -> str:
         value, error = "", ""
         while True:
             shown = "•" * len(value) if secret else value
-            field = shown + self.style("▌", fg="green") if value else self.style(default or " ", dim=True) + \
-                self.style("▌", fg="green")
+            field = shown + self.style("▌", fg="accent") if value else self.style(default or " ", dim=True) + \
+                self.style("▌", fg="accent")
             lines = ["  " + self.style(label, bold=True) + (self.style("  " + hint, dim=True) if hint else ""),
-                     "  " + self.style("›", fg="green", bold=True) + " " + field]
+                     "  " + self.style("›", fg="accent", bold=True) + " " + field]
             if error:
                 lines.append("    " + self.style(error, fg="red"))
             self._draw(lines)
@@ -228,7 +232,7 @@ class Term:
                 result = value or default
                 error = validate(result) if validate else None
                 if not error:
-                    self._draw(lines[:1] + ["  " + self.style("✓", fg="green") + " " +
+                    self._draw(lines[:1] + ["  " + self.style("✓", fg="accent") + " " +
                                             ("•" * len(result) if secret else result)])
                     self._settle()
                     return result
@@ -249,7 +253,7 @@ class Term:
             for i, (value, text, colour, detail) in enumerate(opts):
                 swatch = self.style("■", fg=colour) + " " if colour else ""
                 if i == index:
-                    row = self.style("❯ ", fg="green", bold=True) + swatch + self.style(text, bold=True)
+                    row = self.style("❯ ", fg="accent", bold=True) + swatch + self.style(text, bold=True)
                 else:
                     row = "  " + swatch + text
                 lines.append("  " + row + (self.style("  " + detail, dim=True) if detail and i == index else ""))
@@ -263,14 +267,14 @@ class Term:
             elif key in ("down", "j", "tab"):
                 index = (index + 1) % len(opts)
             elif key == "enter":
-                self._draw([lines[0], "  " + self.style("✓", fg="green") + " " + opts[index][1]])
+                self._draw([lines[0], "  " + self.style("✓", fg="accent") + " " + opts[index][1]])
                 self._settle()
                 return opts[index][0]
 
     def confirm(self, question: str, yes: str, no: str, default: bool = False) -> bool:
         choice = default
         while True:
-            pill = lambda text, on: (self.style(f" {text} ", fg="green", bold=True, underline=True) if on
+            pill = lambda text, on: (self.style(f" {text} ", fg="accent", bold=True, underline=True) if on
                                      else self.style(f" {text} ", dim=True)) if self.color else (
                 f"[{text}]" if on else f" {text} ")
             lines = ["  " + self.style(question, bold=True), "  " + pill(yes, choice) + "  " + pill(no, not choice)]
@@ -285,7 +289,7 @@ class Term:
             elif key.lower() in (no[:1].lower(), "n"):
                 choice = False
             elif key == "enter":
-                self._draw([lines[0], "  " + self.style("✓", fg="green") + " " + (yes if choice else no)])
+                self._draw([lines[0], "  " + self.style("✓", fg="accent") + " " + (yes if choice else no)])
                 self._settle()
                 return choice
 
@@ -302,11 +306,11 @@ class Steps:
         lines = []
         for i, (_, label) in enumerate(self.labels):
             if self.done or i < self.current:
-                mark = t.style("✓", fg="green", bold=True)
+                mark = t.style("✓", fg="accent", bold=True)
             elif i == self.current and self.failed:
                 mark = t.style("✗", fg="red", bold=True)
             elif i == self.current:
-                mark = t.style(SPINNER[self.tick % len(SPINNER)] if t.color else "…", fg="gold")
+                mark = t.style(SPINNER[self.tick % len(SPINNER)] if t.color else "…", fg="accent2")
             else:
                 mark = t.style("·", dim=True)
             lines.append(f"  {mark} " + (t.style(label, bold=True) if i == self.current and not self.done else label))

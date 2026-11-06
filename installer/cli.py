@@ -269,7 +269,7 @@ def print_apps(term, lang: str, host: str) -> None:
                                 (t(lang, "apps_behind"), [x for x in SERVICES if x not in DAILY_APPS], False)):
         term.heading(title)
         for svc in group:
-            url = term.style(f"http://{host}:{PORTS[svc]}", fg="teal", underline=True)
+            url = term.style(f"http://{host}:{PORTS[svc]}", fg="accent2", underline=True)
             name = term.pad(term.style(APP_NAMES[svc], bold=True), 13)  # padded on what shows, not on the codes
             term.line(f"  {term.style('■', fg=_APP_SWATCH[svc])} {name}{t(lang, 'app_' + svc).ljust(17)}{url}")
             if daily:
