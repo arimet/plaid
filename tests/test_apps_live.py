@@ -80,6 +80,17 @@ class LinksTest(unittest.TestCase):
         self.assertTrue(c["bazarr"]["use_radarr"] and c["bazarr"]["use_sonarr"])
         self.assertTrue(c["seerr_public"])
 
+    def test_default_indexer_reaches_radarr_and_sonarr(self):
+        import time
+        names = {}
+        for _ in range(20):  # Prowlarr syncs in the background
+            names = {app: [i["name"] for i in get(f"http://localhost:{port}/api/v3/indexer", {"X-Api-Key": self.keys[app]})]
+                     for app, port in (("radarr", 7878), ("sonarr", 8989))}
+            if all(names.values()):
+                break
+            time.sleep(3)
+        self.assertEqual(names, {"radarr": ["Internet Archive (Prowlarr)"], "sonarr": ["Internet Archive (Prowlarr)"]})
+
     def test_jellyfin_libraries(self):
         names = sorted(self.keys["jellyfin_libraries"])
         self.assertEqual(names, ["Films", "Séries"])

@@ -249,14 +249,15 @@ def add_default_indexer(prowlarr: Arr) -> None:
 
 def configure_prowlarr(prowlarr: Arr, s: Settings, radarr: Arr, sonarr: Arr, log: Log) -> None:
     prowlarr.login(s.username, s.password)
-    try:
-        add_default_indexer(prowlarr)
-    except (HttpError, OSError, StopIteration):
-        pass  # a convenience: the stack works without it, and the done page explains how to add trackers
     for app, port in ((radarr, 7878), (sonarr, 8989)):
         name = app.name.capitalize()
         prowlarr.add("applications", name, name,
                      {"prowlarrUrl": "http://prowlarr:9696", "baseUrl": f"http://{app.name}:{port}", "apiKey": app.key})
+    # After the apps: Prowlarr hands an indexer to Radarr and Sonarr when it is enabled, not when an app is added.
+    try:
+        add_default_indexer(prowlarr)
+    except (HttpError, OSError, StopIteration):
+        pass  # a convenience: the stack works without it, and the done page explains how to add trackers
     log("prowlarr")
 
 
