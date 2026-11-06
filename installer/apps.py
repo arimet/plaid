@@ -95,6 +95,16 @@ def read_when(compose_out: ComposeOut, svc: str, path: str, pattern: str, second
 
 # ---------------------------------------------------------------- qBittorrent
 
+def _qbit_login(host: str, name: str, pw: str) -> bool:
+    """False on a wrong password; an unreachable qBittorrent raises OSError. qBittorrent bans the address after
+    5 failed logins: callers try at most twice."""
+    try:  # success: 204 (v5) or "Ok." (v4); wrong password: 401 (v5) or "Fails." (v4)
+        return call("POST", f"http://{host}/api/v2/auth/login", {"username": name, "password": pw},
+                    {"Host": host}, form=True) != "Fails."
+    except HttpError:
+        return False
+
+
 def configure_qbittorrent(s: Settings, host: str, compose_out: ComposeOut, log: Log) -> str:
     """Returns qBittorrent's API key: Radarr 6 fails the password login against qBittorrent 5.3
     (session cookie renamed QBT_SID_<port>), the key works."""
@@ -103,11 +113,7 @@ def configure_qbittorrent(s: Settings, host: str, compose_out: ComposeOut, log: 
     # qBittorrent rejects requests whose Host header does not name its own port (8080).
     headers = {"Host": host}
 
-    def login(name, pw):
-        try:  # success: 204 (v5) or "Ok." (v4); wrong password: 401 (v5) or "Fails." (v4)
-            return call("POST", base + "/auth/login", {"username": name, "password": pw}, headers, form=True) != "Fails."
-        except HttpError:
-            return False
+    login = lambda name, pw: _qbit_login(host, name, pw)
 
     # Few attempts on purpose: qBittorrent bans the address after 5 failed logins.
     if not login(s.username, s.password):
@@ -130,6 +136,16 @@ def configure_qbittorrent(s: Settings, host: str, compose_out: ComposeOut, log: 
 
 # ---------------------------------------------------------------- Jellyfin
 
+JELLYFIN_CLIENT = 'MediaBrowser Client="Plaid", Device="Plaid", DeviceId="plaid", Version="1.0"'
+
+
+def _jellyfin_auth(host: str, name: str, pw: str) -> tuple[dict, str]:
+    """(headers with the session token, user id). HttpError 401 on a wrong password."""
+    reply = call("POST", f"http://{host}/Users/AuthenticateByName", {"Username": name, "Pw": pw},
+                 {"Authorization": JELLYFIN_CLIENT})
+    return {"Authorization": f'{JELLYFIN_CLIENT}, Token="{reply["AccessToken"]}"'}, reply["User"]["Id"]
+
+
 def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log) -> tuple[str, list[str]]:
     """Returns (API key for Radarr/Sonarr, library names)."""
     base = f"http://{host}"
@@ -145,7 +161,7 @@ def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log) -> tuple
         if time.time() > deadline:
             raise TimeoutError("Jellyfin is not ready")
         time.sleep(3)
-    client = 'MediaBrowser Client="Plaid", Device="Plaid", DeviceId="plaid", Version="1.0"'
+    client = JELLYFIN_CLIENT
     culture, country, lang = JELLYFIN_LOCALE[s.lang]
     if not info["StartupWizardCompleted"]:
         call("POST", base + "/Startup/Configuration",
@@ -212,6 +228,19 @@ class Arr:
             if flag in item:
                 item[flag] = True
         self("POST", f"/{kind}", item)
+
+    def set_download_client_host(self, host: str) -> None:
+        """qBittorrent sits behind gluetun with a VPN, on its own without: Radarr and Sonarr follow it."""
+        for client in self("GET", "/downloadclient"):
+            if client["name"] != "qBittorrent":
+                continue
+            field = next(f for f in client["fields"] if f["name"] == "host")
+            if field.get("value") != host:
+                field["value"] = host
+                self("PUT", f"/downloadclient/{client['id']}", client)
+
+    def rescan(self) -> None:
+        self("POST", "/command", {"name": "RescanMovie" if self.name == "radarr" else "RescanSeries"})
 
     def root_folder(self, path):
         if path not in {f["path"].rstrip("/") for f in self("GET", "/rootfolder")}:
@@ -376,3 +405,77 @@ def configure_all(s: Settings, host_of: Callable[[str], str], log: Log, compose_
     servers = configure_seerr(s, host_of("seerr"), radarr, sonarr, log)
     return {"radarr": radarr.key, "sonarr": sonarr.key, "prowlarr": prowlarr.key, "bazarr": bazarr_key,
             "jellyfin": jellyfin_key, "jellyfin_libraries": libraries, "seerr_servers": servers}
+
+
+# ---------------------------------------------------------------- settings changes
+
+def check_logins(s: Settings, host_of: Callable[[str], str]) -> list[str]:
+    """The apps among Jellyfin and qBittorrent that refuse the password Plaid has: the user changed it there.
+    One attempt each; an app that does not answer is not listed (the change will report it)."""
+    refused = []
+    try:
+        _jellyfin_auth(host_of("jellyfin"), s.username, s.password)
+    except HttpError as e:
+        if e.status in (400, 401, 403):
+            refused.append("jellyfin")
+    except OSError:
+        pass
+    try:
+        if not _qbit_login(host_of("qbittorrent"), s.username, s.password):
+            refused.append("qbittorrent")
+    except OSError:
+        pass
+    return refused
+
+
+def change_account(old: Settings, new: Settings, host_of: Callable[[str], str], compose_out: ComposeOut,
+                   current: dict[str, str], log: Log) -> list[str]:
+    """Sets the new username and password in every app. Returns the apps left unchanged: one failure does not
+    stop the others. Seerr signs in through Jellyfin, so it follows Jellyfin."""
+    failed = []
+
+    def attempt(app: str, change: Callable[[], None]) -> None:
+        try:
+            change()
+            log(app)
+        except Exception:  # noqa: BLE001 - reported to the user by name
+            failed.append(app)
+
+    for name, version in (("radarr", "v3"), ("sonarr", "v3"), ("prowlarr", "v1")):  # by API key
+        attempt(name, lambda name=name, version=version:
+                Arr(name, host_of(name), version, compose_out).login(new.username, new.password))
+
+    def bazarr():
+        key = read_when(compose_out, "bazarr", "/config/config/config.yaml", r"^\s+apikey: '?([0-9a-f]{8,})")
+        call("POST", f"http://{host_of('bazarr')}/api/system/settings",
+             {"settings-auth-username": new.username, "settings-auth-password": new.password},
+             {"X-API-KEY": key}, form=True)
+    attempt("bazarr", bazarr)
+
+    def qbittorrent():
+        host = host_of("qbittorrent")
+        if not _qbit_login(host, old.username, current.get("qbittorrent", old.password)):
+            raise RuntimeError("qBittorrent refused the current password")
+        prefs = {"web_ui_username": new.username, "web_ui_password": new.password}
+        call("POST", f"http://{host}/api/v2/app/setPreferences", {"json": json.dumps(prefs)}, {"Host": host}, form=True)
+    attempt("qbittorrent", qbittorrent)
+
+    def jellyfin():
+        host, pw = host_of("jellyfin"), current.get("jellyfin", old.password)
+        auth, uid = _jellyfin_auth(host, old.username, pw)
+        if new.password != old.password:
+            call("POST", f"http://{host}/Users/{uid}/Password", {"CurrentPw": pw, "NewPw": new.password}, auth)
+        if new.username != old.username:
+            user = call("GET", f"http://{host}/Users/{uid}", headers=auth)
+            user["Name"] = new.username
+            call("POST", f"http://{host}/Users/{uid}", user, auth)
+    attempt("jellyfin", jellyfin)
+    return failed
+
+
+def rescan_all(s: Settings, host_of: Callable[[str], str], compose_out: ComposeOut) -> None:
+    """After a new media folder: Radarr, Sonarr and Jellyfin look at what is there."""
+    for name in ("radarr", "sonarr"):
+        Arr(name, host_of(name), "v3", compose_out).rescan()
+    auth, _ = _jellyfin_auth(host_of("jellyfin"), s.username, s.password)
+    call("POST", f"http://{host_of('jellyfin')}/Library/Refresh", headers=auth)
