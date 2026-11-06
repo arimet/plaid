@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- Source of site/assets/og.png, the link preview (1200×630). Rebuild it with:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+       --window-size=1200,630 --screenshot=site/assets/og.png "file://$PWD/docs/og.html" -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../site/assets/fonts.css">
+<style>
+:root{--surface:#e0e5ec;--hi:rgba(255,255,255,.85);--lo:rgba(163,177,198,.7);
+  --raised:-10px -10px 22px var(--hi),10px 10px 22px var(--lo);--small:-5px -5px 12px var(--hi),5px 5px 12px var(--lo);
+  --inset:inset -5px -5px 12px var(--hi),inset 5px 5px 12px var(--lo);
+  --accent:#0089a8;--accent-2:#00a8c9;--accent-text:#00748f;--text:#3d4757;--text-2:#56627a;--muted:#8b97ab}
+*{box-sizing:border-box;margin:0}
+html,body{width:1200px;height:630px;overflow:hidden;background:var(--surface);font-family:Inter,sans-serif;color:var(--text-2)}
+.page{display:grid;grid-template-columns:1fr 380px;gap:56px;align-items:center;height:100%;padding:0 72px}
+.brand{display:flex;align-items:center;gap:20px}
+.mark{width:72px;height:72px;border-radius:20px;box-shadow:var(--raised);overflow:hidden}
+.mark svg{display:block;width:100%;height:100%}
+.brand b{font:800 64px/1 Nunito,sans-serif;color:var(--text);letter-spacing:-.03em}
+h1{margin-top:40px;font:800 58px/1.04 Nunito,sans-serif;color:var(--text);letter-spacing:-.03em}
+h1 em{font-style:normal;color:var(--accent-text)}
+p{margin-top:22px;font-size:24px;line-height:1.4;max-width:30ch}
+.apps{display:flex;gap:14px;margin-top:40px}
+.apps span{width:54px;height:54px;border-radius:50%;box-shadow:var(--small);display:grid;place-items:center}
+.apps img{width:30px;height:30px}
+.card{border-radius:30px;box-shadow:var(--raised);padding:20px}
+.in{border-radius:22px;box-shadow:var(--inset);padding:30px 30px 32px}
+.label{font:700 14px/1 Inter,sans-serif;letter-spacing:.14em;color:var(--muted)}
+.big{font:800 92px/1 Nunito,sans-serif;color:var(--accent-text);letter-spacing:-.04em;margin:18px 0 10px}
+.big small{font-size:34px;color:var(--text-2);margin-left:4px}
+.track{height:12px;border-radius:99px;box-shadow:var(--inset);overflow:hidden}
+.track i{display:block;height:100%;width:73%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+ul{list-style:none;padding:0;margin-top:26px;display:flex;flex-direction:column;gap:14px;font-size:19px}
+li{display:flex;align-items:center;gap:12px}
+.ok{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center}
+.ok svg{width:12px;height:12px}
+.now{width:22px;height:22px;border-radius:50%;border:3px solid var(--accent-2);border-right-color:transparent}
+li.cur{color:var(--text);font-weight:600}
+</style>
+</head>
+<body>
+<div class="page">
+  <div>
+    <div class="brand">
+      <div class="mark"><svg viewBox="0 0 32 32"><rect width="32" height="32" fill="#1e5b45"/>
+        <g opacity=".85"><rect x="5" width="4" height="32" fill="#b8242f"/><rect x="15" width="1.5" height="32" fill="#e8b230"/><rect x="22" width="6" height="32" fill="#22305e"/></g>
+        <g opacity=".6"><rect y="5" width="32" height="4" fill="#b8242f"/><rect y="15" width="32" height="1.5" fill="#e8b230"/><rect y="22" width="32" height="6" fill="#22305e"/></g></svg></div>
+      <b>Plaid</b>
+    </div>
+    <h1>Your films and series, <em>at&nbsp;home.</em></h1>
+    <p>Seven apps, installed and linked in one sitting. Removed without a trace.</p>
+    <div class="apps">
+      <span><img src="../site/assets/icons/jellyfin.svg" alt=""></span>
+      <span><img src="../site/assets/icons/seerr.svg" alt=""></span>
+      <span><img src="../site/assets/icons/radarr.svg" alt=""></span>
+      <span><img src="../site/assets/icons/sonarr.svg" alt=""></span>
+      <span><img src="../site/assets/icons/qbittorrent.svg" alt=""></span>
+      <span><img src="../site/assets/icons/prowlarr.svg" alt=""></span>
+      <span><img src="../site/assets/icons/bazarr.svg" alt=""></span>
+    </div>
+  </div>
+  <div class="card"><div class="in">
+    <div class="label">INSTALLING</div>
+    <div class="big">73<small>%</small></div>
+    <div class="track"><i></i></div>
+    <ul>
+      <li><span class="ok"><svg viewBox="0 0 12 12"><path d="M2 6.3l2.5 2.5L10 3.4" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Downloading the apps</li>
+      <li class="cur"><span class="now"></span>Linking them together</li>
+    </ul>
+  </div></div>
+</div>
+</body>
+</html>
