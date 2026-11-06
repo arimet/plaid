@@ -1,4 +1,4 @@
-"""Terminal interface for the command-line mode: tartan banner, arrow-key menus, masked secrets,
+"""Terminal interface for the command-line mode: text header, arrow-key menus, masked secrets,
 inline validation and live progress. Standard library only; falls back to plain text without a colour TTY."""
 from __future__ import annotations
 
@@ -121,17 +121,11 @@ class Term:
 
     # ------------------------------------------------------------------ blocks
     def banner(self, title: str, subtitle: str) -> None:
-        """A strip of woven tartan, then the name: the same cloth as the web assistant's header."""
-        warp = lambda x: "red" if x % 24 in (4, 5) else "gold" if x % 24 == 11 else "navy" if x % 24 in (16, 17, 18) else "green"
-        weft = lambda y: "red" if y % 6 == 1 else "navy" if y % 6 == 4 else "green"
-        cloth = lambda x, y: warp(x) if (x + y) % 2 == 0 else weft(y)
-        width = self.width - 4
+        """Text only: the name, then what it does."""
         self.line()
-        if self.color:
-            for y in (0, 2):
-                self.line("  " + "".join(self.style("▀", fg=cloth(x, y), bg=cloth(x, y + 1)) for x in range(width)))
-        self.line()
-        self.line("  " + self.style(title, bold=True) + "  " + self.style(subtitle, dim=True))
+        self.line("  " + self.style(title, bold=True))
+        for chunk in self.wrap(subtitle):
+            self.line("  " + self.style(chunk, dim=True))
 
     def step(self, n: int, total: int, title: str, help: str = "") -> None:
         bar = "".join(self.style("━━━━━ ", fg="green") if i < n - 1 else
