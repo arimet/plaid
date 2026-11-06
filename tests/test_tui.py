@@ -80,3 +80,27 @@ class ColorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RedrawTest(unittest.TestCase):
+    # A line wider than the terminal takes several rows: the redraw must climb all of them,
+    # or the top line is copied again at every refresh (seen during "Linking the apps").
+    def test_wrapped_line_counts_its_rows(self):
+        out = io.StringIO()
+        t = tui.Term(read_key=lambda: "", out=out, color=True)
+        t.columns = 20
+        t._draw(["x" * 45, "short"])
+        t._draw(["again"])
+        self.assertIn("\x1b[4F", out.getvalue())  # 3 rows for the long line + 1
+
+    def test_colour_codes_do_not_count(self):
+        out = io.StringIO()
+        t = tui.Term(read_key=lambda: "", out=out, color=True)
+        t.columns = 20
+        t._draw([t.style("x" * 15, bold=True, fg="green")])
+        t._draw(["again"])
+        self.assertIn("\x1b[1F", out.getvalue())
+
+    def test_pad_ignores_colour(self):
+        t = tui.Term(read_key=lambda: "", out=io.StringIO(), color=True)
+        self.assertEqual(tui.visible_len(t.pad(t.style("Seerr", bold=True), 12)), 12)

@@ -153,3 +153,17 @@ class PlainRollbackTest(unittest.TestCase):
                                ENV, "fr")
         self.assertEqual(code, 1)
         self.assertTrue(flow.rolled_back)
+
+
+class SummaryAlignmentTest(unittest.TestCase):
+    def test_links_line_up_with_colours_on(self):
+        import io
+        from installer import tui
+        from tests.test_tui import keys
+        out = io.StringIO()
+        t = tui.Term(read_key=keys("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r"),
+                     out=out, color=True)
+        cli.run_install_tui(t, FakeFlow(), ENV, "fr")
+        rows = [tui._ANSI.sub("", line) for line in out.getvalue().splitlines() if "http://localhost:" in line
+                and "■" in tui._ANSI.sub("", line)]
+        self.assertEqual(len({row.index("http://") for row in rows}), 1, rows)

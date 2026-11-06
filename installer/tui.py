@@ -3,6 +3,7 @@ inline validation and live progress. Standard library only; falls back to plain 
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 import textwrap
@@ -18,6 +19,13 @@ _KEYS = {"\x1b[A": "up", "\x1b[B": "down", "\x1b[C": "right", "\x1b[D": "left", 
          "\x1bOC": "right", "\x1bOD": "left", "\r": "enter", "\n": "enter", "\x7f": "backspace", "\x08": "backspace",
          "\x03": "ctrl-c", "\x04": "ctrl-d", "\x15": "ctrl-u", "\t": "tab"}
 SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def visible_len(text: str) -> int:
+    return len(_ANSI.sub("", text))
 
 
 def split_keys(raw: str) -> list[str]:
@@ -78,8 +86,9 @@ class Term:
         self.color = supports_color(self.out) if color is None else color
         self.read_key = read_key or _RawKeys()
         self.truecolor = os.environ.get("COLORTERM", "") in ("truecolor", "24bit")
-        self.width = max(40, min(shutil.get_terminal_size((80, 24)).columns, 88))
-        self._drawn = 0  # lines of the widget currently on screen, redrawn in place
+        self.columns = shutil.get_terminal_size((80, 24)).columns  # the real width, for counting rows
+        self.width = max(40, min(self.columns, 88))  # the width text is wrapped to
+        self._drawn = 0  # screen rows of the widget currently shown, redrawn in place
 
     # ------------------------------------------------------------------ styling
     def _code(self, name: str, ground: int) -> str:
@@ -109,12 +118,17 @@ class Term:
     def wrap(self, text: str, indent: int = 2) -> list[str]:
         return textwrap.wrap(text, self.width - indent - 2) or [""]
 
+    def pad(self, text: str, width: int) -> str:
+        """Left-aligns styled text in a column: colour codes take no room on screen."""
+        return text + " " * max(0, width - visible_len(text))
+
     # ------------------------------------------------------------------ redraw in place
     def _draw(self, lines: list[str]) -> None:
         if self.color and self._drawn:
-            self.write(f"\x1b[{self._drawn}F\x1b[J")  # back to the widget's first line, clear below
+            self.write(f"\x1b[{self._drawn}F\x1b[J")  # back to the widget's first row, clear below
         self.write("".join(line + "\n" for line in lines))
-        self._drawn = len(lines)
+        # A line wider than the terminal wraps onto several rows: climb them all next time.
+        self._drawn = sum(max(1, -(-visible_len(line) // max(1, self.columns))) for line in lines)
 
     def _settle(self) -> None:
         self._drawn = 0
@@ -250,7 +264,7 @@ class Steps:
                 mark = t.style("·", dim=True)
             lines.append(f"  {mark} " + (t.style(label, bold=True) if i == self.current and not self.done else label))
             if i == self.current and self.subs and not self.done:
-                lines.append("    " + t.style(" · ".join(self.subs), dim=True))
+                lines += ["    " + t.style(chunk, dim=True) for chunk in t.wrap(" · ".join(self.subs), 4)]
         t._draw(lines)
         self.tick += 1
 

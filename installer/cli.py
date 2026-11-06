@@ -227,8 +227,8 @@ def run_install_tui(term, flow, env: dict, lang: str) -> int:
         term.heading(title)
         for svc in group:
             url = term.style(f"http://{host}:{PORTS[svc]}", underline=True)
-            term.line(f"  {term.style('■', fg=_APP_SWATCH[svc])} {term.style(APP_NAMES[svc], bold=True):<12} "
-                      f"{t(lang, 'app_' + svc):<16} {url}")
+            name = term.pad(term.style(APP_NAMES[svc], bold=True), 13)  # padded on what shows, not on the codes
+            term.line(f"  {term.style('■', fg=_APP_SWATCH[svc])} {name}{t(lang, 'app_' + svc).ljust(17)}{url}")
             if daily:
                 for chunk in term.wrap(t(lang, "appd_" + svc), 4):
                     term.line("    " + term.style(chunk, dim=True))
