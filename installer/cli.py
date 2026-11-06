@@ -197,6 +197,8 @@ def run_install_tui(term, flow, env: dict, lang: str) -> int:
             steps.render()
             continue
         except KeyboardInterrupt:  # Ctrl-C mid-install: leave the machine as it was
+            steps.failed = True  # the interrupted step shows ✗, not a frozen spinner
+            steps.render()
             term._settle()
             term.line()
             return undo_install(term, flow, lang, cancel, worker)
