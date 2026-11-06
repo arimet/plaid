@@ -20,7 +20,7 @@ class DemoFlow:
         return self.complete
 
     def preflight(self, s):
-        return ["warn_dir_not_empty"] + ([] if s.vpn_provider else ["warn_no_vpn"])
+        return [] if s.vpn_provider else ["warn_no_vpn"]  # the demo has no real folder to look at
 
     def install(self, s, report):
         self.settings = s
