@@ -73,9 +73,10 @@ if __name__ == "__main__":
 class UninstallHelpersTest(unittest.TestCase):
     def test_run_detached(self):
         run = FakeRun()
-        docker.run_detached("img", ["--uninstall-worker"], {"ARR_STATE": "abc"}, run=run)
+        docker.run_detached("img", ["--uninstall-worker"], {"ARR_STATE": "abc"}, "worker", run=run)
         args = run.calls[0]
-        self.assertEqual(args[:4], ["docker", "run", "-d", "--rm"])
+        # no --rm: a failed worker must stay, so the panel can show its logs
+        self.assertEqual(args[:5], ["docker", "run", "-d", "--name", "worker"])
         self.assertIn("ARR_STATE=abc", args)
         self.assertIn("/var/run/docker.sock:/var/run/docker.sock", args)
         self.assertEqual(args[-2:], ["img", "--uninstall-worker"])
@@ -99,6 +100,8 @@ class UninstallHelpersTest(unittest.TestCase):
         self.assertIn("containers/json", script)
         self.assertIn("ancestor", script)
         self.assertIn("-X DELETE http://d/images/ghcr.io/x/arr-installer:latest", script)
+        self.assertIn("-X DELETE 'http://d/containers/arr-installer-uninstall?force=true'", script)
+        self.assertIn("seq 150", script)  # bounded: offline, curl is missing and the wait would never end
 
 
 class TimeoutTest(unittest.TestCase):

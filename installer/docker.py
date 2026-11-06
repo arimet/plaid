@@ -117,9 +117,27 @@ def own_image(run: Run = default_run) -> str:
     return _check(run, ["docker", "inspect", "-f", "{{.Config.Image}}", self_container_id()]).stdout.strip()
 
 
-def run_detached(image: str, args: list, env: dict, run: Run = default_run) -> None:
+WORKER = "arr-installer-uninstall"
+
+
+def run_detached(image: str, args: list, env: dict, name: str, run: Run = default_run) -> None:
+    """No --rm: a worker that fails stays, so the panel can show its logs. On success the reaper deletes it."""
     env_args = [a for k, v in env.items() for a in ("-e", f"{k}={v}")]
-    _check(run, ["docker", "run", "-d", "--rm", "-v", SOCKET, *env_args, image, *args])
+    _check(run, ["docker", "run", "-d", "--name", name, "-v", SOCKET, *env_args, image, *args])
+
+
+def container_state(name: str, run: Run = default_run) -> tuple[bool, bool, int]:
+    """(exists, running, exit code)."""
+    result = run(["docker", "inspect", "-f", "{{.State.Running}} {{.State.ExitCode}}", name])
+    if result.returncode != 0:
+        return False, False, 0
+    running, code = result.stdout.split()
+    return True, running == "true", int(code)
+
+
+def logs(name: str, run: Run = default_run) -> str:
+    result = run(["docker", "logs", "--tail", "30", name])
+    return ((result.stdout or "") + (result.stderr or "")).strip()
 
 
 def remove(kind: str, name: str, run: Run = default_run) -> None:
@@ -130,9 +148,11 @@ def remove(kind: str, name: str, run: Run = default_run) -> None:
         # A container cannot delete its own image: a reaper on the small helper image waits until nothing
         # runs the installer any more, then deletes it through the Docker API (the helper has no docker CLI).
         api = "curl -s --unix-socket /var/run/docker.sock"
+        # Bounded wait (5 min): offline, curl cannot be installed and the reaper must still go away.
         script = (f"apk add --no-cache curl >/dev/null 2>&1; "
-                  f"while [ \"$({api} -G http://d/containers/json "
-                  f"--data-urlencode 'filters={{\"ancestor\":[\"{image}\"]}}')\" != '[]' ]; do sleep 2; done; "
+                  f"for i in $(seq 150); do [ \"$({api} -G http://d/containers/json "
+                  f"--data-urlencode 'filters={{\"ancestor\":[\"{image}\"]}}')\" = '[]' ] && break; sleep 2; done; "
+                  f"{api} -X DELETE 'http://d/containers/{WORKER}?force=true' >/dev/null; "
                   f"{api} -X DELETE http://d/images/{image} >/dev/null")
         run(["docker", "run", "-d", "--rm", "-v", SOCKET, HELPER, "sh", "-c", script])
         return

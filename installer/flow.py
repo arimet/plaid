@@ -18,6 +18,7 @@ from installer.settings import Settings, validate
 STATE_DIR = os.environ.get("ARR_STATE_DIR", "/state")
 STATE_VOLUME = "arr-installer-state"
 INSTALLER_NAME = "arr-installer"
+WORKER_NAME = docker.WORKER
 STATE_FILES = ("compose.json", "settings.json")
 VPN_WAIT = 180
 
@@ -123,9 +124,10 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
         try:
             dk.compose(state_dir, "up", "-d")
         except DockerError as e:
-            port = re.search(r":(\d+) failed: port is already allocated|port (\d+).*already", str(e))
-            if port:
-                report(Progress(step, error=f"err_port_busy:{port.group(1) or port.group(2)}", detail=str(e)))
+            text = str(e)
+            port = re.search(r"\d+\.\d+\.\d+\.\d+:(\d+)", text)  # Desktop: "already allocated", Engine: "in use"
+            if port and ("already allocated" in text or "already in use" in text):
+                report(Progress(step, error=f"err_port_busy:{port.group(1)}", detail=text))
                 return None
             raise
         dk.connect_network(dk.self_container_id())
@@ -169,7 +171,20 @@ def uninstall(remove_media: bool, report: Report, dk=docker, state_dir: str = ST
     """Hands the work to a detached container: this one is deleted along the way."""
     report(Progress("step_uninstall"))
     args = ["--uninstall-worker"] + (["--remove-media"] if remove_media else [])
-    dk.run_detached(dk.own_image(), args, {"ARR_STATE": pack_state(state_dir)})
+    dk.run_detached(dk.own_image(), args, {"ARR_STATE": pack_state(state_dir)}, WORKER_NAME)
+
+
+def uninstall_status(dk=docker) -> tuple[str, str]:
+    """("idle" | "running" | "failed", detail). On success the worker deletes this container, so a worker
+    that stopped with an error while we still answer means the removal failed: show its logs."""
+    exists, running, code = dk.container_state(WORKER_NAME)
+    if not exists:
+        return "idle", ""
+    if running or code == 0:
+        return "running", ""
+    detail = dk.logs(WORKER_NAME)
+    dk.remove("container", WORKER_NAME)
+    return "failed", detail
 
 
 def uninstall_worker(payload: str, remove_media: bool, dk=docker, work_dir: str = "/tmp/arr-state") -> None:

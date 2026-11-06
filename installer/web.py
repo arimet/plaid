@@ -317,6 +317,11 @@ def make_handler(state: State):
                 return self.json(200, self.progress(lang))
             if path == "/api/ping":
                 return self.json(200, {"ok": True})
+            if path == "/api/uninstall-status":
+                if self.locked():
+                    return self.json(401, {})
+                status, detail = state.flow.uninstall_status()
+                return self.json(200, {"state": status, "detail": detail, "text": t(lang, "err_uninstall_failed")})
             if path != "/":
                 return self.send(404, "Not found", "text/plain")
             if self.locked():
@@ -328,6 +333,10 @@ def make_handler(state: State):
 
         def do_POST(self):
             path = urllib.parse.urlparse(self.path).path
+            # SameSite treats the seven apps (other ports, same host) as same-site: refuse their pages' POSTs.
+            origin = self.headers.get("Origin")
+            if origin and urllib.parse.urlparse(origin).netloc != self.headers.get("Host"):
+                return self.json(403, {})
             data = self.body()
             s = state.flow.load_settings()
             lang = data.get("lang") if data.get("lang") in T else self.lang(s)
@@ -346,16 +355,21 @@ def make_handler(state: State):
                 return self.json(200, {"errors": [item(k) for k in found if k.startswith("err_")],
                                        "warnings": [item(k) for k in found if k.startswith("warn_")]})
             if path == "/api/install":
-                if self.locked() or state.running:
+                if self.locked() or state.running or s is not None:
                     return self.json(409, {})
                 settings = settings_from(data, state.env)
                 if validate(settings):
                     return self.json(400, {"errors": validate(settings)})
+                blocking = [k for k in state.flow.preflight(settings) if k.startswith("err_")]
+                if blocking:  # the page checks first, but never install on top of anything
+                    return self.json(409, {"errors": blocking})
                 state.start_install(settings)
                 return self.json(202, {}, self.session_cookie())
             if path == "/api/uninstall":
                 if self.locked() or s is None:
                     return self.json(401, {})
+                if state.running:
+                    return self.json(409, {})
                 state.flow.uninstall(bool(data.get("remove_media")), state.report)
                 return self.json(202, {"text": t(lang, "uninstall_started")})
             return self.send(404, "Not found", "text/plain")

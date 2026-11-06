@@ -199,12 +199,25 @@
       status.hidden = false;
       status.textContent = T.uninstall_started;
       const ping = async () => {
-        try { await fetch("/api/ping", {cache: "no-store"}); setTimeout(ping, 2000); }
-        catch {
+        let data;
+        try { data = await (await fetch("/api/uninstall-status", {cache: "no-store", credentials: "same-origin"})).json(); }
+        catch {  // this server is gone: the removal deleted it, so it went through
           status.textContent = "";
           $("#done h1").textContent = T.uninstall_done;
           $$("#done > :not(h1)").forEach((el) => (el.hidden = true));
+          return;
         }
+        if (data.state === "failed") {
+          status.textContent = data.text;
+          const pre = document.createElement("pre");
+          pre.className = "detail";
+          pre.textContent = data.detail;
+          status.after(pre);
+          removal.hidden = false;
+          cloth.classList.toggle("fray", false);
+          return;
+        }
+        setTimeout(ping, 2000);
       };
       setTimeout(ping, 3000);
     });

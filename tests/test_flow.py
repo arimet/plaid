@@ -68,8 +68,14 @@ class FakeDocker:
     def wipe_dir(self, path, home, platform):
         self.calls.append(("wipe", path))
 
-    def run_detached(self, image, args, env):
-        self.calls.append(("detached", image, tuple(args), tuple(sorted(env))))
+    def run_detached(self, image, args, env, name):
+        self.calls.append(("detached", image, tuple(args), tuple(sorted(env)), name))
+
+    def container_state(self, name):
+        return getattr(self, "state", (False, False, 0))
+
+    def logs(self, name):
+        return getattr(self, "log_text", "")
 
     def own_image(self):
         return "img"
@@ -138,8 +144,8 @@ class FlowTest(unittest.TestCase):
         self.install(settings(), FakeDocker())
         dk = FakeDocker()
         flow.uninstall(False, self.events.append, dk=dk, state_dir=self.state)
-        kind, image, args, env = dk.calls[-1]
-        self.assertEqual((kind, image, args), ("detached", "img", ("--uninstall-worker",)))
+        kind, image, args, env, name = dk.calls[-1]
+        self.assertEqual((kind, image, args, name), ("detached", "img", ("--uninstall-worker",), flow.WORKER_NAME))
         self.assertIn("ARR_STATE", env)
 
     def test_worker_keeps_media(self):
@@ -209,3 +215,26 @@ class TailscaleFlowTest(unittest.TestCase):
         flow.uninstall_worker(flow.pack_state(state), remove_media=False, dk=dk, work_dir=tempfile.mkdtemp())
         logout = ("compose", "exec", "-T", "tailscale", "tailscale", "logout")
         self.assertLess(dk.calls.index(logout), dk.calls.index(("compose", "down", "-v", "--rmi", "all", "--remove-orphans")))
+
+
+class ReviewFixesFlowTest(unittest.TestCase):
+    def test_port_from_engine_bind_error(self):
+        # Docker Engine on Linux, port held by a host program: the old regex reported "port 0".
+        err = ("Error response from daemon: driver failed programming external connectivity on endpoint "
+               "arrstack-qbittorrent-1: failed to bind port 0.0.0.0:8080/tcp: Error starting userland proxy: "
+               "listen tcp4 0.0.0.0:8080: bind: address already in use")
+        events = []
+        flow.install(settings(vpn_provider=None, vpn_fields={}), events.append, dk=FakeDocker(up_error=err),
+                     state_dir=tempfile.mkdtemp(), vpn_wait=0, arch="x86_64", configure=lambda *a, **k: {})
+        self.assertEqual(events[-1].error, "err_port_busy:8080")
+
+    def test_uninstall_status(self):
+        dk = FakeDocker()
+        dk.state = (True, True, 0)
+        self.assertEqual(flow.uninstall_status(dk=dk), ("running", ""))
+        dk.state = (True, False, 1)
+        dk.log_text = "compose down failed"
+        self.assertEqual(flow.uninstall_status(dk=dk), ("failed", "compose down failed"))
+        self.assertIn(("rm", "container", flow.WORKER_NAME), dk.calls)
+        dk.state = (False, False, 0)
+        self.assertEqual(flow.uninstall_status(dk=dk), ("idle", ""))

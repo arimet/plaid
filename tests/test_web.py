@@ -197,3 +197,38 @@ class TailscaleWebTest(WebTest):
         _, _, html = self.req("GET", "/", headers={"Cookie": headers["Set-Cookie"].split(";")[0]})
         self.assertIn("http://plaid:8096", html)
         self.assertNotIn("tskey-auth-x", html)
+
+
+class ReviewFixesWebTest(WebTest):
+    def login(self):
+        form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
+        _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
+        return headers["Set-Cookie"].split(";")[0]
+
+    def test_install_refused_over_existing_stack(self):
+        self.start(FakeFlow(installed=settings()))
+        status, _, _ = self.req("POST", "/api/install", FORM, {"Cookie": self.login()})
+        self.assertEqual(status, 409)
+
+    def test_install_runs_blocking_preflight(self):
+        flow = FakeFlow()
+        flow.preflight = lambda s: ["err_stack_exists"]
+        self.start(flow)
+        status, _, _ = self.req("POST", "/api/install", FORM)
+        self.assertEqual(status, 409)
+        self.assertIsNone(flow.installed)
+
+    def test_cross_origin_post_refused(self):
+        self.start(FakeFlow(installed=settings()))
+        cookie = self.login()
+        status, _, _ = self.req("POST", "/api/uninstall", {"remove_media": True},
+                                {"Cookie": cookie, "Origin": "http://localhost:8096"})
+        self.assertEqual(status, 403)
+
+    def test_uninstall_status_route(self):
+        flow = FakeFlow(installed=settings())
+        flow.uninstall_status = lambda: ("failed", "boom")
+        self.start(flow)
+        _, _, body = self.req("GET", "/api/uninstall-status", headers={"Cookie": self.login()})
+        self.assertEqual(json.loads(body)["state"], "failed")
+        self.assertIn("boom", json.loads(body)["detail"])
