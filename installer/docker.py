@@ -1,0 +1,97 @@
+"""Docker CLI calls. Host folders are reached through throwaway containers, since the
+installer itself runs in a container and only sees the host through the Docker socket."""
+from __future__ import annotations
+
+import ntpath
+import posixpath
+import socket
+import subprocess
+from typing import Callable
+
+from installer.settings import is_dangerous_path
+
+PROJECT = "arrstack"
+HELPER = "alpine:3.20"
+Run = Callable[[list], subprocess.CompletedProcess]
+
+
+class DockerError(Exception):
+    pass
+
+
+def default_run(args: list) -> subprocess.CompletedProcess:
+    return subprocess.run(args, capture_output=True, text=True)
+
+
+def _check(run: Run, args: list) -> subprocess.CompletedProcess:
+    result = run(args)
+    if result.returncode != 0:
+        raise DockerError((result.stderr or result.stdout or "").strip() or f"exit {result.returncode}")
+    return result
+
+
+def host_path(path: str, platform: str) -> str:
+    """Path as the Docker daemon sees it. Docker Desktop on Windows mounts drives under /run/desktop/mnt/host."""
+    if platform == "windows" and len(path) >= 2 and path[1] == ":":
+        rest = ntpath.normpath(path)[2:].replace("\\", "/")
+        return f"/run/desktop/mnt/host/{path[0].lower()}{rest}"
+    return path
+
+
+def dir_state(src: str, run: Run = default_run) -> tuple[bool, int]:
+    """(empty?, size in bytes) of a host folder. A missing folder counts as empty."""
+    result = run(["docker", "run", "--rm", "--mount", f"type=bind,src={src},dst=/m,readonly", HELPER,
+                  "sh", "-c", 'echo $(ls -A /m | wc -l) $(du -sk /m | cut -f1)'])
+    if result.returncode != 0:
+        if "does not exist" in (result.stderr or ""):
+            return True, 0
+        raise DockerError(result.stderr.strip())
+    count, kib = result.stdout.split()
+    return count == "0", int(kib) * 1024
+
+
+def ensure_data_dirs(src: str, puid: int, pgid: int, run: Run = default_run) -> None:
+    dirs = " ".join(f"/m/{d}" for d in ("torrents/movies", "torrents/tv", "media/movies", "media/tv"))
+    owned = "/m /m/torrents /m/media " + dirs
+    _check(run, ["docker", "run", "--rm", "-v", f"{src}:/m", HELPER, "sh", "-c",
+                 f"mkdir -p {dirs} && chown {puid}:{pgid} {owned}"])
+
+
+def wipe_dir(path: str, home: str, platform: str, run: Run = default_run) -> None:
+    """Deletes the folder and everything in it. Refuses roots, shared parents and the home folder."""
+    if is_dangerous_path(path, home):
+        raise ValueError(f"refusing to delete {path}")
+    src = host_path(path, platform).rstrip("/")
+    parent, name = posixpath.split(src)
+    _check(run, ["docker", "run", "--rm", "-v", f"{parent}:/p", HELPER, "rm", "-rf", f"/p/{name}"])
+
+
+def stack_exists(run: Run = default_run) -> bool:
+    out = _check(run, ["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={PROJECT}"]).stdout
+    return bool(out.strip())
+
+
+def compose(state_dir: str, *args: str, run: Run = default_run) -> subprocess.CompletedProcess:
+    return _check(run, ["docker", "compose", "-p", PROJECT, "-f", f"{state_dir}/compose.json",
+                        "--env-file", f"{state_dir}/.env", *args])
+
+
+def port_busy(port: int, run: Run = default_run) -> bool:
+    """True when another container already publishes the port. Host programs are caught later,
+    by compose's 'port is already allocated' error."""
+    out = _check(run, ["docker", "ps", "-q", "--filter", f"publish={port}"]).stdout
+    return bool(out.strip())
+
+
+def has_device(path: str, run: Run = default_run) -> bool:
+    return run(["docker", "run", "--rm", "--device", path, HELPER, "true"]).returncode == 0
+
+
+def self_container_id() -> str:
+    return socket.gethostname()  # Docker sets the hostname to the short container id
+
+
+def connect_network(container: str, run: Run = default_run) -> None:
+    result = run(["docker", "network", "connect", f"{PROJECT}_default", container])
+    if result.returncode != 0 and "already exists" not in (result.stderr or ""):
+        raise DockerError(result.stderr.strip())
