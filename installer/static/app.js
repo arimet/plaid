@@ -198,7 +198,11 @@
       status.textContent = T.uninstall_started;
       const ping = async () => {
         try { await fetch("/api/ping", {cache: "no-store"}); setTimeout(ping, 2000); }
-        catch { status.textContent = T.uninstall_done; }
+        catch {
+          status.textContent = "";
+          $("#done h1").textContent = T.uninstall_done;
+          $$("#done > :not(h1)").forEach((el) => (el.hidden = true));
+        }
       };
       setTimeout(ping, 3000);
     });

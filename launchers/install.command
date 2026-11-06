@@ -23,11 +23,15 @@ TZ_NAME=$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')
 if docker container inspect "$NAME" >/dev/null 2>&1; then
   docker start "$NAME" >/dev/null
 else
-  docker run -d --name "$NAME" --restart unless-stopped -p 7000:7000 \
+  docker run -d --name "$NAME" --restart unless-stopped -p 7575:7575 \
     -v /var/run/docker.sock:/var/run/docker.sock -v arr-installer-state:/state \
     -e HOST_HOME="$HOME" -e HOST_PLATFORM=mac -e HOST_ADDR=localhost -e TZ="$TZ_NAME" \
-    -e PUID="$(id -u)" -e PGID="$(id -g)" --label io.arr-installer=1 "$IMAGE" >/dev/null || exit 1
+    -e PUID="$(id -u)" -e PGID="$(id -g)" --label io.arr-installer=1 "$IMAGE" >/dev/null || {
+      docker rm -f "$NAME" >/dev/null 2>&1
+      echo "Plaid could not start: port 7575 is probably used by another program."
+      exit 1
+    }
 fi
-until curl -fs http://localhost:7000/api/ping >/dev/null 2>&1; do sleep 1; done
-open http://localhost:7000
-echo "Plaid is open in your browser: http://localhost:7000. You can close this window."
+until curl -fs http://localhost:7575/api/ping >/dev/null 2>&1; do sleep 1; done
+open http://localhost:7575
+echo "Plaid is open in your browser: http://localhost:7575. You can close this window."

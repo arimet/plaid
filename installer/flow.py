@@ -62,7 +62,10 @@ def preflight(s: Settings, dk=docker) -> list[str]:
     if s.vpn_provider and s.platform in ("linux", "synology") and not dk.has_device("/dev/net/tun"):
         return ["err_no_tun"]
     found = [f"err_port_busy:{port}" for port in PORTS.values() if dk.port_busy(port)]
-    empty, _ = dk.dir_state(dk.host_path(s.data_dir, s.platform))
+    try:
+        empty, _ = dk.dir_state(dk.host_path(s.data_dir, s.platform))
+    except DockerError:
+        empty = True  # unknown: the install step creates the folders and reports a real failure
     if not empty:
         found.append("warn_dir_not_empty")
     if not s.vpn_provider:
@@ -176,5 +179,6 @@ def uninstall_worker(payload: str, remove_media: bool, dk=docker, work_dir: str 
     if remove_media and s:
         dk.wipe_dir(s.data_dir, s.home, s.platform)
     dk.remove("container", INSTALLER_NAME)
+    dk.remove("network", f"{docker.PROJECT}_default")  # compose could not: the installer was attached to it
     dk.remove("volume", STATE_VOLUME)
     dk.remove("image", "self")

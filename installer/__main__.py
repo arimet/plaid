@@ -16,7 +16,7 @@ def main(argv=None) -> int:
     mode.add_argument("--uninstall-worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--remove-media", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--lang", choices=["en", "fr"], default="fr" if os.environ.get("LANG", "").startswith("fr") else "en")
-    parser.add_argument("--port", type=int, default=7000)
+    parser.add_argument("--port", type=int, default=7575)
     args = parser.parse_args(argv)
     env = dict(os.environ)
 

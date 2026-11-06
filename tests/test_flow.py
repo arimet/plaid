@@ -147,6 +147,9 @@ class FlowTest(unittest.TestCase):
         self.assertFalse([c for c in dk.calls if c[0] == "wipe"])
         self.assertIn(("rm", "container", flow.INSTALLER_NAME), dk.calls)
         self.assertIn(("rm", "volume", flow.STATE_VOLUME), dk.calls)
+        # the installer was attached to the stack network, so compose could not remove it
+        self.assertLess(dk.calls.index(("rm", "container", flow.INSTALLER_NAME)),
+                        dk.calls.index(("rm", "network", "arrstack_default")))
 
     def test_worker_removes_media_when_asked(self):
         self.install(settings(), FakeDocker())

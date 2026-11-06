@@ -26,6 +26,7 @@ LIBRARY_EVENTS = ["onDownload", "onUpgrade", "onRename", "onMovieDelete", "onMov
                   "onEpisodeFileDeleteForUpgrade", "onImportComplete"]
 DEFAULT_PROFILE = "HD-1080p"
 WAIT = 300
+TIMEOUT = 120  # one API call; Prowlarr tests an indexer against the internet before saving it
 
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
@@ -48,10 +49,12 @@ def call(method, url, body=None, headers=None, form=False):
             headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with opener.open(req, timeout=60) as resp:
+        with opener.open(req, timeout=TIMEOUT) as resp:
             raw = resp.read().decode() or "null"
     except urllib.error.HTTPError as e:
         raise HttpError(e.code, url, e.read().decode(errors="replace")) from None
+    except OSError as e:  # timeouts and dropped connections: say which call, for the error detail
+        raise type(e)(f"{method} {url}: {e}") from None
     try:
         return json.loads(raw)
     except ValueError:

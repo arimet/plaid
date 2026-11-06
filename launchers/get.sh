@@ -44,11 +44,15 @@ start_panel() {
   if $DOCKER container inspect "$NAME" >/dev/null 2>&1; then
     $DOCKER start "$NAME" >/dev/null
   else
-    run -d --name "$NAME" --restart unless-stopped -p 7000:7000 "$IMAGE" >/dev/null
+    run -d --name "$NAME" --restart unless-stopped -p 7575:7575 "$IMAGE" >/dev/null || {
+      $DOCKER rm -f "$NAME" >/dev/null 2>&1
+      echo "Plaid could not start: port 7575 is probably used by another program."
+      exit 1
+    }
   fi
   echo
   echo "Plaid is ready. Open this address in a browser on this network:"
-  echo "    http://$ADDR:7000"
+  echo "    http://$ADDR:7575"
 }
 
 $DOCKER pull -q "$IMAGE" >/dev/null 2>&1 || true

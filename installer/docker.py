@@ -19,8 +19,16 @@ class DockerError(Exception):
     pass
 
 
-def default_run(args: list) -> subprocess.CompletedProcess:
-    return subprocess.run(args, capture_output=True, text=True)
+HELPER_TIMEOUT = 120  # a throwaway container that hangs must not freeze the assistant
+
+
+def default_run(args: list, timeout: float | None = None) -> subprocess.CompletedProcess:
+    if timeout is None and args[:3] == ["docker", "run", "--rm"]:
+        timeout = HELPER_TIMEOUT
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(args, 124, "", f"{' '.join(args[:3])} timed out after {timeout}s")
 
 
 def _check(run: Run, args: list) -> subprocess.CompletedProcess:
@@ -123,5 +131,6 @@ def remove(kind: str, name: str, run: Run = default_run) -> None:
                   f"{api} -X DELETE http://d/images/{image} >/dev/null")
         run(["docker", "run", "-d", "--rm", "-v", SOCKET, HELPER, "sh", "-c", script])
         return
-    cmd = {"container": ["rm", "-f"], "volume": ["volume", "rm", "-f"], "image": ["rmi"]}[kind]
+    cmd = {"container": ["rm", "-f"], "volume": ["volume", "rm", "-f"], "network": ["network", "rm"],
+           "image": ["rmi"]}[kind]
     run(["docker", *cmd, name])

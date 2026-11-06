@@ -356,5 +356,5 @@ def make_server(port: int, flow=default_flow, env=None) -> ThreadingHTTPServer:
     return ThreadingHTTPServer(("", port), make_handler(State(flow, dict(env if env is not None else os.environ))))
 
 
-def serve(port: int = 7000, flow=default_flow) -> None:
+def serve(port: int = 7575, flow=default_flow) -> None:
     make_server(port, flow).serve_forever()

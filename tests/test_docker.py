@@ -86,6 +86,11 @@ class UninstallHelpersTest(unittest.TestCase):
         docker.remove("container", "arr-installer", run=run)
         self.assertEqual(run.calls[0], ["docker", "rm", "-f", "arr-installer"])
 
+    def test_remove_network(self):
+        run = FakeRun()
+        docker.remove("network", "arrstack_default", run=run)
+        self.assertEqual(run.calls[0], ["docker", "network", "rm", "arrstack_default"])
+
     def test_remove_self_image_waits_for_containers(self):
         run = FakeRun(0, "ghcr.io/x/arr-installer:latest\n")
         docker.remove("image", "self", run=run)
@@ -95,3 +100,11 @@ class UninstallHelpersTest(unittest.TestCase):
         self.assertIn("containers/json", script)
         self.assertIn("ancestor", script)
         self.assertIn("-X DELETE http://d/images/ghcr.io/x/arr-installer:latest", script)
+
+
+class TimeoutTest(unittest.TestCase):
+    def test_helper_run_times_out(self):
+        import sys
+        result = docker.default_run([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.5)
+        self.assertEqual(result.returncode, 124)
+        self.assertIn("timed out", result.stderr)
