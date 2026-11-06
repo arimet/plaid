@@ -43,6 +43,10 @@ It installs Docker if it is missing. To answer the questions in the terminal ins
 curl -fsSL https://raw.githubusercontent.com/arimet/plaid/main/launchers/get.sh | sh -s -- --cli
 ```
 
+The terminal version shows one step per screen: arrow keys to choose, Enter to confirm. Press Ctrl-C during the questions and nothing is changed; press it during the install and everything installed so far is removed again.
+
+On a machine where Plaid is already installed, the same command opens a menu instead: see your apps and their addresses, add trackers, reach your apps away from home, or remove the stack. Nothing needs a browser.
+
 ### Synology
 
 1. In DSM, open **Package Center** and install **Container Manager**.
@@ -104,7 +108,7 @@ Trackers protected by Cloudflare do not work. To stop using Internet Archive, di
 
 Open the assistant again (<http://localhost:7575>, or the address printed by the Linux command), sign in, and click **Remove**. It deletes the apps, their settings, your password and the assistant itself. Your media folder is deleted only if you tick the box, which shows its path and size.
 
-From a terminal: `curl -fsSL https://raw.githubusercontent.com/arimet/plaid/main/launchers/get.sh | sh -s -- --uninstall`.
+From a terminal: run the `--cli` command again and choose **Remove the stack**, or go straight to it with `curl -fsSL https://raw.githubusercontent.com/arimet/plaid/main/launchers/get.sh | sh -s -- --uninstall`.
 
 Docker stays installed. One small `alpine` image, used for the cleanup itself, may remain: `docker rmi alpine:3.20` removes it.
 
@@ -136,6 +140,7 @@ The assistant is Python (standard library only) and runs in its own container, t
 python3 -m unittest                                # unit tests
 ARR_LIVE=1 python3 -m unittest tests.test_apps_live  # starts a real stack and checks every link
 python3 tests/demo.py 7700                         # the assistant with a simulated install
+python3 tests/demo_cli.py linux                    # the terminal version with a simulated install
 docker build -t plaid:dev . && PLAID_IMAGE=plaid:dev ./launchers/install.command
 ```
 
