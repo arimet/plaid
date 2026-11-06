@@ -139,3 +139,16 @@ class PageTest(unittest.TestCase):
         t, _ = term(ENTER, "x")
         t.pause("Entrée pour revenir")
         self.assertEqual(t.read_key(), "x")
+
+
+class AccentTest(unittest.TestCase):
+    def test_brand_and_titles_in_tartan_colours(self):
+        t, out = term(color=True)
+        t.page("Votre compte", step=(2, 3))
+        t.heading("Au quotidien")
+        text = out.getvalue()
+        green, gold = t._code("green", 38), t._code("gold", 38)
+        self.assertRegex(text, rf"\x1b\[[0-9;]*{green}m Plaid".replace(" ", ""))
+        self.assertRegex(text, rf"\x1b\[[0-9;]*{green}mVotre compte")
+        self.assertRegex(text, rf"\x1b\[[0-9;]*{gold}mAu quotidien")
+        self.assertRegex(text, rf"\x1b\[[0-9;]*{gold}m\s*·\s*2/3")

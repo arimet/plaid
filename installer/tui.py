@@ -163,9 +163,9 @@ class Term:
             self.write("\x1b[H\x1b[2J")
         self._drawn = 0
         self.line()
-        head = self.style("Plaid", bold=True)
+        head = self.style("Plaid", fg="green", bold=True)
         if step:
-            head += self.style(f"  ·  {step[0]}/{step[1]}", dim=True)
+            head += self.style(f"  ·  {step[0]}/{step[1]}", fg="gold")
         self.line("  " + head)
         if step:
             n, total = step
@@ -177,7 +177,7 @@ class Term:
         for label, value in recap or []:
             self.line("  " + self.style("✓", fg="green") + " " + self.style(f"{label} : ", dim=True) + value)
         self.line()
-        self.line("  " + self.style(title, bold=True))
+        self.line("  " + self.style(title, fg="green", bold=True))
         for chunk in (self.wrap(help) if help else []):
             self.line("  " + self.style(chunk, dim=True))
         self.line()
@@ -207,7 +207,7 @@ class Term:
 
     def heading(self, text: str) -> None:
         self.line()
-        self.line("  " + self.style(text, bold=True))
+        self.line("  " + self.style(text, fg="gold", bold=True))
 
     # ------------------------------------------------------------------ questions
     def text(self, label: str, default: str = "", secret: bool = False, validate=None, hint: str = "") -> str:
