@@ -108,12 +108,14 @@ class FlowTest(unittest.TestCase):
         self.assertEqual(links["jellyfin"], 8096)
         self.assertTrue(self.events[-1].done)
         self.assertEqual(flow.load_settings(self.state), settings())
+        self.assertTrue(flow.is_complete(self.state))
         for name in ("compose.json", ".env", "settings.json"):
             self.assertTrue(os.path.exists(os.path.join(self.state, name)), name)
 
     def test_install_vpn_timeout(self):
         self.assertIsNone(self.install(settings(), FakeDocker(health="unhealthy")))
         self.assertEqual(self.events[-1].error, "err_vpn_failed")
+        self.assertFalse(flow.is_complete(self.state))
         self.assertIsNotNone(flow.load_settings(self.state))  # uninstall can still clean up
 
     def test_install_port_busy(self):

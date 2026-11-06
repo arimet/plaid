@@ -32,12 +32,24 @@ class Progress:
 Report = Callable[[Progress], None]
 
 
+def is_complete(state_dir: str = STATE_DIR) -> bool:
+    """True once an install went all the way; a failed one leaves only what Remove needs."""
+    return os.path.exists(os.path.join(state_dir, "complete"))
+
+
 def load_settings(state_dir: str = STATE_DIR) -> Settings | None:
     try:
         with open(os.path.join(state_dir, "settings.json"), encoding="utf-8") as f:
             return Settings.from_json(f.read())
     except FileNotFoundError:
         return None
+
+
+def media_size(s: Settings, dk=docker) -> int:
+    try:
+        return dk.dir_state(dk.host_path(s.data_dir, s.platform))[1]
+    except DockerError:
+        return 0
 
 
 def preflight(s: Settings, dk=docker) -> list[str]:
@@ -126,6 +138,7 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
 
         configure(s, host_of, lambda app: report(Progress(f"step_app:{app}")),
                   lambda *args: dk.compose(state_dir, *args).stdout, has_dri)
+        open(os.path.join(state_dir, "complete"), "w").close()
         report(Progress("step_done", done=True))
         return dict(PORTS)
     except Exception as e:  # shown to the user with its detail; the stack stays removable
