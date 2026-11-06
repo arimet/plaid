@@ -202,9 +202,9 @@
         let data;
         try { data = await (await fetch("/api/uninstall-status", {cache: "no-store", credentials: "same-origin"})).json(); }
         catch {  // this server is gone: the removal deleted it, so it went through
-          status.textContent = "";
-          $("#done h1").textContent = T.uninstall_done;
-          $$("#done > :not(h1)").forEach((el) => (el.hidden = true));
+          const done = document.createElement("h1");
+          done.textContent = T.uninstall_done;
+          $("#done").replaceChildren(done);
           return;
         }
         if (data.state === "failed") {

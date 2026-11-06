@@ -186,7 +186,7 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
     return page(lang, body, cloth="part", p=40 if running else 8, foot=foot)
 
 
-def panel_page(lang: str, s: Settings, host: str, media_size: int, complete: bool = True) -> str:
+def panel_page(lang: str, s: Settings, host: str, complete: bool = True) -> str:
     def app_link(svc: str, daily: bool) -> str:
         return (f'<a class="app{" daily" if daily else ""}" href="http://{E(host)}:{PORTS[svc]}" target="_blank" '
                 f'rel="noopener"><span class="ic" style="--c:{APP_COLORS[svc]}"><img src="/static/icons/{svc}.svg" '
@@ -201,43 +201,57 @@ def panel_page(lang: str, s: Settings, host: str, media_size: int, complete: boo
             f'<p class="lead">{E(t(lang, "apps_flow"))}</p>'
             f'<h2>{E(t(lang, "apps_behind"))}</h2><p class="hint">{E(t(lang, "apps_behind_help"))}</p>'
             f'<div class="apps">{"".join(app_link(x, False) for x in behind)}</div>')
-    steps = "".join(f"<li>{E(step)}</li>" for step in t(lang, "prowlarr_steps").split("|"))
+    if not complete:  # a failed install: removal is the only thing to do
+        body = f"""<h1>{E(t(lang, "progress_failed"))}</h1><p class="lead">{E(t(lang, "err_unexpected"))}</p>
+  <a class="btn danger" href="/remove">{E(t(lang, "uninstall_title"))}</a>"""
+        return subpage(lang, body, back=False)
     autostart = (f'<p class="note warn">{E(t(lang, "autostart_hint"))}</p>'
                  if s.platform in ("mac", "windows") else "")
-    if s.tailscale_key:
-        remote = f'<div class="tip"><h2>{E(t(lang, "remote_done_title"))}</h2>{steps_html(lang, "remote_done_steps")}</div>'
-    elif s.platform in ("mac", "windows"):
-        remote = f'<div class="tip"><h2>{E(t(lang, "remote_done_title"))}</h2>{steps_html(lang, "remote_desktop_steps")}</div>'
-    else:
-        remote = ""
-    if complete:
-        top = f"""<h1>{E(t(lang, "done_title"))}</h1>
+    more = "".join(
+        f'<a class="more{" danger" if path == "/remove" else ""}" href="{path}"><b>{E(t(lang, title))}</b>'
+        f'<small>{E(t(lang, desc))}</small><span aria-hidden="true">›</span></a>'
+        for path, title, desc in (("/remote", "remote_done_title", "nav_remote_desc"),
+                                  ("/trackers", "trackers_title", "nav_trackers_desc"),
+                                  ("/remove", "uninstall_title", "nav_remove_desc")))
+    body = f"""<h1>{E(t(lang, "done_title"))}</h1>
   <p class="lead">{E(t(lang, "done_lead"))} {t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
   {apps}
   {autostart}
-  {remote}
-  <div class="tip" id="trackers"><h2>{E(t(lang, "trackers_title"))}</h2><p>{E(t(lang, "trackers_help"))}</p>
+  <h2>{E(t(lang, "nav_more"))}</h2><nav class="mores">{more}</nav>"""
+    return subpage(lang, body, back=False)
+
+
+def subpage(lang: str, body: str, back: bool = True) -> str:
+    link = f'<a class="back" href="/">‹ {E(t(lang, "nav_back"))}</a>' if back else ""
+    return page(lang, f'<section id="done">{link}{body}</section>', foot='<div style="height:32px"></div>')
+
+
+def remote_page(lang: str, s: Settings) -> str:
+    key = "remote_done_steps" if s.tailscale_key else "remote_desktop_steps"
+    return subpage(lang, f'<h1>{E(t(lang, "remote_done_title"))}</h1><p class="lead">{E(t(lang, "nav_remote_desc"))}</p>'
+                         f'<div class="tip">{steps_html(lang, key)}</div>')
+
+
+def trackers_page(lang: str) -> str:
+    steps = steps_html(lang, "prowlarr_steps")
+    return subpage(lang, f"""<h1>{E(t(lang, "trackers_title"))}</h1><p class="lead">{E(t(lang, "trackers_help"))}</p>
   <input class="input" id="tracker-search" type="search" autocomplete="off" placeholder="{E(t(lang, "trackers_search"))}"
    aria-label="{E(t(lang, "trackers_search"))}">
   <ul class="trackers" id="tracker-list" aria-live="polite"><li class="hint">{E(t(lang, "trackers_loading"))}</li></ul>
-  <p class="hint" id="tracker-more"></p><p class="hint">{E(t(lang, "trackers_rights"))}</p></div>
-  <div class="tip"><h2>{E(t(lang, "prowlarr_title"))}</h2><p>{E(t(lang, "prowlarr_default"))}</p><ol>{steps}</ol>
-  <p>{E(t(lang, "prowlarr_cloudflare"))} <a href="https://wiki.servarr.com/prowlarr/indexers" target="_blank" rel="noopener">{E(t(lang, "prowlarr_docs"))}</a></p></div>
-  <hr class="sep">"""
-    else:
-        top = f"""<h1>{E(t(lang, "progress_failed"))}</h1><p class="lead">{E(t(lang, "err_unexpected"))}</p>"""
-    body = f"""
-<section id="done">
-  {top}
-  <form id="uninstall" class="field-group">
-    <h2>{E(t(lang, "uninstall_title"))}</h2>
+  <p class="hint" id="tracker-more"></p><p class="hint">{E(t(lang, "trackers_rights"))}</p>
+  <div class="tip"><h2>{E(t(lang, "prowlarr_title"))}</h2><p>{E(t(lang, "prowlarr_default"))}</p>{steps}
+  <p>{E(t(lang, "prowlarr_cloudflare"))} <a href="https://wiki.servarr.com/prowlarr/indexers" target="_blank" rel="noopener">{E(t(lang, "prowlarr_docs"))}</a></p></div>""")
+
+
+def remove_page(lang: str, s: Settings, media_size: int) -> str:
+    size = human_size(media_size, lang)
+    return subpage(lang, f"""<form id="uninstall" class="field-group">
+    <h1>{E(t(lang, "uninstall_title"))}</h1>
     <p class="lead">{E(t(lang, "uninstall_text"))}</p>
-    <label class="check"><input type="checkbox" name="remove_media"><div><b>{E(t(lang, "uninstall_media", path=s.data_dir, size=human_size(media_size, lang)))}</b></div></label>
+    <label class="check"><input type="checkbox" name="remove_media"><div><b>{E(t(lang, "uninstall_media", path=s.data_dir, size=size))}</b></div></label>
     <button class="btn danger" type="submit">{E(t(lang, "btn_uninstall"))}</button>
   </form>
-  <p class="lead" id="uninstall-status" aria-live="polite" hidden></p>
-</section>"""
-    return page(lang, body, foot='<div style="height:32px"></div>')
+  <p class="lead" id="uninstall-status" aria-live="polite" hidden></p>""")
 
 
 def login_page(lang: str, error: bool) -> str:
@@ -344,14 +358,22 @@ def make_handler(state: State):
                     return self.json(401, {})
                 status, detail = state.flow.uninstall_status()
                 return self.json(200, {"state": status, "detail": detail, "text": t(lang, "err_uninstall_failed")})
-            if path != "/":
+            if path not in ("/", "/remote", "/trackers", "/remove"):
                 return self.send(404, "Not found", "text/plain")
             if self.locked():
                 return self.send(303, "", headers={"Location": "/login"})
             if s is None or state.running:
+                if path != "/":
+                    return self.send(303, "", headers={"Location": "/"})
                 return self.send(200, form_page(lang, state.env, state.running, bool(s and s.vpn_provider)))
+            if path == "/remote":
+                return self.send(200, remote_page(lang, s))
+            if path == "/trackers":
+                return self.send(200, trackers_page(lang))
+            if path == "/remove":
+                return self.send(200, remove_page(lang, s, state.flow.media_size(s)))
             host = (self.headers.get("Host") or "localhost").rsplit(":", 1)[0]
-            return self.send(200, panel_page(lang, s, host, state.flow.media_size(s), state.flow.is_complete()))
+            return self.send(200, panel_page(lang, s, host, state.flow.is_complete()))
 
         def do_POST(self):
             path = urllib.parse.urlparse(self.path).path

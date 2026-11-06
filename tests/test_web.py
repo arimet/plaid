@@ -130,7 +130,7 @@ class WebTest(unittest.TestCase):
         form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
         _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
         cookie = headers["Set-Cookie"].split(";")[0]
-        _, _, html = self.req("GET", "/", headers={"Cookie": cookie})
+        _, _, html = self.req("GET", "/remove", headers={"Cookie": cookie})
         self.assertIn('name="remove_media"', html)
         self.assertNotIn("checked", html)
         self.assertIn("/home/zoe/Plaid", html)
@@ -145,8 +145,8 @@ class WebTest(unittest.TestCase):
         _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
         _, _, html = self.req("GET", "/", headers={"Cookie": headers["Set-Cookie"].split(";")[0]})
         self.assertIn("L’installation s’est arrêtée", html)
-        self.assertNotIn('class="app"', html)  # no app links (texts JSON may mention ports)
-        self.assertIn('name="remove_media"', html)
+        self.assertNotIn('class="app', html.split('<script id="texts"')[0])  # no app links
+        self.assertIn('href="/remove"', html)
 
     def test_reload_during_install_shows_progress(self):
         flow = FakeFlow()
@@ -194,7 +194,7 @@ class TailscaleWebTest(WebTest):
         self.start(FakeFlow(installed=s))
         form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
         _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
-        _, _, html = self.req("GET", "/", headers={"Cookie": headers["Set-Cookie"].split(";")[0]})
+        _, _, html = self.req("GET", "/remote", headers={"Cookie": headers["Set-Cookie"].split(";")[0]})
         self.assertIn("http://plaid:8096", html)
         self.assertNotIn("tskey-auth-x", html)
 
@@ -270,7 +270,7 @@ class TrackersWebTest(WebTest):
 
     def test_panel_has_tracker_picker(self):
         self.start(self.flow())
-        _, _, html = self.req("GET", "/?lang=fr", headers={"Cookie": self.login()})
+        _, _, html = self.req("GET", "/trackers?lang=fr", headers={"Cookie": self.login()})
         self.assertIn('id="tracker-search"', html)
 
 
@@ -287,3 +287,27 @@ class BeginnerPanelTest(WebTest):
         self.assertLess(link("seerr"), main.index("En coulisses"))
         self.assertLess(main.index("En coulisses"), link("radarr"))
         self.assertIn("Netflix", main)  # Jellyfin explained in plain words
+
+
+class PanelPagesTest(WebTest):
+    def login(self):
+        form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
+        _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
+        return {"Cookie": headers["Set-Cookie"].split(";")[0]}
+
+    def test_main_page_keeps_only_the_apps(self):
+        self.start(FakeFlow(installed=settings()))
+        _, _, html = self.req("GET", "/?lang=fr", headers=self.login())
+        main = html.split('<script id="texts"')[0]
+        for absent in ('id="tracker-search"', 'name="remove_media"', "Disable key expiry", "tailscale.com/download"):
+            self.assertNotIn(absent, main)
+        for link in ('href="/remote"', 'href="/trackers"', 'href="/remove"'):
+            self.assertIn(link, main)
+
+    def test_pages_need_login_and_link_back(self):
+        self.start(FakeFlow(installed=settings()))
+        for path in ("/remote", "/trackers", "/remove"):
+            self.assertEqual(self.req("GET", path)[0], 303, path)
+            status, _, html = self.req("GET", path + "?lang=fr", headers=self.login())
+            self.assertEqual(status, 200, path)
+            self.assertIn('class="back" href="/"', html)

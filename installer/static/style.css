@@ -130,3 +130,12 @@ label.l{font:700 14px "Bricolage Grotesque"}
 .app.daily .ic img{width:36px;height:36px}
 .app.daily b{font-size:20px}
 .apps .app.daily{grid-template-columns:56px 1fr auto}
+.mores{display:flex;flex-direction:column}
+.more{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line);text-decoration:none;color:var(--ink)}
+.more b{font:700 17px/1.2 "Bricolage Grotesque"}
+.more small{grid-column:1;font-size:14px;color:var(--ink-2)}
+.more span{grid-column:2;grid-row:1 / span 2;font-size:26px;color:var(--ink-2);transition:transform .15s}
+.more:hover span,.more:focus-visible span{transform:translateX(3px)}
+.more.danger b{color:var(--err)}
+.back{align-self:flex-start;font-weight:600;color:var(--ink-2);text-decoration:none}
+.back:hover{color:var(--ink)}
