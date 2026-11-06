@@ -16,7 +16,7 @@ class I18nTest(unittest.TestCase):
         for path in SRC.glob("*.py"):
             text = path.read_text(encoding="utf-8")
             used |= set(re.findall(r'"((?:err|warn|step)_[a-z_]+)', text))
-            used |= set(re.findall(r'\bt\([^,()]+, "([a-z_]+)"', text))
+            used |= set(re.findall(r'\bt\([^,()]+, "([a-z_]+)"\s*[,)]', text))
         self.assertEqual(used - set(T["en"]), set())
 
     def test_parameterised_keys(self):
@@ -33,3 +33,11 @@ class I18nTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DynamicKeysTest(unittest.TestCase):
+    def test_app_and_vpn_field_keys(self):
+        from installer.compose import SERVICES
+        from installer.vpn import PROVIDERS
+        keys = {f"app_{s}" for s in SERVICES} | {f"vpnf_{f.lower()}" for p in PROVIDERS.values() for f in p.fields}
+        self.assertEqual(keys - set(T["en"]), set())
