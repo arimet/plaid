@@ -326,3 +326,12 @@ class HeaderMenuTest(PanelPagesTest):
         self.start(FakeFlow())
         _, _, html = self.req("GET", "/?lang=fr")
         self.assertNotIn('class="menu"', html)
+
+
+class FolderWarningTest(WebTest):
+    def test_warning_names_the_folder(self):
+        flow = FakeFlow()
+        flow.preflight = lambda s: ["warn_dir_not_empty"]
+        self.start(flow)
+        _, _, body = self.req("POST", "/api/preflight", FORM)
+        self.assertIn("/home/zoe/Plaid", json.loads(body)["warnings"][0]["text"])

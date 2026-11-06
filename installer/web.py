@@ -404,7 +404,7 @@ def make_handler(state: State):
                     return self.json(401, {})
                 settings = settings_from(data, state.env)
                 found = validate(settings) or state.flow.preflight(settings)
-                item = lambda k: {"key": k, "text": t(lang, k)}
+                item = lambda k: {"key": k, "text": t(lang, k, path=settings.data_dir)}
                 return self.json(200, {"errors": [item(k) for k in found if k.startswith("err_")],
                                        "warnings": [item(k) for k in found if k.startswith("warn_")]})
             if path == "/api/install":

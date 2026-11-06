@@ -108,3 +108,16 @@ class TuiCliTest(unittest.TestCase):
         self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 1)
         self.assertIsNone(flow.got)
         self.assertIn("Rien n’a été modifié", out.getvalue())
+
+
+class FolderWarningCliTest(TuiCliTest):
+    def test_warning_names_the_folder(self):
+        flow = FakeFlow(found=["warn_dir_not_empty"])
+        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r")
+        cli.run_install_tui(t, flow, ENV, "fr")
+        self.assertIn("Le dossier /home/zoe/Plaid contient déjà des fichiers", out.getvalue())
+
+    def test_plain_mode_too(self):
+        flow, out = FakeFlow(found=["warn_dir_not_empty"]), []
+        cli.run_install(scripted("", "zoe", "longenough", "longenough", "0", "", "", ""), out.append, flow, ENV, "fr")
+        self.assertTrue(any("/home/zoe/Plaid contient" in line for line in out))

@@ -59,7 +59,7 @@ T: dict[str, dict[str, str]] = {
         "err_port_busy": "Port {param} is already used by another program.",
         "err_vpn_failed": "The VPN did not connect. Check its details, remove the stack and install again.",
         "err_unexpected": "Something went wrong. Remove the stack and install again.",
-        "warn_dir_not_empty": "This folder already holds files. Installing never touches them, but if you ever remove Plaid and tick “also delete the folder”, they go too.",
+        "warn_dir_not_empty": "The folder {path} already holds files. Installing never touches them, but if you ever remove Plaid and tick “also delete the folder”, they go too.",
         "warn_no_vpn": "Without a VPN, your internet provider and the other peers see what you download.",
         "step_prepare": "Preparing",
         "step_folders": "Creating the folders",
@@ -198,7 +198,7 @@ T: dict[str, dict[str, str]] = {
         "err_vpn_failed": "Le VPN ne s’est pas connecté. Vérifiez ses informations, supprimez la stack et "
                           "réinstallez.",
         "err_unexpected": "Quelque chose a échoué. Supprimez la stack et réinstallez.",
-        "warn_dir_not_empty": "Ce dossier contient déjà des fichiers. L’installation n’y touche pas, mais si un jour vous supprimez Plaid en cochant « effacer aussi le dossier », ils partiront avec.",
+        "warn_dir_not_empty": "Le dossier {path} contient déjà des fichiers. L’installation n’y touche pas, mais si un jour vous supprimez Plaid en cochant « effacer aussi le dossier », ils partiront avec.",
         "warn_no_vpn": "Sans VPN, votre fournisseur d’accès et les autres pairs voient ce que vous téléchargez.",
         "step_prepare": "Préparation",
         "step_folders": "Création des dossiers",

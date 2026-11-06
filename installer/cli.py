@@ -57,7 +57,7 @@ def run_install(inp: Ask, out: Out, flow, env: dict, lang: str, secret: Ask | No
     found = flow.preflight(s)
     blocking = [k for k in found if k.startswith("err_")]
     for key in found:
-        out(t(lang, key))
+        out(t(lang, key, path=s.data_dir))
     if blocking or (found and not _yes(inp, lang, t(lang, "btn_continue_anyway"))):
         return 1
 
@@ -165,7 +165,7 @@ def run_install_tui(term, flow, env: dict, lang: str) -> int:
         s = settings_from(data, env)
         found = validate(s) or flow.preflight(s)
         for key in found:
-            term.note(t(lang, key), "error" if key.startswith("err_") else "warn")
+            term.note(t(lang, key, path=s.data_dir), "error" if key.startswith("err_") else "warn")
         if any(k.startswith("err_") for k in found):
             return 1
         question = t(lang, "cli_continue") if found else t(lang, "cli_install_start")
