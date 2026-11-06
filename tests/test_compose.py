@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 
-from installer.compose import PORTS, SERVICES, render_compose
+from installer.compose import DISK_APPS, PORTS, SERVICES, render_compose
 from installer.settings import Settings
 
 SECRET_KEY = "k'ey\"$x é\\"  # ends with a backslash: broke the old .env quoting
@@ -52,7 +52,6 @@ class ComposeTest(unittest.TestCase):
         c = render_compose(make(), "/srv/arr", has_dri=False)
         for name, svc in c["services"].items():
             self.assertEqual(svc["labels"]["io.plaid"], "1", name)
-            self.assertEqual(svc["restart"], "unless-stopped", name)
         for name in SERVICES:
             self.assertEqual(c["volumes"][f"{name}-config"]["labels"]["io.plaid"], "1")
         self.assertEqual(c["networks"]["default"]["labels"]["io.plaid"], "1")
@@ -107,3 +106,12 @@ class TailscaleComposeTest(unittest.TestCase):
         c = render_compose(make(), "/d", has_dri=False)
         self.assertNotIn("tailscale", c["services"])
         self.assertNotIn("tailscale-state", c["volumes"])
+
+
+class GuardComposeTest(unittest.TestCase):
+    def test_disk_apps_are_started_by_the_guard(self):
+        s = make(vpn=True)
+        s.tailscale_key = "tskey-auth-fake"
+        c = render_compose(s, "/srv/arr", False)
+        for name, svc in c["services"].items():
+            self.assertEqual(svc["restart"], "no" if name in DISK_APPS else "unless-stopped", name)

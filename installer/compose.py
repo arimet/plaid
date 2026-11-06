@@ -7,6 +7,9 @@ from installer.vpn import PROVIDERS, gluetun_env
 LABEL = "io.plaid"
 LABELS = {LABEL: "1"}
 SERVICES = ["jellyfin", "seerr", "radarr", "sonarr", "qbittorrent", "prowlarr", "bazarr"]
+# The apps that read the media folder. Plaid's guard starts them once it sees the real disk: Docker would start
+# them at boot on whatever is there, the empty mount point of a disk that is not mounted yet included.
+DISK_APPS = ("jellyfin", "radarr", "sonarr", "qbittorrent", "bazarr")
 PORTS = {"jellyfin": 8096, "seerr": 5055, "radarr": 7878, "sonarr": 8989, "qbittorrent": 8080,
          "prowlarr": 9696, "bazarr": 6767}
 IMAGES = {
@@ -37,10 +40,10 @@ def render_compose(s: Settings, data_source: str, has_dri: bool) -> dict:
             "environment": dict(ids),
             "volumes": [f"{svc}-config:{CONFIG_DIR.get(svc, '/config')}"],
             "ports": _port(svc),
-            "restart": "unless-stopped",
+            "restart": "no" if svc in DISK_APPS else "unless-stopped",
             "labels": dict(LABELS),
         }
-    for svc in ("jellyfin", "radarr", "sonarr", "qbittorrent", "bazarr"):
+    for svc in DISK_APPS:
         services[svc]["volumes"].append(dict(data))
     services["seerr"].update(init=True, environment={"TZ": s.timezone})
     services["qbittorrent"]["environment"]["WEBUI_PORT"] = "8080"
