@@ -35,6 +35,7 @@ fi
 
 ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
 [ -n "$ADDR" ] || ADDR=$(ip route get 1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}' || true)
+[ -n "$ADDR" ] || ADDR=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)  # macOS
 [ -n "$ADDR" ] || ADDR=localhost
 TZ_NAME=$(cat /etc/timezone 2>/dev/null || readlink /etc/localtime 2>/dev/null | sed 's#.*/zoneinfo/##' || echo UTC)
 [ -n "$TZ_NAME" ] || TZ_NAME=UTC

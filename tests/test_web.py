@@ -345,3 +345,30 @@ class FaviconTest(WebTest):
         status, headers, body = self.req("GET", "/static/favicon.svg")
         self.assertEqual((status, headers["Content-Type"].split(";")[0]), (200, "image/svg+xml"))
         self.assertIn("<svg", body)
+
+
+class LanAddressTest(WebTest):
+    def panel(self, env, host_header):
+        self.server = web.make_server(0, FakeFlow(installed=settings()), env)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        self.port = self.server.server_address[1]
+        form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
+        _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
+        cookie = headers["Set-Cookie"].split(";")[0]
+        return self.req("GET", "/", headers={"Cookie": cookie, "Host": host_header})[2]
+
+    def test_localhost_shows_the_machine_address(self):
+        # opened on the machine itself: links must still work from the TV or the phone
+        html = self.panel(dict(ENV, HOST_ADDR="192.168.1.20"), "localhost:7575")
+        self.assertIn('href="http://192.168.1.20:8096"', html)
+
+    def test_address_typed_in_the_browser_wins(self):
+        # from another computer or through Tailscale, the address that reached us works for sure
+        html = self.panel(dict(ENV, HOST_ADDR="192.168.1.20"), "plaid:7575")
+        self.assertIn('href="http://plaid:8096"', html)
+
+    def test_localhost_without_known_address(self):
+        html = self.panel(dict(ENV, HOST_ADDR="localhost"), "localhost:7575")
+        self.assertIn('href="http://localhost:8096"', html)

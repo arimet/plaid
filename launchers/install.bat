@@ -17,13 +17,17 @@ timeout /t 5 /nobreak >nul
 goto waitdocker
 
 :ready
+rem The PC's address on the local network: the links must open from the TV or the phone too.
+set "ADDR="
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "(Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway } | Select-Object -First 1).IPv4Address.IPAddress"`) do set "ADDR=%%i"
+if not defined ADDR set "ADDR=localhost"
 rem Start Docker Desktop at sign-in, or the apps stop when the PC restarts (best effort).
 powershell -NoProfile -Command "$f = Join-Path $env:APPDATA 'Docker\settings-store.json'; try { $j = Get-Content $f -Raw | ConvertFrom-Json; $j | Add-Member -Force AutoStart $true; $j | ConvertTo-Json -Depth 20 | Set-Content $f -Encoding UTF8 } catch {}"
 
 docker container inspect arr-installer >nul 2>nul && (
   docker start arr-installer >nul
 ) || (
-  docker run -d --name arr-installer --restart unless-stopped -p 7575:7575 -v /var/run/docker.sock:/var/run/docker.sock -v arr-installer-state:/state -e "HOST_HOME=%USERPROFILE%" -e HOST_PLATFORM=windows -e HOST_ADDR=localhost -e PUID=1000 -e PGID=1000 --label io.arr-installer=1 "%PLAID_IMAGE%" >nul || (
+  docker run -d --name arr-installer --restart unless-stopped -p 7575:7575 -v /var/run/docker.sock:/var/run/docker.sock -v arr-installer-state:/state -e "HOST_HOME=%USERPROFILE%" -e HOST_PLATFORM=windows -e "HOST_ADDR=%ADDR%" -e PUID=1000 -e PGID=1000 --label io.arr-installer=1 "%PLAID_IMAGE%" >nul || (
     docker rm -f arr-installer >nul 2>nul
     echo Plaid could not start: port 7575 is probably used by another program.
     pause
@@ -36,4 +40,6 @@ timeout /t 1 /nobreak >nul
 goto waitpanel
 :open
 start "" http://localhost:7575
-echo Plaid is open in your browser: http://localhost:7575. You can close this window.
+echo Plaid is open in your browser: http://localhost:7575.
+if not "%ADDR%"=="localhost" echo From another device on your network: http://%ADDR%:7575
+echo You can close this window.

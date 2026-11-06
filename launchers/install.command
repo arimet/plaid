@@ -20,12 +20,14 @@ STORE="$HOME/Library/Group Containers/group.com.docker/settings-store.json"
 plutil -replace AutoStart -bool YES "$STORE" >/dev/null 2>&1 || true
 
 TZ_NAME=$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')
+# The Mac's address on the local network: the links must open from the TV or the phone too.
+ADDR=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo localhost)
 if docker container inspect "$NAME" >/dev/null 2>&1; then
   docker start "$NAME" >/dev/null
 else
   docker run -d --name "$NAME" --restart unless-stopped -p 7575:7575 \
     -v /var/run/docker.sock:/var/run/docker.sock -v arr-installer-state:/state \
-    -e HOST_HOME="$HOME" -e HOST_PLATFORM=mac -e HOST_ADDR=localhost -e TZ="$TZ_NAME" \
+    -e HOST_HOME="$HOME" -e HOST_PLATFORM=mac -e HOST_ADDR="$ADDR" -e TZ="$TZ_NAME" \
     -e PUID="$(id -u)" -e PGID="$(id -g)" --label io.arr-installer=1 "$IMAGE" >/dev/null || {
       docker rm -f "$NAME" >/dev/null 2>&1
       echo "Plaid could not start: port 7575 is probably used by another program."
@@ -34,4 +36,6 @@ else
 fi
 until curl -fs http://localhost:7575/api/ping >/dev/null 2>&1; do sleep 1; done
 open http://localhost:7575
-echo "Plaid is open in your browser: http://localhost:7575. You can close this window."
+echo "Plaid is open in your browser: http://localhost:7575."
+[ "$ADDR" = localhost ] || echo "From another device on your network: http://$ADDR:7575"
+echo "You can close this window."

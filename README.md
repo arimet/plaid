@@ -96,6 +96,10 @@ Docker Desktop cannot put a container on your computer's network, so install the
 3. In the Tailscale app on the computer, note its name (for example `zoe-macbook`).
 4. On your phone, open `http://zoe-macbook:8096`. The other apps use their own port.
 
+## Keep the same address
+
+Plaid shows your apps at the machine's address on your network, such as `http://192.168.1.20:8096`, so they open from the TV, the phone or another computer. Your router may hand the machine a new address one day: in its settings, look for **DHCP reservation** (or "static lease") and reserve the current one for this machine.
+
 ## Add your trackers
 
 1. Open Prowlarr, then **Indexers › Add Indexer**.

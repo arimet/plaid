@@ -382,6 +382,9 @@ def make_handler(state: State):
             if path == "/remove":
                 return self.send(200, remove_page(lang, s, state.flow.media_size(s)))
             host = (self.headers.get("Host") or "localhost").rsplit(":", 1)[0]
+            if host in ("localhost", "127.0.0.1", "[::1]") and state.env.get("HOST_ADDR", "localhost") != "localhost":
+                # Opened on the machine itself: the LAN address works here too, and from the TV or the phone.
+                host = state.env["HOST_ADDR"]
             return self.send(200, panel_page(lang, s, host, state.flow.is_complete()))
 
         def do_POST(self):
