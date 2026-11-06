@@ -52,6 +52,16 @@ def _prowlarr(dk, state_dir: str):
                     lambda *args: dk.compose(state_dir, *args).stdout)
 
 
+def reattach(dk=docker, state_dir: str = STATE_DIR) -> None:
+    """A recreated assistant (new image) starts outside the stack network; the panel needs Prowlarr."""
+    if load_settings(state_dir) is None:
+        return
+    try:
+        dk.connect_network(dk.self_container_id())
+    except DockerError:
+        pass  # no stack network (failed install): the panel still offers Remove
+
+
 def tracker_catalog(dk=docker, state_dir: str = STATE_DIR) -> list[dict]:
     return apps.list_public_indexers(_prowlarr(dk, state_dir))
 

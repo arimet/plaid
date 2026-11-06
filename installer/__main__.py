@@ -32,6 +32,7 @@ def main(argv=None) -> int:
         s = flow.load_settings()
         size = web.human_size(flow.media_size(s), args.lang) if s else ""
         return cli.run_uninstall(input, print, flow, args.lang, s.data_dir if s else "", size)
+    flow.reattach()
     web.serve(args.port)
     return 0
 

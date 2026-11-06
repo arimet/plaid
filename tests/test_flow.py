@@ -238,3 +238,19 @@ class ReviewFixesFlowTest(unittest.TestCase):
         self.assertIn(("rm", "container", flow.WORKER_NAME), dk.calls)
         dk.state = (False, False, 0)
         self.assertEqual(flow.uninstall_status(dk=dk), ("idle", ""))
+
+
+class ReattachTest(unittest.TestCase):
+    def test_reconnects_to_the_stack_network_when_installed(self):
+        # A recreated assistant (new image) starts outside the stack network: the trackers page needs Prowlarr.
+        state = tempfile.mkdtemp()
+        flow.install(settings(), lambda p: None, dk=FakeDocker(), state_dir=state, vpn_wait=0, arch="x86_64",
+                     configure=lambda *a, **k: {})
+        dk = FakeDocker()
+        flow.reattach(dk=dk, state_dir=state)
+        self.assertIn(("connect", "me"), dk.calls)
+
+    def test_nothing_to_do_before_install(self):
+        dk = FakeDocker()
+        flow.reattach(dk=dk, state_dir=tempfile.mkdtemp())
+        self.assertEqual(dk.calls, [])
