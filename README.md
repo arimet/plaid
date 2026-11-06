@@ -66,6 +66,32 @@ Docker Desktop runs the seven apps on Windows and Mac. It installs like any othe
 
 Leave the launcher window open while you install Docker Desktop: it carries on by itself once Docker answers.
 
+## Reach your apps away from home (Tailscale)
+
+[Tailscale](https://tailscale.com) links your devices in a private network, so your apps answer on your phone or laptop anywhere, without opening anything on your router. It is free for personal use.
+
+### Linux PC, mini PC, Synology, Raspberry Pi
+
+The assistant has an optional step for it.
+
+1. Create an account on [tailscale.com](https://tailscale.com) (sign in with Google, Microsoft or Apple).
+2. Open [login.tailscale.com › Settings › Keys](https://login.tailscale.com/admin/settings/keys), click **Generate auth key**, leave the options off, and copy the key. It starts with `tskey-auth-` and works once, for 90 days.
+3. Paste it in the assistant's **Away from home** step. Plaid joins the machine to your network under the name `plaid`.
+4. Install the Tailscale app on your phone or laptop and sign in with the same account.
+5. Open `http://plaid:8096` for Jellyfin. Every app answers at `http://plaid:<port>` (see [Ports](#ports)).
+6. In [login.tailscale.com › Machines](https://login.tailscale.com/admin/machines), open **plaid › … › Disable key expiry**, or the machine leaves your network after 180 days.
+
+If Tailscale already runs on the machine, leave the key empty: your apps are already reachable through it. Removing the stack also takes `plaid` off your Tailscale network.
+
+### Windows or Mac
+
+Docker Desktop cannot put a container on your computer's network, so install the Tailscale app instead:
+
+1. Install Tailscale from [tailscale.com/download](https://tailscale.com/download) on this computer and sign in.
+2. Install it on your phone with the same account.
+3. In the Tailscale app on the computer, note its name (for example `zoe-macbook`).
+4. On your phone, open `http://zoe-macbook:8096`. The other apps use their own port.
+
 ## Add your trackers
 
 1. Open Prowlarr, then **Indexers › Add Indexer**.
