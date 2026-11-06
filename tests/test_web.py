@@ -335,3 +335,13 @@ class FolderWarningTest(WebTest):
         self.start(flow)
         _, _, body = self.req("POST", "/api/preflight", FORM)
         self.assertIn("/home/zoe/Plaid", json.loads(body)["warnings"][0]["text"])
+
+
+class FaviconTest(WebTest):
+    def test_tartan_favicon(self):
+        self.start(FakeFlow())
+        _, _, html = self.req("GET", "/")
+        self.assertIn('<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">', html)
+        status, headers, body = self.req("GET", "/static/favicon.svg")
+        self.assertEqual((status, headers["Content-Type"].split(";")[0]), (200, "image/svg+xml"))
+        self.assertIn("<svg", body)

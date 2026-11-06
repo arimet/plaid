@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A square of the Plaid tartan: green ground, red, gold and navy threads woven both ways. -->
+  <defs>
+    <clipPath id="r"><rect width="32" height="32" rx="7"/></clipPath>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="32" height="32" fill="#1e5b45"/>
+    <g opacity="0.85">
+      <rect x="5" width="4" height="32" fill="#b8242f"/>
+      <rect x="15" width="1.5" height="32" fill="#e8b230"/>
+      <rect x="22" width="6" height="32" fill="#22305e"/>
+    </g>
+    <g opacity="0.6">
+      <rect y="5" width="32" height="4" fill="#b8242f"/>
+      <rect y="15" width="32" height="1.5" fill="#e8b230"/>
+      <rect y="22" width="32" height="6" fill="#22305e"/>
+    </g>
+  </g>
+</svg>

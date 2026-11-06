@@ -92,7 +92,7 @@ def page(lang: str, body: str, *, cloth: str = "", p: int = 100, foot: str = "",
     texts = json.dumps({k: v for k, v in T[lang].items()}, ensure_ascii=False).replace("</", "<\\/")
     return f"""<!doctype html>
 <html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Plaid</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/static/fonts.css">
+<title>Plaid</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/fonts.css">
 <link rel="stylesheet" href="/static/style.css"></head><body>
 <div class="cloth {cloth}" id="cloth" style="--p:{p}%"><div class="woven"></div>
 <a class="brand" href="/"><b>Plaid</b></a><div class="top">{menu}<nav class="lang" aria-label="Language">{links}</nav></div></div>
