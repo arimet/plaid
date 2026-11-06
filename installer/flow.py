@@ -247,11 +247,17 @@ def pack_state(state_dir: str = STATE_DIR) -> str:
     return base64.b64encode(json.dumps(files).encode()).decode()
 
 
+# Held by a guard round, and by a removal while it starts its worker: the guard must not start the apps again
+# while the worker takes the stack down.
+OPS_LOCK = threading.Lock()
+
+
 def uninstall(remove_media: bool, report: Report, dk=docker, state_dir: str = STATE_DIR) -> None:
     """Hands the work to a detached container: this one is deleted along the way."""
     report(Progress("step_uninstall"))
     args = ["--uninstall-worker"] + (["--remove-media"] if remove_media else [])
-    dk.run_detached(dk.own_image(), args, {"ARR_STATE": pack_state(state_dir)}, WORKER_NAME)
+    with OPS_LOCK:  # a running guard round finishes first; the next one sees the worker and stands back
+        dk.run_detached(dk.own_image(), args, {"ARR_STATE": pack_state(state_dir)}, WORKER_NAME)
 
 
 def rollback(report: Report, dk=docker, state_dir: str = STATE_DIR) -> None:

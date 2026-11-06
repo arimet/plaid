@@ -70,6 +70,7 @@ class FakeDk:
         self.disk, self.containers, self.blind = disk, containers or {}, set(blind)
         self.worker, self.fail_on = worker, fail_on
         self.calls, self.probed = [], []
+        self.worker_after = None
 
     def host_path(self, path, platform):
         return path
@@ -85,6 +86,9 @@ class FakeDk:
         return svc not in self.blind
 
     def container_state(self, name):
+        if self.worker_after is not None:  # the removal starts while the round runs
+            self.worker_after -= 1
+            self.worker = self.worker_after < 0
         return (self.worker and name == self.WORKER, self.worker, 0)
 
     def compose(self, state_dir, *args):
@@ -149,3 +153,34 @@ class CycleTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RemovalRaceTest(unittest.TestCase):
+    def test_cycle_stops_when_removal_starts(self):
+        dk = FakeDk(containers={"radarr": Q()})
+        dk.worker_after = 1  # free at the start of the round, then the worker exists
+        guard.cycle(dk, FakeFlow(), "/state")
+        self.assertEqual(dk.calls, [])
+
+    def test_removal_waits_for_the_running_round(self):
+        import threading
+        from installer import flow
+        from tests.test_flow import FakeDocker, settings
+        dk = FakeDocker()
+        flow.OPS_LOCK.acquire()
+        t = threading.Thread(target=flow.uninstall, args=(False, lambda p: None),
+                             kwargs={"dk": dk, "state_dir": "/nonexistent"})
+        t.start()
+        t.join(0.3)
+        self.assertFalse(any(c[0] == "detached" for c in dk.calls))
+        flow.OPS_LOCK.release()
+        t.join(2)
+        self.assertTrue(any(c[0] == "detached" for c in dk.calls))
+
+    def test_cycle_holds_the_lock(self):
+        from installer import flow
+        seen = []
+        dk = FakeDk()
+        dk.marker_state = lambda src: seen.append(flow.OPS_LOCK.locked()) or "ok"
+        guard.cycle(dk, FakeFlow(), "/state")
+        self.assertEqual(seen, [True])

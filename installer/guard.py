@@ -37,7 +37,13 @@ def decide(disk: str, vpn_on: bool, containers: dict, blind: set[str]) -> tuple[
 
 def cycle(dk=docker, fl=flow, state_dir: str = flow.STATE_DIR) -> dict | None:
     """One round. Does nothing while an install is not finished or a removal runs: they own the stack then."""
-    if not fl.is_complete(state_dir) or dk.container_state(dk.WORKER)[0]:
+    with flow.OPS_LOCK:
+        return _cycle(dk, fl, state_dir)
+
+
+def _cycle(dk, fl, state_dir: str) -> dict | None:
+    removing = lambda: dk.container_state(dk.WORKER)[0]
+    if not fl.is_complete(state_dir) or removing():
         return None
     s = fl.load_settings(state_dir)
     disk = dk.marker_state(dk.host_path(s.data_dir, s.platform))
@@ -50,6 +56,8 @@ def cycle(dk=docker, fl=flow, state_dir: str = flow.STATE_DIR) -> dict | None:
     commands = {"recreate_qbittorrent": ("up", "-d", "--force-recreate", "--no-deps", "qbittorrent"),
                 "up": ("up", "-d", *DISK_APPS), "stop": ("stop", *DISK_APPS)}
     for action in actions:
+        if removing():  # started from the terminal container, which does not share the lock
+            return None
         try:
             dk.compose(state_dir, *(commands.get(action[0]) or action))
         except DockerError as e:  # the next action, and the next round, may still fix things
