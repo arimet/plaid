@@ -102,8 +102,12 @@ def stack_containers(run: Run = default_run) -> dict[str, dict]:
         return {}
     found = {}
     for c in json.loads(_check(run, ["docker", "inspect", *ids]).stdout):
-        state = c.get("State") or {}
-        found[c["Config"]["Labels"]["com.docker.compose.service"]] = {
+        state, labels = c.get("State") or {}, c["Config"]["Labels"]
+        service = labels["com.docker.compose.service"]
+        # Skip `compose run` containers, and a stopped leftover when compose recreated the service.
+        if labels.get("com.docker.compose.oneoff") == "True" or (service in found and found[service]["running"]):
+            continue
+        found[service] = {
             "id": c["Id"], "running": bool(state.get("Running")), "started": state.get("StartedAt", ""),
             "health": (state.get("Health") or {}).get("Status", ""), "network": c["HostConfig"]["NetworkMode"]}
     return found
@@ -111,8 +115,10 @@ def stack_containers(run: Run = default_run) -> dict[str, dict]:
 
 def sees_marker(state_dir: str, svc: str, run: Run = default_run) -> bool:
     """False when a running app lost the disk: a container keeps its old view of a mount that came back."""
-    return run(["docker", "compose", "-p", PROJECT, "-f", f"{state_dir}/compose.json", "exec", "-T", svc,
-                "test", "-e", f"/data/{MARKER}"], timeout=PROBE_TIMEOUT).returncode == 0
+    result = run(["docker", "compose", "-p", PROJECT, "-f", f"{state_dir}/compose.json", "exec", "-T", svc,
+                  "test", "-e", f"/data/{MARKER}"], timeout=PROBE_TIMEOUT)
+    # Only `test` saying "absent" counts: an app restarting or a slow NAS timing out would restart it every round.
+    return not (result.returncode == 1 and not (result.stderr or "").strip())
 
 
 def wipe_dir(path: str, home: str, platform: str, run: Run = default_run) -> None:

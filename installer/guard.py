@@ -14,6 +14,12 @@ from installer.docker import DockerError
 INTERVAL = 30
 
 
+def _instant(started: str) -> str:
+    """Docker's StartedAt with its fraction padded: it trims trailing zeros, so ".2Z" must sort after ".12Z"."""
+    head, _, frac = started.rstrip("Z").partition(".")
+    return f"{head[:19]}.{frac.ljust(9, '0')}"
+
+
 def decide(disk: str, vpn_on: bool, containers: dict, blind: set[str]) -> tuple[list[tuple], str]:
     """(actions in order, VPN state). `blind`: running disk apps that no longer see the marker."""
     actions = []
@@ -25,7 +31,7 @@ def decide(disk: str, vpn_on: bool, containers: dict, blind: set[str]) -> tuple[
         # Only with the disk there, or the disk rule would stop it again on every round.
         if disk == "ok" and g and g["running"] and g["health"] == "healthy" and q and (
                 q["network"] != f"container:{g['id']}" or
-                (q["running"] and q["started"][:19] < g["started"][:19])):  # Docker trims trailing zeros
+                (q["running"] and _instant(q["started"]) < _instant(g["started"]))):
             actions.append(("recreate_qbittorrent",))
     if disk == "ok":
         actions.append(("up",))

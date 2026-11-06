@@ -193,3 +193,10 @@ class HangTest(unittest.TestCase):
         guard.cycle(dk, FakeFlow(), "/state")
         self.assertEqual(len(dk.calls), 2)
         self.assertTrue(all(t for t in dk.timeouts))
+
+
+class FractionTest(unittest.TestCase):
+    def test_restart_in_the_same_second_is_seen(self):
+        acts, _ = guard.decide("ok", True, {"gluetun": G(started="2026-11-06T10:00:00.2Z"),
+                                            "qbittorrent": Q(started="2026-11-06T10:00:00.12Z")}, set())
+        self.assertEqual(acts[0], ("recreate_qbittorrent",))

@@ -198,3 +198,21 @@ class ComposeTimeoutTest(unittest.TestCase):
         run = FakeRun()
         docker.compose("/state", "up", "-d", run=run, timeout=5)
         self.assertEqual(run.timeouts, [5])
+
+
+class MinorFixesDockerTest(unittest.TestCase):
+    def test_only_a_clean_absent_answer_is_blind(self):
+        self.assertFalse(docker.sees_marker("/state", "radarr", run=FakeRun(1, "", "")))
+        # Not an answer about the file: the app is restarting, or a slow NAS made the call time out.
+        self.assertTrue(docker.sees_marker("/state", "radarr", run=FakeRun(1, "", 'service "radarr" is not running')))
+        self.assertTrue(docker.sees_marker("/state", "radarr", run=FakeRun(124, "", "timed out")))
+
+    def test_stack_containers_skips_one_offs_and_keeps_the_running_one(self):
+        def c(cid, running, oneoff="False"):
+            return {"Id": cid, "State": {"Running": running, "StartedAt": "2026-11-06T10:00:00Z"},
+                    "HostConfig": {"NetworkMode": "plaid_default"},
+                    "Config": {"Labels": {"com.docker.compose.service": "gluetun", "com.docker.compose.oneoff": oneoff}}}
+        for order in ([c("real", True), c("old", False), c("run", True, "True")],
+                      [c("run", True, "True"), c("old", False), c("real", True)]):
+            got = docker.stack_containers(run=FakeRun(0, json.dumps(order)))
+            self.assertEqual(got["gluetun"]["id"], "real")
