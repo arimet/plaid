@@ -216,7 +216,7 @@ def guard_notes(lang: str, s: Settings, status: dict) -> list[tuple[str, str, bo
 def guard_html(lang: str, s: Settings, status: dict) -> str:
     button = (f'<form method="post" action="/api/confirm-disk"><button class="btn" type="submit">'
               f'{E(t(lang, "guard_disk_confirm"))}</button></form>')
-    return "".join(f'<div class="note warn"><div><b>{E(title)}</b> {E(text)}{button if confirm else ""}</div></div>'
+    return "".join(f'<div class="note warn"><div><b>{E(title)}</b><br>{E(text)}{button if confirm else ""}</div></div>'
                    for title, text, confirm in guard_notes(lang, s, status))
 
 

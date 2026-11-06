@@ -53,6 +53,14 @@ class DemoFlow:
     def uninstall_status(self):
         return "running", ""
 
+    status = {"disk": "ok", "vpn": "off"}
+
+    def guard_status(self):
+        return self.status
+
+    def confirm_disk(self, s):
+        self.status = dict(self.status, disk="ok")
+
 
 if __name__ == "__main__":
     from installer.settings import Settings  # noqa: E402
@@ -66,4 +74,9 @@ if __name__ == "__main__":
         flow.settings = Settings(data_dir=home + "/Plaid", username="demo", password="demo-pass",
                                  vpn_provider=None, home=home, platform=platform, lang="fr")
         flow.complete = True
+    for word in sys.argv[3:]:  # guard alerts: missing, unconfirmed, vpn-down
+        if word in ("missing", "unconfirmed"):
+            flow.status = dict(flow.status, disk=word)
+        if word == "vpn-down":
+            flow.status = dict(flow.status, vpn="down")
     web.make_server(port, flow, env).serve_forever()
