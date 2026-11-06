@@ -48,8 +48,13 @@ class FakeDocker:
     def host_has_tailscale(self):
         return False
 
-    def ensure_data_dirs(self, src, puid, pgid):
-        self.calls.append(("ensure", src))
+    APPLY_WORKER = "plaid-apply"
+
+    def ensure_data_dirs(self, src, puid, pgid, create=True):
+        self.calls.append(("ensure", src) if create else ("ensure-existing", src))
+
+    def folder_state(self, src):
+        return getattr(self, "folder", "library")
 
     def write_marker(self, src):
         self.calls.append(("marker", src))
@@ -74,11 +79,11 @@ class FakeDocker:
     def wipe_dir(self, path, home, platform):
         self.calls.append(("wipe", path))
 
-    def run_detached(self, image, args, env, name):
-        self.calls.append(("detached", image, tuple(args), tuple(sorted(env)), name))
+    def run_detached(self, image, args, env, name, volumes=()):
+        self.calls.append(("detached", image, tuple(args), tuple(sorted(env)), name) + tuple(volumes))
 
     def container_state(self, name):
-        return getattr(self, "state", (False, False, 0))
+        return getattr(self, "states", {}).get(name, getattr(self, "state", (False, False, 0)))
 
     def logs(self, name):
         return getattr(self, "log_text", "")

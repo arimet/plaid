@@ -8,7 +8,7 @@ import platform
 import re
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Callable
 
 from installer import apps, docker
@@ -238,6 +238,59 @@ def confirm_disk(s: Settings, dk=docker, state_dir: str = STATE_DIR) -> bool:
         return False
     save_guard_status({**guard_status(state_dir), "disk": "ok"}, state_dir)
     return True
+
+
+APPLY_REQUEST, APPLY_FILE = "apply-request.json", "apply.json"
+
+
+def write_json(path: str, data, mode: int = 0o600) -> None:
+    """Whole file or nothing: readers in other containers never see half of it."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def start_apply(new: Settings, current: dict[str, str], dk=docker, state_dir: str = STATE_DIR) -> None:
+    """Hands a settings change to a detached container that mounts the state volume."""
+    write_json(os.path.join(state_dir, APPLY_REQUEST), {"settings": json.loads(new.to_json()), "current": current})
+    write_json(os.path.join(state_dir, APPLY_FILE), [])
+    with OPS_LOCK:  # a running guard round finishes first; the next one sees the worker and stands back
+        dk.run_detached(dk.own_image(), ["--apply-worker"], {}, dk.APPLY_WORKER,
+                        volumes=(f"{STATE_VOLUME}:/state",))
+
+
+def apply_status(dk=docker, state_dir: str = STATE_DIR) -> dict:
+    """{"state": idle|running|done|failed, "events": [Progress as dict]}. A stopped worker is removed here, so
+    the guard does not stay paused and the next change can start."""
+    try:
+        with open(os.path.join(state_dir, APPLY_FILE), encoding="utf-8") as f:
+            events = json.load(f)
+    except (OSError, ValueError):
+        events = []
+    last = events[-1] if events else {}
+    final = "done" if last.get("done") else "failed" if last.get("error") else None
+    exists, running, _ = dk.container_state(dk.APPLY_WORKER)
+    if exists and running:
+        return {"state": "running", "events": events}
+    if exists:
+        if not final:  # it stopped without a last word: it crashed
+            events.append(asdict(Progress(last.get("step", "step_save"), error="err_apply_failed",
+                                          detail=dk.logs(dk.APPLY_WORKER))))
+            final = "failed"
+        dk.remove("container", dk.APPLY_WORKER)
+    return {"state": final or "idle", "events": events}
+
+
+def check_logins(s: Settings) -> list[str]:
+    from installer import reconfigure
+    return apps.check_logins(s, reconfigure.host_of_for(s))
+
+
+def settings_check(old: Settings, new: Settings) -> list[str]:
+    from installer import reconfigure
+    return reconfigure.check(old, new)
 
 
 def pack_state(state_dir: str = STATE_DIR) -> str:

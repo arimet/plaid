@@ -65,6 +65,8 @@ class DecideTest(unittest.TestCase):
 
 class FakeDk:
     WORKER = "plaid-uninstall"
+    APPLY_WORKER = "plaid-apply"
+    applying = False
 
     def __init__(self, disk="ok", containers=None, blind=(), worker=False, fail_on=None):
         self.disk, self.containers, self.blind = disk, containers or {}, set(blind)
@@ -89,6 +91,8 @@ class FakeDk:
         if self.worker_after is not None:  # the removal starts while the round runs
             self.worker_after -= 1
             self.worker = self.worker_after < 0
+        if name == self.APPLY_WORKER:
+            return (self.applying, self.applying, 0)
         return (self.worker and name == self.WORKER, self.worker, 0)
 
     def compose(self, state_dir, *args, timeout=None):
@@ -200,3 +204,11 @@ class FractionTest(unittest.TestCase):
         acts, _ = guard.decide("ok", True, {"gluetun": G(started="2026-11-06T10:00:00.2Z"),
                                             "qbittorrent": Q(started="2026-11-06T10:00:00.12Z")}, set())
         self.assertEqual(acts[0], ("recreate_qbittorrent",))
+
+
+class ApplyPauseTest(unittest.TestCase):
+    def test_cycle_skips_while_applying(self):
+        dk = FakeDk(containers={"radarr": Q()})
+        dk.applying = True
+        self.assertIsNone(guard.cycle(dk, FakeFlow(), "/state"))
+        self.assertEqual(dk.calls, [])

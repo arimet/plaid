@@ -72,6 +72,12 @@ T: dict[str, dict[str, str]] = {
         "err_unexpected": "Something went wrong. Remove the stack and install again.",
         "warn_dir_not_empty": "The folder {path} already holds files. Installing never touches them, but if you ever remove Plaid and tick “also delete the folder”, they go too.",
         "warn_no_vpn": "Without a VPN, your internet provider and the other peers see what you download.",
+        "err_folder_missing": "Folder not found: is the disk plugged in?",
+        "err_folder_unreadable": "Docker cannot open this folder. On Mac and Windows, check it is shared in "
+                                 "Docker Desktop › Settings › Resources › File sharing.",
+        "warn_folder_no_library": "This folder holds no library. Radarr and Sonarr will mark your films and "
+                                  "series as missing, and downloads in progress will stop.",
+        "err_apply_failed": "The change did not go through. Your previous settings are back.",
         "step_prepare": "Preparing",
         "step_folders": "Creating the folders",
         "step_download": "Downloading the apps",
@@ -246,6 +252,12 @@ T: dict[str, dict[str, str]] = {
         "err_unexpected": "Quelque chose a échoué. Supprimez la stack et réinstallez.",
         "warn_dir_not_empty": "Le dossier {path} contient déjà des fichiers. L’installation n’y touche pas, mais si un jour vous supprimez Plaid en cochant « effacer aussi le dossier », ils partiront avec.",
         "warn_no_vpn": "Sans VPN, votre fournisseur d’accès et les autres pairs voient ce que vous téléchargez.",
+        "err_folder_missing": "Dossier introuvable : le disque est-il branché ?",
+        "err_folder_unreadable": "Docker n’arrive pas à ouvrir ce dossier. Sur Mac et Windows, vérifiez qu’il "
+                                 "est partagé dans Docker Desktop › Settings › Resources › File sharing.",
+        "warn_folder_no_library": "Ce dossier ne contient pas de bibliothèque. Radarr et Sonarr marqueront vos "
+                                  "films et séries comme manquants, et les téléchargements en cours s’arrêteront.",
+        "err_apply_failed": "Le changement n’est pas passé. Vos réglages précédents sont revenus.",
         "step_prepare": "Préparation",
         "step_folders": "Création des dossiers",
         "step_download": "Téléchargement des applis",

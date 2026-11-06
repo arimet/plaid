@@ -1,4 +1,4 @@
-"""python -m installer [--cli | --uninstall | --uninstall-worker [--remove-media]] [--lang fr]"""
+"""python -m installer [--cli | --uninstall | --uninstall-worker [--remove-media] | --apply-worker] [--lang fr]"""
 from __future__ import annotations
 
 import argparse
@@ -14,12 +14,16 @@ def main(argv=None) -> int:
     mode.add_argument("--cli", action="store_true", help="ask the questions in the terminal")
     mode.add_argument("--uninstall", action="store_true", help="remove the stack from the terminal")
     mode.add_argument("--uninstall-worker", action="store_true", help=argparse.SUPPRESS)
+    mode.add_argument("--apply-worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--remove-media", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--lang", choices=["en", "fr"], default="fr" if os.environ.get("LANG", "").startswith("fr") else "en")
     parser.add_argument("--port", type=int, default=7575)
     args = parser.parse_args(argv)
     env = dict(os.environ)
 
+    if args.apply_worker:
+        from installer import reconfigure
+        return reconfigure.run_worker()
     if args.uninstall_worker:
         flow.uninstall_worker(env["ARR_STATE"], args.remove_media)
         return 0
