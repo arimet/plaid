@@ -311,3 +311,18 @@ class PanelPagesTest(WebTest):
             status, _, html = self.req("GET", path + "?lang=fr", headers=self.login())
             self.assertEqual(status, 200, path)
             self.assertIn('class="back" href="/"', html)
+
+
+class HeaderMenuTest(PanelPagesTest):
+    def test_links_live_in_a_header_menu(self):
+        self.start(FakeFlow(installed=settings()))
+        _, _, html = self.req("GET", "/?lang=fr", headers=self.login())
+        header = html.split('<main id="main">')[0]
+        for link in ('href="/remote"', 'href="/trackers"', 'href="/remove"'):
+            self.assertIn(link, header)
+        self.assertNotIn("<h2>Pour aller plus loin", html)  # no section: only the button's accessible name
+
+    def test_no_menu_before_install(self):
+        self.start(FakeFlow())
+        _, _, html = self.req("GET", "/?lang=fr")
+        self.assertNotIn('class="menu"', html)

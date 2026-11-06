@@ -34,7 +34,14 @@ a{color:inherit;text-underline-offset:3px}
 .cloth.fray{filter:saturate(.35) brightness(.9)}
 .brand{position:absolute;left:max(16px,calc(50% - 260px));bottom:-1px;z-index:2;background:var(--ground);padding:10px 16px 4px 12px;border-radius:0 14px 0 0;text-decoration:none}
 .brand b{font:800 42px/0.9 "Bricolage Grotesque";letter-spacing:-.04em;font-variation-settings:"opsz" 96}
-.lang{position:absolute;right:16px;top:14px;z-index:2;display:flex;background:rgba(0,0,0,.38);border-radius:999px;padding:3px}
+.top{position:absolute;right:16px;top:14px;z-index:3;display:flex;gap:8px;align-items:flex-start}
+.lang{display:flex;background:rgba(0,0,0,.38);border-radius:999px;padding:3px}
+.menu{position:static}  /* the list aligns on .top, so it stays on screen on a phone */
+.menu summary{list-style:none;cursor:pointer;display:grid;place-items:center;width:36px;height:30px;border-radius:999px;background:rgba(0,0,0,.38);color:#fff}
+.menu summary::-webkit-details-marker{display:none}
+.menu summary svg{fill:currentColor}
+.menu[open] summary{background:#fff;color:#1b1a22}
+.menu .mores{position:absolute;right:0;top:38px;width:min(300px,calc(100vw - 32px));background:var(--field);border:1px solid var(--line);border-radius:14px;padding:4px 14px;box-shadow:0 12px 28px -12px rgba(0,0,0,.45)}
 .lang a{font:600 13px "Bricolage Grotesque";color:#fff;text-decoration:none;padding:5px 10px;border-radius:999px}
 .lang a[aria-current]{background:#fff;color:#1b1a22}
 
@@ -131,11 +138,11 @@ label.l{font:700 14px "Bricolage Grotesque"}
 .app.daily b{font-size:20px}
 .apps .app.daily{grid-template-columns:56px 1fr auto}
 .mores{display:flex;flex-direction:column}
-.more{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line);text-decoration:none;color:var(--ink)}
+.more{display:flex;flex-direction:column;gap:2px;padding:12px 0;border-bottom:1px solid var(--line);text-decoration:none;color:var(--ink)}
+.more:last-child{border-bottom:0}
 .more b{font:700 17px/1.2 "Bricolage Grotesque"}
-.more small{grid-column:1;font-size:14px;color:var(--ink-2)}
-.more span{grid-column:2;grid-row:1 / span 2;font-size:26px;color:var(--ink-2);transition:transform .15s}
-.more:hover span,.more:focus-visible span{transform:translateX(3px)}
+.more small{font-size:13px;color:var(--ink-2)}
+.more:hover b{text-decoration:underline;text-underline-offset:3px}
 .more.danger b{color:var(--err)}
 .back{align-self:flex-start;font-weight:600;color:var(--ink-2);text-decoration:none}
 .back:hover{color:var(--ink)}

@@ -71,7 +71,22 @@ class State:
         return token
 
 
-def page(lang: str, body: str, *, cloth: str = "", p: int = 100, foot: str = "", script: bool = True) -> str:
+def header_menu(lang: str) -> str:
+    """The "…" button in the header: the pages people rarely need stay out of the main page."""
+    items = "".join(
+        f'<a class="more{" danger" if path == "/remove" else ""}" href="{path}"><b>{E(t(lang, title))}</b>'
+        f'<small>{E(t(lang, desc))}</small></a>'
+        for path, title, desc in (("/remote", "remote_done_title", "nav_remote_desc"),
+                                  ("/trackers", "trackers_title", "nav_trackers_desc"),
+                                  ("/remove", "uninstall_title", "nav_remove_desc")))
+    dots = ('<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="4" cy="10" r="2"/>'
+            '<circle cx="10" cy="10" r="2"/><circle cx="16" cy="10" r="2"/></svg>')
+    return (f'<details class="menu"><summary aria-label="{E(t(lang, "nav_more"))}">{dots}</summary>'
+            f'<nav class="mores">{items}</nav></details>')
+
+
+def page(lang: str, body: str, *, cloth: str = "", p: int = 100, foot: str = "", script: bool = True,
+         menu: str = "") -> str:
     current = ' aria-current="true"'
     links = "".join(f'<a href="?lang={code}"{current if code == lang else ""}>{code.upper()}</a>' for code in T)
     texts = json.dumps({k: v for k, v in T[lang].items()}, ensure_ascii=False).replace("</", "<\\/")
@@ -80,7 +95,7 @@ def page(lang: str, body: str, *, cloth: str = "", p: int = 100, foot: str = "",
 <title>Plaid</title><link rel="icon" href="data:,"><link rel="stylesheet" href="/static/fonts.css">
 <link rel="stylesheet" href="/static/style.css"></head><body>
 <div class="cloth {cloth}" id="cloth" style="--p:{p}%"><div class="woven"></div>
-<a class="brand" href="/"><b>Plaid</b></a><nav class="lang" aria-label="Language">{links}</nav></div>
+<a class="brand" href="/"><b>Plaid</b></a><div class="top">{menu}<nav class="lang" aria-label="Language">{links}</nav></div></div>
 <main id="main">{body}</main>{foot}
 <script id="texts" type="application/json">{texts}</script>
 {'<script src="/static/app.js"></script>' if script else ''}
@@ -204,26 +219,20 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True) -> str:
     if not complete:  # a failed install: removal is the only thing to do
         body = f"""<h1>{E(t(lang, "progress_failed"))}</h1><p class="lead">{E(t(lang, "err_unexpected"))}</p>
   <a class="btn danger" href="/remove">{E(t(lang, "uninstall_title"))}</a>"""
-        return subpage(lang, body, back=False)
+        return subpage(lang, body, back=False, menu=False)
     autostart = (f'<p class="note warn">{E(t(lang, "autostart_hint"))}</p>'
                  if s.platform in ("mac", "windows") else "")
-    more = "".join(
-        f'<a class="more{" danger" if path == "/remove" else ""}" href="{path}"><b>{E(t(lang, title))}</b>'
-        f'<small>{E(t(lang, desc))}</small><span aria-hidden="true">›</span></a>'
-        for path, title, desc in (("/remote", "remote_done_title", "nav_remote_desc"),
-                                  ("/trackers", "trackers_title", "nav_trackers_desc"),
-                                  ("/remove", "uninstall_title", "nav_remove_desc")))
     body = f"""<h1>{E(t(lang, "done_title"))}</h1>
   <p class="lead">{E(t(lang, "done_lead"))} {t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
   {apps}
-  {autostart}
-  <h2>{E(t(lang, "nav_more"))}</h2><nav class="mores">{more}</nav>"""
+  {autostart}"""
     return subpage(lang, body, back=False)
 
 
-def subpage(lang: str, body: str, back: bool = True) -> str:
+def subpage(lang: str, body: str, back: bool = True, menu: bool = True) -> str:
     link = f'<a class="back" href="/">‹ {E(t(lang, "nav_back"))}</a>' if back else ""
-    return page(lang, f'<section id="done">{link}{body}</section>', foot='<div style="height:32px"></div>')
+    return page(lang, f'<section id="done">{link}{body}</section>', foot='<div style="height:32px"></div>',
+                menu=header_menu(lang) if menu else "")
 
 
 def remote_page(lang: str, s: Settings) -> str:
