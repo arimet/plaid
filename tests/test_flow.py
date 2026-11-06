@@ -51,6 +51,9 @@ class FakeDocker:
     def ensure_data_dirs(self, src, puid, pgid):
         self.calls.append(("ensure", src))
 
+    def write_marker(self, src):
+        self.calls.append(("marker", src))
+
     def compose(self, state_dir, *args):
         self.calls.append(("compose",) + args)
         if args[:1] == ("up",) and self.up_error:
@@ -297,3 +300,25 @@ class CancelTest(unittest.TestCase):
         dk = FakeDocker()
         flow.rollback(lambda p: None, dk=dk, state_dir=other)
         self.assertNotIn("--remove-media", dk.calls[-1][2])
+
+
+class GuardStatusTest(unittest.TestCase):
+    def test_guard_status_defaults(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off"})
+            with open(os.path.join(d, "guard.json"), "w") as f:
+                f.write("{broken")
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off"})
+
+    def test_guard_status_round_trip(self):
+        with tempfile.TemporaryDirectory() as d:
+            flow.save_guard_status({"disk": "missing", "vpn": "down"}, d)
+            self.assertEqual(flow.guard_status(d), {"disk": "missing", "vpn": "down"})
+
+    def test_confirm_disk_writes_marker_and_status(self):
+        dk = FakeDocker()
+        with tempfile.TemporaryDirectory() as d:
+            flow.save_guard_status({"disk": "unconfirmed", "vpn": "ok"}, d)
+            flow.confirm_disk(settings(), dk=dk, state_dir=d)
+            self.assertIn(("marker", "/srv/arr"), dk.calls)
+            self.assertEqual(flow.guard_status(d), {"disk": "ok", "vpn": "ok"})

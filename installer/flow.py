@@ -202,6 +202,32 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
         return None
 
 
+GUARD_FILE = "guard.json"
+GUARD_DEFAULT = {"disk": "unknown", "vpn": "off"}  # no alert until the guard has looked
+
+
+def guard_status(state_dir: str = STATE_DIR) -> dict:
+    """What the guard saw last: {"disk": ok|missing|unconfirmed|unknown, "vpn": off|ok|down}."""
+    try:
+        with open(os.path.join(state_dir, GUARD_FILE), encoding="utf-8") as f:
+            return {**GUARD_DEFAULT, **json.load(f)}
+    except (OSError, ValueError):
+        return dict(GUARD_DEFAULT)
+
+
+def save_guard_status(status: dict, state_dir: str = STATE_DIR) -> None:
+    path = os.path.join(state_dir, GUARD_FILE)
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(status, f)
+    os.replace(path + ".tmp", path)  # the panel and the terminal never read half a file
+
+
+def confirm_disk(s: Settings, dk=docker, state_dir: str = STATE_DIR) -> None:
+    """The user says this folder holds their media: mark it, the guard starts the apps on its next round."""
+    dk.write_marker(dk.host_path(s.data_dir, s.platform))
+    save_guard_status({**guard_status(state_dir), "disk": "ok"}, state_dir)
+
+
 def pack_state(state_dir: str = STATE_DIR) -> str:
     files = {}
     for name in STATE_FILES:
