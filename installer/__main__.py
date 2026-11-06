@@ -26,9 +26,13 @@ def main(argv=None) -> int:
     # A real terminal gets menus, colours and live progress; a pipe or a log gets plain questions.
     interactive = sys.stdin.isatty() and sys.stdout.isatty()
     if args.cli:
-        if flow.load_settings() is not None:
-            print(web.t(args.lang, "err_stack_exists"))
-            return 1
+        s = flow.load_settings()
+        if s is not None:  # already installed: the terminal version of the panel
+            if not interactive:
+                print(web.t(s.lang, "err_stack_exists"))
+                return 1
+            flow.reattach()  # the tracker catalogue needs Prowlarr, on the stack network
+            return cli.run_panel_tui(tui.Term(), flow, env, s, complete=flow.is_complete())
         if interactive:
             return cli.run_install_tui(tui.Term(), flow, env, args.lang)
         return cli.run_install(input, print, flow, env, args.lang, cli.secret_input)

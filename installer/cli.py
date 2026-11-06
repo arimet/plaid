@@ -222,6 +222,20 @@ def run_install_tui(term, flow, env: dict, lang: str) -> int:
     host = env.get("HOST_ADDR", "localhost")
     term.heading(t(lang, "done_title"))
     term.note(t(lang, "done_login", username=s.username), "ok")
+    print_apps(term, lang, host)
+    term.line()
+    term.note(t(lang, "trackers_help"))
+    if s.tailscale_key:
+        for line in t(lang, "remote_done_steps").split("|"):
+            term.note(line)
+    term.note(t(lang, "cli_manage"), "ok")
+    term.note(t(lang, "cli_panel_other", url=f"http://{host}:7575"))
+    term.line()
+    return 0
+
+
+def print_apps(term, lang: str, host: str) -> None:
+    from installer.web import DAILY_APPS
     for title, group, daily in ((t(lang, "apps_daily"), [x for x in SERVICES if x in DAILY_APPS], True),
                                 (t(lang, "apps_behind"), [x for x in SERVICES if x not in DAILY_APPS], False)):
         term.heading(title)
@@ -232,14 +246,81 @@ def run_install_tui(term, flow, env: dict, lang: str) -> int:
             if daily:
                 for chunk in term.wrap(t(lang, "appd_" + svc), 4):
                     term.line("    " + term.style(chunk, dim=True))
-    term.line()
+
+
+def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
+    """What the web panel does, in the terminal: for machines without a screen or a browser."""
+    from installer.web import human_size
+    lang, host = s.lang, env.get("HOST_ADDR", "localhost")
+    size = lambda: human_size(flow.media_size(s), lang)
+    if not complete:  # a failed install: removal is the only thing to do
+        term.banner("Plaid", t(lang, "subtitle"))
+        term.line()
+        term.note(t(lang, "progress_failed"), "error")
+        term.note(t(lang, "err_unexpected"))
+        return run_uninstall_tui(term, flow, lang, s.data_dir, size())
+    term.banner("Plaid", t(lang, "subtitle"))
+    actions = [("apps", t(lang, "menu_apps")), ("trackers", t(lang, "menu_trackers")),
+               ("remote", t(lang, "menu_remote")), ("remove", t(lang, "menu_remove")), ("quit", t(lang, "menu_quit"))]
+    try:
+        while True:
+            term.line()
+            choice = term.select(t(lang, "menu_title"), actions, hint=t(lang, "cli_select_hint"))
+            if choice == "quit":
+                return 0
+            if choice == "apps":
+                print_apps(term, lang, host)
+                term.line()
+                term.note(t(lang, "apps_open_anywhere"))
+                term.note(t(lang, "done_login", username=s.username))
+            elif choice == "trackers":
+                _pick_trackers(term, flow, lang)
+            elif choice == "remote":
+                key = "remote_done_steps" if s.tailscale_key else "remote_desktop_steps"
+                term.heading(t(lang, "remote_done_title"))
+                for n, line in enumerate(t(lang, key).split("|"), 1):
+                    term.note(f"{n}. {line}")
+            elif choice == "remove":
+                return run_uninstall_tui(term, flow, lang, s.data_dir, size())
+    except KeyboardInterrupt:
+        term.line()
+        return 0
+
+
+def _pick_trackers(term, flow, lang: str) -> None:
+    term.heading(t(lang, "trackers_title"))
     term.note(t(lang, "trackers_help"))
-    if s.tailscale_key:
-        for line in t(lang, "remote_done_steps").split("|"):
-            term.note(line)
-    term.note(t(lang, "cli_panel", url=f"http://{host}:7575"))
-    term.line()
-    return 0
+    term.note(t(lang, "trackers_rights"))
+    try:
+        catalogue = flow.tracker_catalog()
+    except Exception:
+        term.note(t(lang, "trackers_error"), "error")
+        return
+    while True:
+        term.line()
+        query = term.text(t(lang, "trackers_prompt"), hint=t(lang, "trackers_prompt_hint")).strip().lower()
+        if not query:
+            return
+        found = [x for x in catalogue if query in x["name"].lower() or query in x["description"].lower()]
+        if not found:
+            term.note(t(lang, "trackers_none"))
+            continue
+        options = [(x["id"], x["name"] + (f"  ✓ {t(lang, 'tracker_added')}" if x["added"] else ""), None,
+                    x["language"]) for x in found[:10]]
+        options.append(("", t(lang, "trackers_back"), None, ""))
+        if len(found) > 10:
+            term.note(t(lang, "trackers_more", n=len(found) - 10))
+        picked = term.select(t(lang, "trackers_title"), options, hint=t(lang, "cli_select_hint"))
+        tracker = next((x for x in found if x["id"] == picked), None)
+        if tracker is None or tracker["added"]:
+            continue
+        try:
+            flow.add_tracker(tracker["id"])
+        except Exception:
+            term.note(t(lang, "trackers_error"), "error")
+            continue
+        tracker["added"] = True
+        term.note(t(lang, "tracker_added_named", name=tracker["name"]), "ok")
 
 
 _APP_SWATCH = {"jellyfin": "plum", "seerr": "navy", "radarr": "gold", "sonarr": "teal", "qbittorrent": "green",

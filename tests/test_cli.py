@@ -167,3 +167,50 @@ class SummaryAlignmentTest(unittest.TestCase):
         rows = [tui._ANSI.sub("", line) for line in out.getvalue().splitlines() if "http://localhost:" in line
                 and "■" in tui._ANSI.sub("", line)]
         self.assertEqual(len({row.index("http://") for row in rows}), 1, rows)
+
+
+def installed_flow():
+    from installer.settings import Settings
+    flow = FakeFlow()
+    flow.settings = Settings(data_dir="/home/zoe/Plaid", username="zoe", password="longenough", vpn_provider=None,
+                             home="/home/zoe", platform="linux", lang="fr")
+    flow.added, flow.removed = [], None
+    flow.tracker_catalog = lambda: [
+        {"id": "alpha", "name": "Alpha", "language": "en-US", "description": "a", "added": False},
+        {"id": "beta", "name": "Beta", "language": "fr-FR", "description": "b", "added": True}]
+    flow.add_tracker = flow.added.append
+    flow.uninstall_status = lambda: ("done", "")
+    flow.media_size = lambda s: 0
+    return flow
+
+
+class PanelCliTest(TuiCliTest):
+    # Menu order: apps, trackers, remote, remove, quit. Up from the top wraps to "quit".
+    def test_apps_then_quit(self):
+        flow = installed_flow()
+        t, out = self.term("\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, dict(ENV, HOST_ADDR="192.168.1.20"), flow.settings), 0)
+        self.assertIn("http://192.168.1.20:8096", out.getvalue())
+
+    def test_add_a_tracker(self):
+        flow = installed_flow()
+        # trackers · search "al" · pick the first match · empty search goes back · quit
+        t, out = self.term("\x1b[B\r", "al\r", "\r", "\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertEqual(flow.added, ["alpha"])
+        self.assertIn("Alpha", out.getvalue())
+
+    def test_remove_from_the_menu(self):
+        flow = installed_flow()
+        # remove · confirm (left = yes) · keep the media folder (Enter = no)
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[D\r", "\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertIs(flow.removed, False)
+
+    def test_failed_install_offers_removal_only(self):
+        flow = installed_flow()
+        flow.complete = False
+        t, out = self.term("\x1b[D\r", "\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings, complete=False), 0)
+        self.assertIs(flow.removed, False)
+        self.assertIn("L’installation s’est arrêtée", out.getvalue())

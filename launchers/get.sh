@@ -80,7 +80,15 @@ CLI=plaid-cli
 $DOCKER rm -f "$CLI" >/dev/null 2>&1 || true
 case "$MODE" in
   --cli)
-    if run --rm -it --name "$CLI" "$IMAGE" --cli </dev/tty; then start_panel; else leave_no_trace; exit 1; fi ;;
+    # Installs, or on an installed machine opens the terminal panel (apps, trackers, removal).
+    status=0
+    run --rm -it --name "$CLI" "$IMAGE" --cli </dev/tty || status=$?
+    if [ -n "$($DOCKER ps -aq --filter label=com.docker.compose.project=arrstack)" ]; then
+      start_panel >/dev/null  # keep the web assistant up for other computers on the network
+    else
+      leave_no_trace
+    fi
+    exit "$status" ;;
   --uninstall)
     run --rm -it --name "$CLI" "$IMAGE" --uninstall </dev/tty || true
     leave_no_trace ;;
