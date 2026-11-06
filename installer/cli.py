@@ -108,6 +108,21 @@ def secret_input(prompt: str) -> str:
 
 
 # ---------------------------------------------------------------- interactive terminal (TTY)
+# Each step is one page on a screen of its own (Term.fullscreen): questions leave nothing in the terminal's
+# history. What matters afterwards (the links, an error, "nothing was changed") is printed once it closes.
+
+Notes = list  # [(text, kind)] printed on the normal screen once the full-screen part is over
+
+
+def _print_notes(term, notes: Notes) -> None:
+    term.line()
+    for text, kind in notes:
+        if kind == "detail":
+            term.line("    " + term.style(text, dim=True))
+        else:
+            term.note(text, kind)
+    term.line()
+
 
 def _steps_labels(lang: str, with_vpn: bool) -> list[tuple[str, str]]:
     keys = ["step_prepare", "step_folders", "step_download", "step_start"] + (["step_vpn"] if with_vpn else []) + \
@@ -115,110 +130,124 @@ def _steps_labels(lang: str, with_vpn: bool) -> list[tuple[str, str]]:
     return [(k, t(lang, k)) for k in keys]
 
 
+def _ask(term, flow, env: dict, lang: str):
+    """The questions, one page each. Returns (settings, notes); settings is None when nothing will be installed."""
+    from installer.settings import is_absolute, is_dangerous_path
+    from installer.web import PROVIDER_COLORS
+
+    remote = env.get("HOST_PLATFORM", "linux") in REMOTE_PLATFORMS
+    total = 4 if remote else 3
+    home = env.get("HOST_HOME", "")
+    recap: list[tuple[str, str]] = []
+    data = {"lang": lang}
+
+    term.page(t(lang, "field_folder"), t(lang, "field_folder_help"), step=(1, total), intro=t(lang, "subtitle"))
+    data["data_dir"] = term.text(
+        t(lang, "field_folder"), default=default_data_dir(env),
+        validate=lambda v: t(lang, "err_path_absolute") if not is_absolute(v)
+        else t(lang, "err_dangerous_path") if is_dangerous_path(v, home) else None)
+    recap.append((t(lang, "field_folder"), data["data_dir"]))
+
+    term.page(f"{t(lang, 'field_username')} · {t(lang, 'field_password')}", t(lang, "field_account_help"),
+              step=(2, total), recap=recap)
+    data["username"] = term.text(t(lang, "field_username"), default="admin",
+                                 validate=lambda v: None if v.strip() else t(lang, "err_username"))
+    data["password"] = term.text(t(lang, "field_password"), secret=True,
+                                 validate=lambda v: None if len(v) >= 8 else t(lang, "err_password_short"))
+    term.text(t(lang, "field_password2"), secret=True,
+              validate=lambda v: None if v == data["password"] else t(lang, "err_passwords_differ"))
+    recap.append((t(lang, "field_username"), data["username"]))
+
+    term.page(t(lang, "field_vpn"), t(lang, "field_vpn_help"), step=(3, total), recap=recap)
+    options = [(pid, p.label, _swatch(PROVIDER_COLORS.get(pid)), t(lang, "cli_vpn_pf" if p.port_forwarding
+                                                                       else "cli_vpn_nopf"))
+               for pid, p in PROVIDERS.items()] + [("", t(lang, "vpn_none"), "grey", t(lang, "cli_vpn_none"))]
+    provider = term.select(t(lang, "field_vpn"), options, default="protonvpn", hint=t(lang, "cli_select_hint"))
+    data["vpn_provider"] = provider or None
+    data["vpn_fields"] = {}
+    if provider:
+        term.note(t(lang, "vpn_where"))
+        for f in PROVIDERS[provider].fields:
+            data["vpn_fields"][f] = term.text(t(lang, "vpnf_" + f.lower()), secret="KEY" in f or "PASSWORD" in f,
+                                              validate=lambda v: None if v.strip() else t(lang, "err_vpn_fields"))
+    recap.append((t(lang, "field_vpn"), PROVIDERS[provider].label if provider else t(lang, "vpn_none")))
+
+    if remote:
+        term.page(t(lang, "field_remote"), t(lang, "remote_help"), step=(4, total), recap=recap)
+        for n, line in enumerate(t(lang, "remote_steps").split("|"), 1):
+            term.note(f"{n}. {line}")
+        term.line()
+        data["tailscale_key"] = term.text(
+            t(lang, "field_tailscale_key"), secret=True, hint=t(lang, "cli_skip"),
+            validate=lambda v: None if not v or v.strip().startswith("tskey-") else t(lang, "err_tailscale_key"))
+        recap.append((t(lang, "field_remote"), "Tailscale" if data["tailscale_key"] else "—"))
+
+    data["timezone"] = env.get("TZ", "UTC")
+    s = settings_from(data, env)
+    term.page(t(lang, "confirm_title"), recap=recap)
+    term.note(t(lang, "cli_tz", tz=data["timezone"]))
+    found = validate(s) or flow.preflight(s)
+    notes = [(t(lang, key, path=s.data_dir), "error" if key.startswith("err_") else "warn") for key in found]
+    for text, kind in notes:
+        term.note(text, kind)
+    term.line()
+    if any(k.startswith("err_") for k in found):
+        return None, notes
+    question = t(lang, "cli_continue") if found else t(lang, "cli_install_start")
+    if not term.confirm(question, t(lang, "cli_yes_word"), t(lang, "cli_no_word"), default=not found):
+        return None, [(t(lang, "cli_cancelled"), "info")]
+    return s, []
+
+
 def run_install_tui(term, flow, env: dict, lang: str) -> int:
     """Same questions as the web assistant, with arrow-key menus, masked secrets and live progress."""
     import queue
     import threading
 
-    from installer.settings import is_absolute, is_dangerous_path
     from installer.tui import Steps
-    from installer.web import DAILY_APPS, PROVIDER_COLORS
 
-    remote = env.get("HOST_PLATFORM", "linux") in REMOTE_PLATFORMS
-    total = 4 if remote else 3
-    home = env.get("HOST_HOME", "")
-    term.banner("Plaid", t(lang, "subtitle"))
-    try:
-        term.step(1, total, t(lang, "field_folder"), t(lang, "field_folder_help"))
-        data = {"lang": lang}
-        data["data_dir"] = term.text(
-            t(lang, "field_folder"), default=default_data_dir(env),
-            validate=lambda v: t(lang, "err_path_absolute") if not is_absolute(v)
-            else t(lang, "err_dangerous_path") if is_dangerous_path(v, home) else None)
-
-        term.step(2, total, f"{t(lang, 'field_username')} · {t(lang, 'field_password')}", t(lang, "field_account_help"))
-        data["username"] = term.text(t(lang, "field_username"), default="admin",
-                                     validate=lambda v: None if v.strip() else t(lang, "err_username"))
-        data["password"] = term.text(t(lang, "field_password"), secret=True,
-                                     validate=lambda v: None if len(v) >= 8 else t(lang, "err_password_short"))
-        term.text(t(lang, "field_password2"), secret=True,
-                  validate=lambda v: None if v == data["password"] else t(lang, "err_passwords_differ"))
-
-        term.step(3, total, t(lang, "field_vpn"), t(lang, "field_vpn_help"))
-        options = [(pid, p.label, "", t(lang, "cli_vpn_pf" if p.port_forwarding else "cli_vpn_nopf"))
-                   for pid, p in PROVIDERS.items()] + [("", t(lang, "vpn_none"), "", t(lang, "cli_vpn_none"))]
-        options = [(o[0], o[1], _swatch(PROVIDER_COLORS.get(o[0])), o[3]) for o in options]
-        provider = term.select(t(lang, "field_vpn"), options, default="protonvpn", hint=t(lang, "cli_select_hint"))
-        data["vpn_provider"] = provider or None
-        data["vpn_fields"] = {}
-        if provider:
-            term.note(t(lang, "vpn_where"))
-            for f in PROVIDERS[provider].fields:
-                data["vpn_fields"][f] = term.text(t(lang, "vpnf_" + f.lower()), secret="KEY" in f or "PASSWORD" in f,
-                                                  validate=lambda v: None if v.strip() else t(lang, "err_vpn_fields"))
-
-        if remote:
-            term.step(4, total, t(lang, "field_remote"), t(lang, "remote_help"))
-            for n, line in enumerate(t(lang, "remote_steps").split("|"), 1):
-                term.note(f"{n}. {line}")
-            data["tailscale_key"] = term.text(
-                t(lang, "field_tailscale_key"), secret=True, hint=t(lang, "cli_skip"),
-                validate=lambda v: None if not v or v.strip().startswith("tskey-") else t(lang, "err_tailscale_key"))
-
-        data["timezone"] = env.get("TZ", "UTC")
-        term.line()
-        term.note(t(lang, "cli_tz", tz=data["timezone"]))
-        s = settings_from(data, env)
-        found = validate(s) or flow.preflight(s)
-        for key in found:
-            term.note(t(lang, key, path=s.data_dir), "error" if key.startswith("err_") else "warn")
-        if any(k.startswith("err_") for k in found):
-            return 1
-        question = t(lang, "cli_continue") if found else t(lang, "cli_install_start")
-        if not term.confirm(question, t(lang, "cli_yes_word"), t(lang, "cli_no_word"), default=not found):
-            term.note(t(lang, "cli_cancelled"))
-            return 1
-    except KeyboardInterrupt:
-        term.line()
-        term.note(t(lang, "cli_cancelled"))
-        return 1
-
-    term.heading(t(lang, "progress_title"))
-    term.note(t(lang, "progress_help"))
-    steps = Steps(term, _steps_labels(lang, bool(s.vpn_provider)))
-    events: queue.Queue = queue.Queue()
-    cancel = threading.Event()
-    worker = threading.Thread(target=flow.install, args=(s, events.put), kwargs={"cancel": cancel}, daemon=True)
-    worker.start()
-    while True:
+    done, notes = False, [(t(lang, "cli_cancelled"), "info")]
+    with term.fullscreen():
         try:
-            p = events.get(timeout=0.12)
-        except queue.Empty:
-            steps.render()
-            continue
-        except KeyboardInterrupt:  # Ctrl-C mid-install: leave the machine as it was
-            steps.failed = True  # the interrupted step shows ✗, not a frozen spinner
-            steps.render()
-            term._settle()
-            term.line()
-            return undo_install(term, flow, lang, cancel, worker)
-        if p.step.startswith("step_app:"):
-            steps.subs.append(t(lang, p.step))
-        else:
-            steps.advance(p.step)
-        if p.error:
-            steps.failed = True
-            steps.render()
-            term._settle()
-            term.note(t(lang, p.error), "error")
-            if p.detail:
-                term.line("    " + term.style(p.detail, dim=True))
-            return 1
-        if p.done:
-            steps.finish()
-            break
-        steps.render()
-
+            s, notes = _ask(term, flow, env, lang)
+        except KeyboardInterrupt:
+            s = None
+        if s is not None:
+            term.page(t(lang, "progress_title"), t(lang, "progress_help"))
+            steps = Steps(term, _steps_labels(lang, bool(s.vpn_provider)))
+            events: queue.Queue = queue.Queue()
+            cancel = threading.Event()
+            worker = threading.Thread(target=flow.install, args=(s, events.put), kwargs={"cancel": cancel},
+                                      daemon=True)
+            worker.start()
+            while True:
+                try:
+                    p = events.get(timeout=0.12)
+                except queue.Empty:
+                    steps.render()
+                    continue
+                except KeyboardInterrupt:  # Ctrl-C mid-install: leave the machine as it was
+                    steps.failed = True  # the interrupted step shows ✗, not a frozen spinner
+                    steps.render()
+                    term._settle()
+                    notes = _undo_steps(term, flow, lang, cancel, worker)
+                    break
+                if p.step.startswith("step_app:"):
+                    steps.subs.append(t(lang, p.step))
+                else:
+                    steps.advance(p.step)
+                if p.error:
+                    notes = [(t(lang, "progress_failed"), "error"), (t(lang, p.error), "info")] + \
+                        ([(p.detail, "detail")] if p.detail else []) + [(t(lang, "cli_manage"), "info")]
+                    break
+                if p.done:
+                    steps.finish()
+                    done = True
+                    break
+                steps.render()
+    if not done:
+        _print_notes(term, notes)
+        return 1
     host = env.get("HOST_ADDR", "localhost")
     term.heading(t(lang, "done_title"))
     term.note(t(lang, "done_login", username=s.username), "ok")
@@ -253,48 +282,53 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     from installer.web import human_size
     lang, host = s.lang, env.get("HOST_ADDR", "localhost")
     size = lambda: human_size(flow.media_size(s), lang)
-    if not complete:  # a failed install: removal is the only thing to do
-        term.banner("Plaid", t(lang, "subtitle"))
-        term.line()
-        term.note(t(lang, "progress_failed"), "error")
-        term.note(t(lang, "err_unexpected"))
-        return run_uninstall_tui(term, flow, lang, s.data_dir, size())
-    term.banner("Plaid", t(lang, "subtitle"))
+    code, notes = 0, []
     actions = [("apps", t(lang, "menu_apps")), ("trackers", t(lang, "menu_trackers")),
                ("remote", t(lang, "menu_remote")), ("remove", t(lang, "menu_remove")), ("quit", t(lang, "menu_quit"))]
-    try:
-        while True:
-            term.line()
-            choice = term.select(t(lang, "menu_title"), actions, hint=t(lang, "cli_select_hint"))
-            if choice == "quit":
-                return 0
-            if choice == "apps":
-                print_apps(term, lang, host)
-                term.line()
-                term.note(t(lang, "apps_open_anywhere"))
-                term.note(t(lang, "done_login", username=s.username))
-            elif choice == "trackers":
-                _pick_trackers(term, flow, lang)
-            elif choice == "remote":
-                key = "remote_done_steps" if s.tailscale_key else "remote_desktop_steps"
-                term.heading(t(lang, "remote_done_title"))
-                for n, line in enumerate(t(lang, key).split("|"), 1):
-                    term.note(f"{n}. {line}")
-            elif choice == "remove":
-                return run_uninstall_tui(term, flow, lang, s.data_dir, size())
-    except KeyboardInterrupt:
-        term.line()
-        return 0
+    with term.fullscreen():
+        try:
+            if not complete:  # a failed install: removal is the only thing to do
+                term.page(t(lang, "progress_failed"), t(lang, "err_unexpected"))
+                code, notes = _remove_steps(term, flow, lang, s.data_dir, size())
+            while complete:
+                term.page(t(lang, "panel_title"), intro=t(lang, "subtitle"))
+                choice = term.select(t(lang, "menu_title"), actions, hint=t(lang, "cli_select_hint"))
+                if choice == "quit":
+                    break
+                if choice == "apps":
+                    term.page(t(lang, "menu_apps"), t(lang, "apps_open_anywhere"))
+                    print_apps(term, lang, host)
+                    term.line()
+                    term.note(t(lang, "done_login", username=s.username))
+                    term.pause(t(lang, "cli_back"))
+                elif choice == "trackers":
+                    term.page(t(lang, "trackers_title"), t(lang, "trackers_help"))
+                    _pick_trackers(term, flow, lang)
+                elif choice == "remote":
+                    key = "remote_done_steps" if s.tailscale_key else "remote_desktop_steps"
+                    term.page(t(lang, "remote_done_title"), t(lang, "nav_remote_desc"))
+                    for n, line in enumerate(t(lang, key).split("|"), 1):
+                        term.note(f"{n}. {line}")
+                    term.pause(t(lang, "cli_back"))
+                elif choice == "remove":
+                    term.page(t(lang, "uninstall_title"), t(lang, "uninstall_text"))
+                    code, notes = _remove_steps(term, flow, lang, s.data_dir, size())
+                    if code == 0:
+                        break
+        except KeyboardInterrupt:
+            pass
+    if notes:
+        _print_notes(term, notes)
+    return code
 
 
 def _pick_trackers(term, flow, lang: str) -> None:
-    term.heading(t(lang, "trackers_title"))
-    term.note(t(lang, "trackers_help"))
     term.note(t(lang, "trackers_rights"))
     try:
         catalogue = flow.tracker_catalog()
     except Exception:
         term.note(t(lang, "trackers_error"), "error")
+        term.pause(t(lang, "cli_back"))
         return
     while True:
         term.line()
@@ -333,48 +367,53 @@ def _swatch(hex_color: str | None) -> str:
             "#22305e": "navy"}.get(hex_color or "", "grey")
 
 
-def run_uninstall_tui(term, flow, lang: str, path: str = "", size: str = "") -> int:
+def _wait_removal(term, flow, lang: str, steps, done_text: str) -> tuple[int, Notes]:
     import time
-
-    from installer.tui import Steps
-    term.banner("Plaid", t(lang, "uninstall_title"))
-    term.line()
-    term.note(t(lang, "uninstall_text"))
-    yes, no = t(lang, "cli_yes_word"), t(lang, "cli_no_word")
-    try:
-        if not term.confirm(t(lang, "uninstall_confirm"), yes, no):
-            term.note(t(lang, "cli_cancelled"))
-            return 1
-        remove_media = bool(path) and term.confirm(t(lang, "uninstall_media", path=path, size=size), yes, no)
-    except KeyboardInterrupt:
-        term.note(t(lang, "cli_cancelled"))
-        return 1
-    flow.uninstall(remove_media, lambda p: None)
-    steps = Steps(term, [("rm", t(lang, "cli_uninstall_wait"))])
     while True:
         state, detail = flow.uninstall_status()
         if state == "failed":
             steps.failed = True
             steps.render()
             term._settle()
-            term.note(t(lang, "err_uninstall_failed"), "error")
-            term.line("    " + term.style(detail, dim=True))
-            return 1
+            return 1, [(t(lang, "err_uninstall_failed"), "error"), (detail, "detail")]
         if state in ("done", "idle"):
             steps.finish()
-            term.note(t(lang, "uninstall_done"), "ok")
-            return 0
+            return 0, [(done_text, "ok")]
         steps.render()
         time.sleep(0.12)
 
 
-def undo_install(term, flow, lang: str, cancel, worker) -> int:
-    """Stops the install at its next step, then removes everything it created (the media folder only
-    if the install made it). Returns 1: the install did not happen."""
-    import time
+def _remove_steps(term, flow, lang: str, path: str, size: str) -> tuple[int, Notes]:
+    """Confirmation, then removal with live progress, on the current page."""
+    from installer.tui import Steps
+    yes, no = t(lang, "cli_yes_word"), t(lang, "cli_no_word")
+    if not term.confirm(t(lang, "uninstall_confirm"), yes, no):
+        return 1, [(t(lang, "cli_cancelled"), "info")]
+    remove_media = bool(path) and term.confirm(t(lang, "uninstall_media", path=path, size=size), yes, no)
+    term.line()
+    flow.uninstall(remove_media, lambda p: None)
+    return _wait_removal(term, flow, lang, Steps(term, [("rm", t(lang, "cli_uninstall_wait"))]),
+                         t(lang, "uninstall_done"))
 
+
+def run_uninstall_tui(term, flow, lang: str, path: str = "", size: str = "") -> int:
+    code, notes = 1, [(t(lang, "cli_cancelled"), "info")]
+    with term.fullscreen():
+        try:
+            term.page(t(lang, "uninstall_title"), t(lang, "uninstall_text"))
+            code, notes = _remove_steps(term, flow, lang, path, size)
+        except KeyboardInterrupt:
+            pass
+    _print_notes(term, notes)
+    return code
+
+
+def _undo_steps(term, flow, lang: str, cancel, worker) -> Notes:
+    """Stops the install at its next step, then removes everything it created (the media folder only
+    if the install made it)."""
     from installer.tui import Steps
     cancel.set()
+    term.line()
     term.note(t(lang, "cli_rollback"), "warn")
     steps = Steps(term, [("undo", t(lang, "cli_uninstall_wait"))])
     while worker.is_alive():  # the current step ends (Ctrl-C also stopped its docker command)
@@ -386,18 +425,10 @@ def undo_install(term, flow, lang: str, cancel, worker) -> int:
             break
         except KeyboardInterrupt:
             continue  # a second Ctrl-C must not leave half an install behind
-    while True:
-        state, detail = flow.uninstall_status()
-        if state == "failed":
-            steps.failed = True
-            steps.render()
-            term._settle()
-            term.note(t(lang, "err_uninstall_failed"), "error")
-            term.line("    " + term.style(detail, dim=True))
-            return 1
-        if state in ("done", "idle"):
-            steps.finish()
-            term.note(t(lang, "cli_rollback_done"), "ok")
-            return 1
-        steps.render()
-        time.sleep(0.12)
+    return _wait_removal(term, flow, lang, steps, t(lang, "cli_rollback_done"))[1]
+
+
+def undo_install(term, flow, lang: str, cancel, worker) -> int:
+    """Rollback outside a full-screen page. Returns 1: the install did not happen."""
+    _print_notes(term, _undo_steps(term, flow, lang, cancel, worker))
+    return 1

@@ -2,6 +2,7 @@
 inline validation and live progress. Standard library only; falls back to plain text without a colour TTY."""
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -140,6 +141,52 @@ class Term:
         self.line("  " + self.style(title, bold=True))
         for chunk in self.wrap(subtitle):
             self.line("  " + self.style(chunk, dim=True))
+
+    # ------------------------------------------------------------------ full-screen pages
+    @contextlib.contextmanager
+    def fullscreen(self):
+        """A screen of its own, as less or htop do: questions leave no trace in the terminal's history,
+        and whatever is printed after the block stays."""
+        if self.color:
+            self.write("\x1b[?1049h\x1b[H")
+        try:
+            yield
+        finally:
+            if self.color:
+                self.write("\x1b[?1049l")
+            self._drawn = 0
+
+    def page(self, title: str, help: str = "", step: tuple[int, int] | None = None,
+             recap: list[tuple[str, str]] | None = None, intro: str = "") -> None:
+        """Clears the screen and draws one step: header, progress bar, what was answered, the question."""
+        if self.color:
+            self.write("\x1b[H\x1b[2J")
+        self._drawn = 0
+        self.line()
+        head = self.style("Plaid", bold=True)
+        if step:
+            head += self.style(f"  ·  {step[0]}/{step[1]}", dim=True)
+        self.line("  " + head)
+        if step:
+            n, total = step
+            self.line("  " + "".join(self.style("━━━━━ ", fg="green") if i < n - 1 else
+                                     self.style("━━━━━ ", fg="red") if i == n - 1 else
+                                     self.style("╍╍╍╍╍ ", dim=True) for i in range(total)))
+        for chunk in (self.wrap(intro) if intro else []):
+            self.line("  " + self.style(chunk, dim=True))
+        for label, value in recap or []:
+            self.line("  " + self.style("✓", fg="green") + " " + self.style(f"{label} : ", dim=True) + value)
+        self.line()
+        self.line("  " + self.style(title, bold=True))
+        for chunk in (self.wrap(help) if help else []):
+            self.line("  " + self.style(chunk, dim=True))
+        self.line()
+
+    def pause(self, text: str) -> None:
+        self.line()
+        self.line("  " + self.style(text, dim=True))
+        if self.read_key() in ("ctrl-c", "ctrl-d"):
+            raise KeyboardInterrupt
 
     def step(self, n: int, total: int, title: str, help: str = "") -> None:
         bar = "".join(self.style("━━━━━ ", fg="green") if i < n - 1 else

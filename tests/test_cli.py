@@ -188,7 +188,7 @@ class PanelCliTest(TuiCliTest):
     # Menu order: apps, trackers, remote, remove, quit. Up from the top wraps to "quit".
     def test_apps_then_quit(self):
         flow = installed_flow()
-        t, out = self.term("\r", "\x1b[A\r")
+        t, out = self.term("\r", "\r", "\x1b[A\r")  # apps · Enter to come back · quit
         self.assertEqual(cli.run_panel_tui(t, flow, dict(ENV, HOST_ADDR="192.168.1.20"), flow.settings), 0)
         self.assertIn("http://192.168.1.20:8096", out.getvalue())
 

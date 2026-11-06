@@ -104,3 +104,38 @@ class RedrawTest(unittest.TestCase):
     def test_pad_ignores_colour(self):
         t = tui.Term(read_key=lambda: "", out=io.StringIO(), color=True)
         self.assertEqual(tui.visible_len(t.pad(t.style("Seerr", bold=True), 12)), 12)
+
+
+class PageTest(unittest.TestCase):
+    def test_each_page_starts_on_a_clear_screen(self):
+        t, out = term(color=True)
+        t.page("Votre compte", "Un seul compte.", step=(2, 3), recap=[("Dossier", "/srv/plaid")])
+        text = out.getvalue()
+        self.assertIn("\x1b[H\x1b[2J", text)
+        self.assertIn("2/3", text)
+        self.assertIn("/srv/plaid", text)
+
+    def test_fullscreen_restores_the_terminal(self):
+        t, out = term(color=True)
+        with t.fullscreen():
+            t.line("question")
+        self.assertTrue(out.getvalue().startswith("\x1b[?1049h"))
+        self.assertTrue(out.getvalue().endswith("\x1b[?1049l"))
+
+    def test_fullscreen_restores_even_on_ctrl_c(self):
+        t, out = term(color=True)
+        with self.assertRaises(KeyboardInterrupt):
+            with t.fullscreen():
+                raise KeyboardInterrupt
+        self.assertTrue(out.getvalue().endswith("\x1b[?1049l"))
+
+    def test_no_screen_codes_without_colour(self):
+        t, out = term()
+        with t.fullscreen():
+            t.page("Titre", step=(1, 3))
+        self.assertNotIn("\x1b[", out.getvalue())
+
+    def test_pause_waits_for_a_key(self):
+        t, _ = term(ENTER, "x")
+        t.pause("Entrée pour revenir")
+        self.assertEqual(t.read_key(), "x")
