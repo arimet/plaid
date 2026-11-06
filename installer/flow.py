@@ -198,13 +198,16 @@ def uninstall(remove_media: bool, report: Report, dk=docker, state_dir: str = ST
 
 
 def uninstall_status(dk=docker) -> tuple[str, str]:
-    """("idle" | "running" | "failed", detail). On success the worker deletes this container, so a worker
-    that stopped with an error while we still answer means the removal failed: show its logs."""
+    """("idle" | "running" | "done" | "failed", detail). A worker that stopped with an error while we still
+    answer means the removal failed: show its logs. One that stopped cleanly is done; the reaper deletes it
+    once no container runs the installer image (the terminal mode is one of those, so it must not wait)."""
     exists, running, code = dk.container_state(WORKER_NAME)
     if not exists:
         return "idle", ""
-    if running or code == 0:
+    if running:
         return "running", ""
+    if code == 0:
+        return "done", ""
     detail = dk.logs(WORKER_NAME)
     dk.remove("container", WORKER_NAME)
     return "failed", detail

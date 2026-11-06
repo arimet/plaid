@@ -5,7 +5,7 @@ import argparse
 import os
 import sys
 
-from installer import cli, flow, web
+from installer import cli, flow, tui, web
 
 
 def main(argv=None) -> int:
@@ -23,15 +23,23 @@ def main(argv=None) -> int:
     if args.uninstall_worker:
         flow.uninstall_worker(env["ARR_STATE"], args.remove_media)
         return 0
+    # A real terminal gets menus, colours and live progress; a pipe or a log gets plain questions.
+    interactive = sys.stdin.isatty() and sys.stdout.isatty()
     if args.cli:
         if flow.load_settings() is not None:
             print(web.t(args.lang, "err_stack_exists"))
             return 1
+        if interactive:
+            return cli.run_install_tui(tui.Term(), flow, env, args.lang)
         return cli.run_install(input, print, flow, env, args.lang, cli.secret_input)
     if args.uninstall:
         s = flow.load_settings()
-        size = web.human_size(flow.media_size(s), args.lang) if s else ""
-        return cli.run_uninstall(input, print, flow, args.lang, s.data_dir if s else "", size)
+        lang = s.lang if s else args.lang  # the language chosen at install, not the terminal's
+        size = web.human_size(flow.media_size(s), lang) if s else ""
+        path = s.data_dir if s else ""
+        if interactive:
+            return cli.run_uninstall_tui(tui.Term(), flow, lang, path, size)
+        return cli.run_uninstall(input, print, flow, lang, path, size)
     flow.reattach()
     web.serve(args.port)
     return 0

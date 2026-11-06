@@ -77,3 +77,34 @@ class TailscaleCliTest(unittest.TestCase):
                                [].append, flow, ENV, "en")
         self.assertEqual(code, 0)
         self.assertEqual(flow.got.tailscale_key, "tskey-auth-x")
+
+
+class TuiCliTest(unittest.TestCase):
+    def term(self, *seq):
+        import io
+        from installer import tui
+        from tests.test_tui import keys
+        out = io.StringIO()
+        return tui.Term(read_key=keys(*seq), out=out, color=False), out
+
+    def test_install_with_arrow_keys(self):
+        flow = FakeFlow(found=["warn_no_vpn"])
+        # folder: default · user: zoe · passwords · VPN: up wraps to "No VPN" · Tailscale: skip · go: left = yes
+        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\x1b[D\r")
+        self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 0)
+        self.assertEqual((flow.got.username, flow.got.vpn_provider, flow.got.data_dir), ("zoe", None, "/home/zoe/Plaid"))
+        self.assertIn("http://localhost:8096", out.getvalue())
+
+    def test_wrong_confirmation_asks_again(self):
+        flow = FakeFlow()
+        # no warning: "Install now?" already sits on Yes, so Enter starts it
+        t, out = self.term("\r", "zoe\r", "longenough\r", "oops\r", "longenough\r", "\x1b[A\r", "\r", "\r")
+        self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 0)
+        self.assertIn("Les mots de passe diffèrent.", out.getvalue())
+
+    def test_declining_changes_nothing(self):
+        flow = FakeFlow(found=["warn_no_vpn"])
+        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r")
+        self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 1)
+        self.assertIsNone(flow.got)
+        self.assertIn("Rien n’a été modifié", out.getvalue())

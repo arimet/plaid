@@ -9,9 +9,15 @@ IMAGE="${PLAID_IMAGE:-ghcr.io/arimet/plaid:latest}"
 MODE="${1:-}"
 NAME=arr-installer
 
-if [ -f /etc/synoinfo.conf ]; then PLATFORM=synology; else PLATFORM=linux; fi
+if [ -f /etc/synoinfo.conf ]; then PLATFORM=synology
+elif [ "$(uname -s)" = Darwin ]; then PLATFORM=mac
+else PLATFORM=linux; fi
 
 if ! command -v docker >/dev/null 2>&1; then
+  if [ "$PLATFORM" = mac ]; then
+    echo "Docker Desktop is missing: https://github.com/arimet/plaid#install-docker-desktop"
+    exit 1
+  fi
   if [ "$PLATFORM" = synology ]; then
     echo "Docker is missing. In DSM, open Package Center, install Container Manager, then run this command again."
     exit 1

@@ -232,6 +232,9 @@ class ReviewFixesFlowTest(unittest.TestCase):
         dk = FakeDocker()
         dk.state = (True, True, 0)
         self.assertEqual(flow.uninstall_status(dk=dk), ("running", ""))
+        # the worker finished cleanly: the terminal can say so (the reaper deletes it once nothing runs the image)
+        dk.state = (True, False, 0)
+        self.assertEqual(flow.uninstall_status(dk=dk), ("done", ""))
         dk.state = (True, False, 1)
         dk.log_text = "compose down failed"
         self.assertEqual(flow.uninstall_status(dk=dk), ("failed", "compose down failed"))
