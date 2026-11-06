@@ -1,0 +1,4 @@
+*
+!installer
+**/__pycache__
+**/*.pyc

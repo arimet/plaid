@@ -98,7 +98,6 @@ def connect_network(container: str, run: Run = default_run) -> None:
 
 
 SOCKET = "/var/run/docker.sock:/var/run/docker.sock"
-REAPER = "docker:27-cli"
 
 
 def own_image(run: Run = default_run) -> str:
@@ -115,10 +114,14 @@ def remove(kind: str, name: str, run: Run = default_run) -> None:
     installer's own image (and the folder helper) once no container runs it any more."""
     if kind == "image" and name == "self":
         image = own_image(run)
-        # ponytail: also removes alpine:3.20 if the user had it unused; it is re-pulled on demand.
-        script = (f"while docker ps -q --filter ancestor={image} | grep -q .; do sleep 2; done; "
-                  f"docker rmi {image} {HELPER} >/dev/null 2>&1; true")
-        run(["docker", "run", "-d", "--rm", "-v", SOCKET, REAPER, "sh", "-c", script])
+        # A container cannot delete its own image: a reaper on the small helper image waits until nothing
+        # runs the installer any more, then deletes it through the Docker API (the helper has no docker CLI).
+        api = "curl -s --unix-socket /var/run/docker.sock"
+        script = (f"apk add --no-cache curl >/dev/null 2>&1; "
+                  f"while [ \"$({api} -G http://d/containers/json "
+                  f"--data-urlencode 'filters={{\"ancestor\":[\"{image}\"]}}')\" != '[]' ]; do sleep 2; done; "
+                  f"{api} -X DELETE http://d/images/{image} >/dev/null")
+        run(["docker", "run", "-d", "--rm", "-v", SOCKET, HELPER, "sh", "-c", script])
         return
     cmd = {"container": ["rm", "-f"], "volume": ["volume", "rm", "-f"], "image": ["rmi"]}[kind]
     run(["docker", *cmd, name])

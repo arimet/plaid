@@ -89,6 +89,9 @@ class UninstallHelpersTest(unittest.TestCase):
     def test_remove_self_image_waits_for_containers(self):
         run = FakeRun(0, "ghcr.io/x/arr-installer:latest\n")
         docker.remove("image", "self", run=run)
-        script = run.calls[-1][-1]
-        self.assertIn("--filter ancestor=ghcr.io/x/arr-installer:latest", script)
-        self.assertIn("docker rmi ghcr.io/x/arr-installer:latest", script)
+        args = run.calls[-1]
+        self.assertIn(docker.HELPER, args)  # the reaper is the small helper image, not the installer
+        script = args[-1]
+        self.assertIn("containers/json", script)
+        self.assertIn("ancestor", script)
+        self.assertIn("-X DELETE http://d/images/ghcr.io/x/arr-installer:latest", script)
