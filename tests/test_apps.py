@@ -32,3 +32,18 @@ class CallTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DefaultIndexerTest(unittest.TestCase):
+    def test_saved_without_live_search(self):
+        calls = []
+
+        def prowlarr(method, path, body=None):
+            calls.append((method, path))
+            if path == "/indexer":
+                return []
+            if path == "/indexer/schema":
+                return [{"definitionName": "internetarchive", "name": "x", "fields": []}]
+        apps.add_default_indexer(prowlarr)
+        # archive.org can take minutes to answer Prowlarr's save-time test search
+        self.assertEqual(calls[-1], ("POST", "/indexer?forceSave=true"))

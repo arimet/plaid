@@ -241,12 +241,16 @@ def add_default_indexer(prowlarr: Arr) -> None:
         return
     item = next(t for t in prowlarr("GET", "/indexer/schema") if t.get("definitionName") == "internetarchive")
     item.update(name="Internet Archive", enable=True, appProfileId=1)
-    prowlarr("POST", "/indexer", item)
+    # forceSave skips Prowlarr's save-time test search, which archive.org can take minutes to answer.
+    prowlarr("POST", "/indexer?forceSave=true", item)
 
 
 def configure_prowlarr(prowlarr: Arr, s: Settings, radarr: Arr, sonarr: Arr, log: Log) -> None:
     prowlarr.login(s.username, s.password)
-    add_default_indexer(prowlarr)
+    try:
+        add_default_indexer(prowlarr)
+    except (HttpError, OSError, StopIteration):
+        pass  # a convenience: the stack works without it, and the done page explains how to add trackers
     for app, port in ((radarr, 7878), (sonarr, 8989)):
         name = app.name.capitalize()
         prowlarr.add("applications", name, name,
