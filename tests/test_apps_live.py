@@ -62,6 +62,8 @@ class LinksTest(unittest.TestCase):
             "sonarr_notif": [(n["implementation"], n["onDownload"]) for n in s("/notification")],
             "radarr_roots": [f["path"].rstrip("/") for f in r("/rootfolder")],
             "prowlarr_apps": len(get("http://localhost:9696/api/v1/applications", {"X-Api-Key": k["prowlarr"]})),
+            "prowlarr_indexers": [(i["name"], i["enable"])
+                                  for i in get("http://localhost:9696/api/v1/indexer", {"X-Api-Key": k["prowlarr"]})],
             "bazarr": get("http://localhost:6767/api/system/settings", {"X-API-KEY": k["bazarr"]})["general"],
             "seerr_public": get("http://localhost:5055/api/v1/settings/public")["initialized"],
         }
@@ -74,6 +76,7 @@ class LinksTest(unittest.TestCase):
         self.assertEqual(c["sonarr_notif"], [("MediaBrowser", True)])
         self.assertEqual(c["radarr_roots"], ["/data/media/movies"])
         self.assertEqual(c["prowlarr_apps"], 2)
+        self.assertEqual(c["prowlarr_indexers"], [("Internet Archive", True)])
         self.assertTrue(c["bazarr"]["use_radarr"] and c["bazarr"]["use_sonarr"])
         self.assertTrue(c["seerr_public"])
 

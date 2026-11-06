@@ -132,8 +132,14 @@ def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log) -> tuple
     base = f"http://{host}"
     wait_for(base + "/System/Info/Public")
     deadline = time.time() + WAIT
-    while "StartupWizardCompleted" not in (info := call("GET", base + "/System/Info/Public") or {}):
-        if time.time() > deadline:  # still starting: the field appears once the server is ready
+    while True:  # still starting: the connection may drop and the field appears once the server is ready
+        try:
+            info = call("GET", base + "/System/Info/Public") or {}
+            if "StartupWizardCompleted" in info:
+                break
+        except (OSError, HttpError):
+            pass
+        if time.time() > deadline:
             raise TimeoutError("Jellyfin is not ready")
         time.sleep(3)
     client = 'MediaBrowser Client="arr-installer", Device="arr-installer", DeviceId="arr-installer", Version="1.0"'
@@ -225,8 +231,19 @@ def configure_arr(app: Arr, s: Settings, root: str, category_field: str, categor
     log(app.name)
 
 
+def add_default_indexer(prowlarr: Arr) -> None:
+    """Internet Archive: legal (public-domain films), so the stack works on day one. A plain Prowlarr
+    indexer the user can disable or delete."""
+    if any(i["name"] == "Internet Archive" for i in prowlarr("GET", "/indexer")):
+        return
+    item = next(t for t in prowlarr("GET", "/indexer/schema") if t.get("definitionName") == "internetarchive")
+    item.update(name="Internet Archive", enable=True, appProfileId=1)
+    prowlarr("POST", "/indexer", item)
+
+
 def configure_prowlarr(prowlarr: Arr, s: Settings, radarr: Arr, sonarr: Arr, log: Log) -> None:
     prowlarr.login(s.username, s.password)
+    add_default_indexer(prowlarr)
     for app, port in ((radarr, 7878), (sonarr, 8989)):
         name = app.name.capitalize()
         prowlarr.add("applications", name, name,
