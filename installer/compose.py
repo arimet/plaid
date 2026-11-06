@@ -4,7 +4,7 @@ from __future__ import annotations
 from installer.settings import Settings
 from installer.vpn import PROVIDERS, gluetun_env
 
-LABEL = "io.arr-installer"
+LABEL = "io.plaid"
 LABELS = {LABEL: "1"}
 SERVICES = ["jellyfin", "seerr", "radarr", "sonarr", "qbittorrent", "prowlarr", "bazarr"]
 PORTS = {"jellyfin": 8096, "seerr": 5055, "radarr": 7878, "sonarr": 8989, "qbittorrent": 8080,

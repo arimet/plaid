@@ -159,7 +159,7 @@ class FlowTest(unittest.TestCase):
         self.assertIn(("rm", "volume", flow.STATE_VOLUME), dk.calls)
         # the installer was attached to the stack network, so compose could not remove it
         self.assertLess(dk.calls.index(("rm", "container", flow.INSTALLER_NAME)),
-                        dk.calls.index(("rm", "network", "arrstack_default")))
+                        dk.calls.index(("rm", "network", "plaid_default")))
 
     def test_worker_removes_media_when_asked(self):
         self.install(settings(), FakeDocker())
@@ -221,7 +221,7 @@ class ReviewFixesFlowTest(unittest.TestCase):
     def test_port_from_engine_bind_error(self):
         # Docker Engine on Linux, port held by a host program: the old regex reported "port 0".
         err = ("Error response from daemon: driver failed programming external connectivity on endpoint "
-               "arrstack-qbittorrent-1: failed to bind port 0.0.0.0:8080/tcp: Error starting userland proxy: "
+               "plaid-qbittorrent-1: failed to bind port 0.0.0.0:8080/tcp: Error starting userland proxy: "
                "listen tcp4 0.0.0.0:8080: bind: address already in use")
         events = []
         flow.install(settings(vpn_provider=None, vpn_fields={}), events.append, dk=FakeDocker(up_error=err),

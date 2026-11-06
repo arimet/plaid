@@ -17,8 +17,8 @@ from installer.docker import DockerError
 from installer.settings import Settings, validate
 
 STATE_DIR = os.environ.get("ARR_STATE_DIR", "/state")
-STATE_VOLUME = "arr-installer-state"
-INSTALLER_NAME = "arr-installer"
+STATE_VOLUME = "plaid-state"
+INSTALLER_NAME = "plaid"
 WORKER_NAME = docker.WORKER
 STATE_FILES = ("compose.json", "settings.json")
 VPN_WAIT = 180

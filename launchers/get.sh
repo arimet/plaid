@@ -7,7 +7,7 @@ set -eu
 
 IMAGE="${PLAID_IMAGE:-ghcr.io/arimet/plaid:latest}"
 MODE="${1:-}"
-NAME=arr-installer
+NAME=plaid
 
 if [ -f /etc/synoinfo.conf ]; then PLATFORM=synology
 elif [ "$(uname -s)" = Darwin ]; then PLATFORM=mac
@@ -42,9 +42,9 @@ TZ_NAME=$(cat /etc/timezone 2>/dev/null || readlink /etc/localtime 2>/dev/null |
 
 run() {
   # shellcheck disable=SC2086
-  $DOCKER run -v /var/run/docker.sock:/var/run/docker.sock -v arr-installer-state:/state \
+  $DOCKER run -v /var/run/docker.sock:/var/run/docker.sock -v plaid-state:/state \
     -e HOST_HOME="$HOME" -e HOST_PLATFORM="$PLATFORM" -e HOST_ADDR="$ADDR" -e TZ="$TZ_NAME" \
-    -e PUID="$(id -u)" -e PGID="$(id -g)" -e LANG="${LANG:-en}" --label io.arr-installer=1 "$@"
+    -e PUID="$(id -u)" -e PGID="$(id -g)" -e LANG="${LANG:-en}" --label io.plaid=1 "$@"
 }
 
 start_panel() {
@@ -66,9 +66,9 @@ start_panel() {
 # take the state volume and the image away too: the machine is as it was. The terminal mode itself
 # holds the volume while it runs, so this can only happen here, once it has exited.
 leave_no_trace() {
-  if [ -z "$($DOCKER ps -aq --filter label=com.docker.compose.project=arrstack)" ] &&
+  if [ -z "$($DOCKER ps -aq --filter label=com.docker.compose.project=plaid)" ] &&
      ! $DOCKER container inspect "$NAME" >/dev/null 2>&1; then
-    $DOCKER volume rm arr-installer-state >/dev/null 2>&1 || true
+    $DOCKER volume rm plaid-state >/dev/null 2>&1 || true
     $DOCKER rmi "$IMAGE" >/dev/null 2>&1 || true  # still used by the cleanup container: the reaper takes it
   fi
 }
@@ -84,7 +84,7 @@ case "$MODE" in
     # Installs, or on an installed machine opens the terminal panel (apps, trackers, removal).
     status=0
     run --rm -it --name "$CLI" "$IMAGE" --cli </dev/tty || status=$?
-    if [ -n "$($DOCKER ps -aq --filter label=com.docker.compose.project=arrstack)" ]; then
+    if [ -n "$($DOCKER ps -aq --filter label=com.docker.compose.project=plaid)" ]; then
       start_panel >/dev/null  # keep the web assistant up for other computers on the network
     else
       leave_no_trace

@@ -2,7 +2,7 @@
 # Plaid launcher for macOS: double-click it. It needs Docker Desktop and opens the assistant in your browser.
 set -u
 IMAGE="${PLAID_IMAGE:-ghcr.io/arimet/plaid:latest}"
-NAME=arr-installer
+NAME=plaid
 HELP="https://github.com/arimet/plaid#install-docker-desktop"
 
 if [ ! -d /Applications/Docker.app ] && ! command -v docker >/dev/null 2>&1; then
@@ -26,9 +26,9 @@ if docker container inspect "$NAME" >/dev/null 2>&1; then
   docker start "$NAME" >/dev/null
 else
   docker run -d --name "$NAME" --restart unless-stopped -p 7575:7575 \
-    -v /var/run/docker.sock:/var/run/docker.sock -v arr-installer-state:/state \
+    -v /var/run/docker.sock:/var/run/docker.sock -v plaid-state:/state \
     -e HOST_HOME="$HOME" -e HOST_PLATFORM=mac -e HOST_ADDR="$ADDR" -e TZ="$TZ_NAME" \
-    -e PUID="$(id -u)" -e PGID="$(id -g)" --label io.arr-installer=1 "$IMAGE" >/dev/null || {
+    -e PUID="$(id -u)" -e PGID="$(id -g)" --label io.plaid=1 "$IMAGE" >/dev/null || {
       docker rm -f "$NAME" >/dev/null 2>&1
       echo "Plaid could not start: port 7575 is probably used by another program."
       exit 1

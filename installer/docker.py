@@ -11,7 +11,7 @@ from typing import Callable
 
 from installer.settings import is_dangerous_path
 
-PROJECT = "arrstack"
+PROJECT = "plaid"
 HELPER = "alpine:3.20"
 Run = Callable[[list], subprocess.CompletedProcess]
 
@@ -121,7 +121,7 @@ def own_image(run: Run = default_run) -> str:
     return _check(run, ["docker", "inspect", "-f", "{{.Config.Image}}", self_container_id()]).stdout.strip()
 
 
-WORKER = "arr-installer-uninstall"
+WORKER = "plaid-uninstall"
 
 
 def run_detached(image: str, args: list, env: dict, name: str, run: Run = default_run) -> None:

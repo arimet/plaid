@@ -40,7 +40,7 @@ class DockerTest(unittest.TestCase):
     def test_compose_args(self):
         run = FakeRun()
         docker.compose("/state", "up", "-d", run=run)
-        self.assertEqual(run.calls[0], ["docker", "compose", "-p", "arrstack", "-f", "/state/compose.json", "up", "-d"])
+        self.assertEqual(run.calls[0], ["docker", "compose", "-p", "plaid", "-f", "/state/compose.json", "up", "-d"])
 
     def test_error_carries_stderr(self):
         with self.assertRaises(docker.DockerError) as ctx:
@@ -58,7 +58,7 @@ class DockerTest(unittest.TestCase):
     def test_stack_exists_ignores_installer(self):
         run = FakeRun(0, "abc\n")
         self.assertTrue(docker.stack_exists(run=run))
-        self.assertIn("label=com.docker.compose.project=arrstack", run.calls[0])
+        self.assertIn("label=com.docker.compose.project=plaid", run.calls[0])
         self.assertFalse(docker.stack_exists(run=FakeRun(0, "")))
 
     def test_port_busy(self):
@@ -84,24 +84,24 @@ class UninstallHelpersTest(unittest.TestCase):
 
     def test_remove_ignores_missing(self):
         run = FakeRun(1, "", "No such container")
-        docker.remove("container", "arr-installer", run=run)
-        self.assertEqual(run.calls[0], ["docker", "rm", "-f", "arr-installer"])
+        docker.remove("container", "plaid", run=run)
+        self.assertEqual(run.calls[0], ["docker", "rm", "-f", "plaid"])
 
     def test_remove_network(self):
         run = FakeRun()
-        docker.remove("network", "arrstack_default", run=run)
-        self.assertEqual(run.calls[0], ["docker", "network", "rm", "arrstack_default"])
+        docker.remove("network", "plaid_default", run=run)
+        self.assertEqual(run.calls[0], ["docker", "network", "rm", "plaid_default"])
 
     def test_remove_self_image_waits_for_containers(self):
-        run = FakeRun(0, "ghcr.io/x/arr-installer:latest\n")
+        run = FakeRun(0, "ghcr.io/x/plaid:latest\n")
         docker.remove("image", "self", run=run)
         args = run.calls[-1]
         self.assertIn(docker.HELPER, args)  # the reaper is the small helper image, not the installer
         script = args[-1]
         self.assertIn("containers/json", script)
         self.assertIn("ancestor", script)
-        self.assertIn("-X DELETE http://d/images/ghcr.io/x/arr-installer:latest", script)
-        self.assertIn("-X DELETE 'http://d/containers/arr-installer-uninstall?force=true'", script)
+        self.assertIn("-X DELETE http://d/images/ghcr.io/x/plaid:latest", script)
+        self.assertIn("-X DELETE 'http://d/containers/plaid-uninstall?force=true'", script)
         self.assertIn("seq 150", script)  # bounded: offline, curl is missing and the wait would never end
 
 

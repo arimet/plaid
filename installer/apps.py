@@ -145,7 +145,7 @@ def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log) -> tuple
         if time.time() > deadline:
             raise TimeoutError("Jellyfin is not ready")
         time.sleep(3)
-    client = 'MediaBrowser Client="arr-installer", Device="arr-installer", DeviceId="arr-installer", Version="1.0"'
+    client = 'MediaBrowser Client="Plaid", Device="Plaid", DeviceId="plaid", Version="1.0"'
     culture, country, lang = JELLYFIN_LOCALE[s.lang]
     if not info["StartupWizardCompleted"]:
         call("POST", base + "/Startup/Configuration",

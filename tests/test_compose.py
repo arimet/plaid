@@ -51,11 +51,11 @@ class ComposeTest(unittest.TestCase):
     def test_labels_and_volumes(self):
         c = render_compose(make(), "/srv/arr", has_dri=False)
         for name, svc in c["services"].items():
-            self.assertEqual(svc["labels"]["io.arr-installer"], "1", name)
+            self.assertEqual(svc["labels"]["io.plaid"], "1", name)
             self.assertEqual(svc["restart"], "unless-stopped", name)
         for name in SERVICES:
-            self.assertEqual(c["volumes"][f"{name}-config"]["labels"]["io.arr-installer"], "1")
-        self.assertEqual(c["networks"]["default"]["labels"]["io.arr-installer"], "1")
+            self.assertEqual(c["volumes"][f"{name}-config"]["labels"]["io.plaid"], "1")
+        self.assertEqual(c["networks"]["default"]["labels"]["io.plaid"], "1")
 
     def test_data_bind_long_syntax(self):
         c = render_compose(make(), "/srv/my arr", has_dri=False)
@@ -101,7 +101,7 @@ class TailscaleComposeTest(unittest.TestCase):
         self.assertEqual(ts["environment"]["TS_AUTHKEY"], self.KEY)
         self.assertEqual(ts["environment"]["TS_HOSTNAME"], "plaid")
         self.assertIn("tailscale-state:/var/lib/tailscale", ts["volumes"])
-        self.assertEqual(c["volumes"]["tailscale-state"]["labels"]["io.arr-installer"], "1")
+        self.assertEqual(c["volumes"]["tailscale-state"]["labels"]["io.plaid"], "1")
 
     def test_absent_without_key(self):
         c = render_compose(make(), "/d", has_dri=False)
