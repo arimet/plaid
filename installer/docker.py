@@ -95,3 +95,30 @@ def connect_network(container: str, run: Run = default_run) -> None:
     result = run(["docker", "network", "connect", f"{PROJECT}_default", container])
     if result.returncode != 0 and "already exists" not in (result.stderr or ""):
         raise DockerError(result.stderr.strip())
+
+
+SOCKET = "/var/run/docker.sock:/var/run/docker.sock"
+REAPER = "docker:27-cli"
+
+
+def own_image(run: Run = default_run) -> str:
+    return _check(run, ["docker", "inspect", "-f", "{{.Config.Image}}", self_container_id()]).stdout.strip()
+
+
+def run_detached(image: str, args: list, env: dict, run: Run = default_run) -> None:
+    env_args = [a for k, v in env.items() for a in ("-e", f"{k}={v}")]
+    _check(run, ["docker", "run", "-d", "--rm", "-v", SOCKET, *env_args, image, *args])
+
+
+def remove(kind: str, name: str, run: Run = default_run) -> None:
+    """Best effort: a missing container, volume or image is fine. ("image", "self") removes the
+    installer's own image (and the folder helper) once no container runs it any more."""
+    if kind == "image" and name == "self":
+        image = own_image(run)
+        # ponytail: also removes alpine:3.20 if the user had it unused; it is re-pulled on demand.
+        script = (f"while docker ps -q --filter ancestor={image} | grep -q .; do sleep 2; done; "
+                  f"docker rmi {image} {HELPER} >/dev/null 2>&1; true")
+        run(["docker", "run", "-d", "--rm", "-v", SOCKET, REAPER, "sh", "-c", script])
+        return
+    cmd = {"container": ["rm", "-f"], "volume": ["volume", "rm", "-f"], "image": ["rmi"]}[kind]
+    run(["docker", *cmd, name])

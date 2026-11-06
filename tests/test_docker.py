@@ -69,3 +69,26 @@ class DockerTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UninstallHelpersTest(unittest.TestCase):
+    def test_run_detached(self):
+        run = FakeRun()
+        docker.run_detached("img", ["--uninstall-worker"], {"ARR_STATE": "abc"}, run=run)
+        args = run.calls[0]
+        self.assertEqual(args[:4], ["docker", "run", "-d", "--rm"])
+        self.assertIn("ARR_STATE=abc", args)
+        self.assertIn("/var/run/docker.sock:/var/run/docker.sock", args)
+        self.assertEqual(args[-2:], ["img", "--uninstall-worker"])
+
+    def test_remove_ignores_missing(self):
+        run = FakeRun(1, "", "No such container")
+        docker.remove("container", "arr-installer", run=run)
+        self.assertEqual(run.calls[0], ["docker", "rm", "-f", "arr-installer"])
+
+    def test_remove_self_image_waits_for_containers(self):
+        run = FakeRun(0, "ghcr.io/x/arr-installer:latest\n")
+        docker.remove("image", "self", run=run)
+        script = run.calls[-1][-1]
+        self.assertIn("--filter ancestor=ghcr.io/x/arr-installer:latest", script)
+        self.assertIn("docker rmi ghcr.io/x/arr-installer:latest", script)
