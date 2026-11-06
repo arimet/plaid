@@ -6,6 +6,7 @@ import ntpath
 import posixpath
 import socket
 import subprocess
+import uuid
 from typing import Callable
 
 from installer.settings import is_dangerous_path
@@ -19,20 +20,20 @@ class DockerError(Exception):
     pass
 
 
-HELPER_TIMEOUT = 120  # a throwaway container that hangs must not freeze the assistant
+# A throwaway container that hangs must not freeze the assistant. Deleting media has no limit: it can be long.
+PROBE_TIMEOUT = 30  # Docker Desktop can hang on a bind of a just-deleted folder
+HELPER_TIMEOUT = 120
 
 
 def default_run(args: list, timeout: float | None = None) -> subprocess.CompletedProcess:
-    if timeout is None and args[:3] == ["docker", "run", "--rm"]:
-        timeout = HELPER_TIMEOUT
     try:
         return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(args, 124, "", f"{' '.join(args[:3])} timed out after {timeout}s")
 
 
-def _check(run: Run, args: list) -> subprocess.CompletedProcess:
-    result = run(args)
+def _check(run: Run, args: list, timeout: float | None = None) -> subprocess.CompletedProcess:
+    result = run(args, timeout=timeout)
     if result.returncode != 0:
         raise DockerError((result.stderr or result.stdout or "").strip() or f"exit {result.returncode}")
     return result
@@ -48,11 +49,14 @@ def host_path(path: str, platform: str) -> str:
 
 def dir_state(src: str, run: Run = default_run) -> tuple[bool, int]:
     """(empty?, size in bytes) of a host folder. A missing folder counts as empty."""
-    result = run(["docker", "run", "--rm", "--mount", f"type=bind,src={src},dst=/m,readonly", HELPER,
-                  "sh", "-c", 'echo $(ls -A /m | wc -l) $(du -sk /m | cut -f1)'])
+    name = f"plaid-probe-{uuid.uuid4().hex[:8]}"
+    result = run(["docker", "run", "--rm", "--name", name, "--mount", f"type=bind,src={src},dst=/m,readonly",
+                  HELPER, "sh", "-c", 'echo $(ls -A /m | wc -l) $(du -sk /m | cut -f1)'], timeout=PROBE_TIMEOUT)
     if result.returncode != 0:
         if "does not exist" in (result.stderr or ""):
             return True, 0
+        if result.returncode == 124:  # timed out: the probe may sit in "Created" forever
+            run(["docker", "rm", "-f", name])
         raise DockerError(result.stderr.strip())
     count, kib = result.stdout.split()
     return count == "0", int(kib) * 1024
@@ -62,7 +66,7 @@ def ensure_data_dirs(src: str, puid: int, pgid: int, run: Run = default_run) -> 
     dirs = " ".join(f"/m/{d}" for d in ("torrents/movies", "torrents/tv", "media/movies", "media/tv"))
     owned = "/m /m/torrents /m/media " + dirs
     _check(run, ["docker", "run", "--rm", "-v", f"{src}:/m", HELPER, "sh", "-c",
-                 f"mkdir -p {dirs} && chown {puid}:{pgid} {owned}"])
+                 f"mkdir -p {dirs} && chown {puid}:{pgid} {owned}"], timeout=HELPER_TIMEOUT)
 
 
 def wipe_dir(path: str, home: str, platform: str, run: Run = default_run) -> None:
@@ -93,11 +97,11 @@ def port_busy(port: int, run: Run = default_run) -> bool:
 def host_has_tailscale(run: Run = default_run) -> bool:
     """True when the host already runs Tailscale: a second tailscaled on the host network would clash."""
     return run(["docker", "run", "--rm", "--network", "host", HELPER,
-                "test", "-e", "/sys/class/net/tailscale0"]).returncode == 0
+                "test", "-e", "/sys/class/net/tailscale0"], timeout=HELPER_TIMEOUT).returncode == 0
 
 
 def has_device(path: str, run: Run = default_run) -> bool:
-    return run(["docker", "run", "--rm", "--device", path, HELPER, "true"]).returncode == 0
+    return run(["docker", "run", "--rm", "--device", path, HELPER, "true"], timeout=HELPER_TIMEOUT).returncode == 0
 
 
 def self_container_id() -> str:

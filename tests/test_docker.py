@@ -9,8 +9,9 @@ class FakeRun:
         self.calls = []
         self.result = (returncode, stdout, stderr)
 
-    def __call__(self, args):
+    def __call__(self, args, timeout=None):
         self.calls.append(args)
+        self.timeouts = getattr(self, "timeouts", []) + [timeout]
         code, out, err = self.result
         return subprocess.CompletedProcess(args, code, out, err)
 
@@ -119,3 +120,20 @@ class HostTailscaleTest(unittest.TestCase):
         self.assertIn("--network", run.calls[0])
         self.assertIn("/sys/class/net/tailscale0", run.calls[0])
         self.assertFalse(docker.host_has_tailscale(run=FakeRun(1)))
+
+
+class HelperTimeoutTest(unittest.TestCase):
+    def test_probe_is_short_and_cleaned_up(self):
+        # Docker Desktop can hang on a bind of a just-deleted folder: give up fast, remove the stuck probe.
+        run = FakeRun(124, "", "timed out")
+        with self.assertRaises(docker.DockerError):
+            docker.dir_state("/srv/a", run=run)
+        self.assertEqual(run.timeouts[0], docker.PROBE_TIMEOUT)
+        name = run.calls[0][run.calls[0].index("--name") + 1]
+        self.assertEqual(run.calls[-1], ["docker", "rm", "-f", name])
+
+    def test_wipe_has_no_timeout(self):
+        # deleting hundreds of GB can take minutes
+        run = FakeRun()
+        docker.wipe_dir("/srv/my arr", "/home/z", "linux", run=run)
+        self.assertEqual(run.timeouts, [None])
