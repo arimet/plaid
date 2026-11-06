@@ -156,6 +156,57 @@ section{padding:clamp(72px,10vw,120px) 0 0}
 .faq details[open] summary .icon{transform:rotate(45deg);color:var(--accent-text)}
 .faq details p{padding:0 26px 24px;font-size:15px}
 
+/* ----------------------------------------------------------------- illustrations: what watching and requesting look like
+   Drawn here, not captured: titles and posters are invented. Screens are dark like a TV, framed by raised devices. */
+.shots{display:grid;grid-template-columns:1.6fr 1fr;gap:clamp(24px,4vw,48px);align-items:end}
+.device{border-radius:var(--r-xl);background:var(--surface);box-shadow:var(--raised-lg);padding:14px}
+.device.phone{border-radius:38px;padding:12px;max-width:300px;justify-self:center;width:100%}
+.glass{border-radius:var(--r-lg);background:#14171c;box-shadow:inset 4px 4px 12px rgba(0,0,0,.55),inset -2px -2px 6px rgba(255,255,255,.04);
+  overflow:hidden;color:#e8ecf4;font:500 12px/1.4 Inter,sans-serif}
+.phone .glass{border-radius:28px;padding:16px 14px 18px}
+.cap{margin-top:16px;text-align:center;font:600 14px/1.4 Inter,sans-serif;color:var(--text-2)}
+.cap b{color:var(--text);font-family:Nunito,sans-serif;font-weight:800}
+.fineprint{margin-top:22px;font-size:13px;color:var(--muted)}
+
+/* a poster: two colours and one shape, never a real film */
+.poster{position:relative;border-radius:8px;overflow:hidden;aspect-ratio:2/3;background:linear-gradient(160deg,var(--a),var(--b))}
+.poster svg{position:absolute;inset:0;width:100%;height:100%}
+.poster span{position:absolute;left:8px;right:8px;bottom:8px;font:800 10px/1.1 Nunito,sans-serif;letter-spacing:.02em;text-transform:uppercase;
+  color:rgba(255,255,255,.92);text-shadow:0 1px 4px rgba(0,0,0,.4)}
+
+/* the TV: a hero, "continue watching", a row of posters */
+.tv{aspect-ratio:16/10;display:grid;grid-template-rows:auto 1fr;padding:0}
+.feature{position:relative;height:clamp(150px,22vw,220px);background:linear-gradient(115deg,#1d3b52,#0f6a7a 45%,#e8b230 120%)}
+.feature svg{position:absolute;inset:0;width:100%;height:100%}
+.feature .info{position:absolute;left:22px;bottom:18px;right:40%}
+.feature h4{font:800 clamp(16px,2.2vw,24px)/1.05 Nunito,sans-serif;color:#fff;letter-spacing:-.01em}
+.feature p{margin-top:6px;color:rgba(255,255,255,.75);font-size:11px}
+.play{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:7px 12px;border-radius:999px;background:#fff;color:#14171c;font:800 11px/1 Nunito,sans-serif}
+.play i{width:0;height:0;border-left:7px solid #14171c;border-top:4.5px solid transparent;border-bottom:4.5px solid transparent}
+.rowtitle{padding:14px 18px 8px;font:700 12px/1 Inter,sans-serif;color:rgba(255,255,255,.7)}
+.row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:0 18px 18px}
+.resume{height:3px;border-radius:2px;background:rgba(255,255,255,.18);margin-top:5px;overflow:hidden}
+.resume i{display:block;height:100%;width:var(--p);background:#4fd1ec}
+
+/* the phone: search, one result, a request that moves along */
+.search{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:999px;background:#20242b;color:rgba(255,255,255,.75)}
+.search svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2}
+.result{display:grid;grid-template-columns:72px 1fr;gap:12px;margin-top:16px}
+.result h5{font:800 15px/1.15 Nunito,sans-serif;color:#fff}
+.result .meta{color:rgba(255,255,255,.55);font-size:11px;margin-top:3px}
+.ask{display:inline-flex;margin-top:10px;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,#0089a8,#00a8c9);color:#fff;font:800 12px/1 Nunito,sans-serif}
+.timeline{list-style:none;padding:0;margin-top:18px;display:flex;flex-direction:column;gap:12px}
+.timeline li{display:grid;grid-template-columns:18px 1fr;gap:10px;align-items:center;color:rgba(255,255,255,.85)}
+.timeline .k{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:#20242b}
+.timeline .k.ok{background:#0aa3c2}
+.timeline .k.ok::after{content:"";width:6px;height:3px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+.timeline .k.now::after{content:"";width:8px;height:8px;border-radius:50%;background:#4fd1ec;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.timeline .bar{height:4px;border-radius:2px;background:#20242b;margin-top:6px;overflow:hidden}
+.timeline .bar i{display:block;height:100%;width:62%;background:linear-gradient(90deg,#0089a8,#4fd1ec)}
+.timeline .dim{color:rgba(255,255,255,.4)}
+@media (max-width:900px){.shots{grid-template-columns:1fr}.tv{aspect-ratio:auto}.row{grid-template-columns:repeat(4,1fr)}.row .poster-wrap:nth-child(n+5){display:none}}
+
 /* ----------------------------------------------------------------- terminal replay
    A real terminal session, played back: the screen is always dark, framed by a raised shell. */
 .term{border-radius:var(--r-xl);box-shadow:var(--raised-lg);background:var(--surface);padding:16px;max-width:860px}
@@ -295,6 +346,64 @@ footer a{color:var(--text-2)}
     <span data-l="en">You request a film in Seerr. Radarr looks for it through Prowlarr, qBittorrent downloads it, Bazarr adds subtitles, and it appears in Jellyfin.</span>
     <span data-l="fr">Vous demandez un film dans Seerr. Radarr le cherche grâce à Prowlarr, qBittorrent le télécharge, Bazarr ajoute les sous-titres, et il apparaît dans Jellyfin.</span>
   </p>
+</section>
+
+<!-- what watching and requesting look like: drawn, not captured (titles and posters are invented) -->
+<section class="reveal" id="looks">
+  <div class="head">
+    <h2><span data-l="en">On the TV, on the phone</span><span data-l="fr">Sur la télé, sur le téléphone</span></h2>
+    <p><span data-l="en">Watch from the sofa in Jellyfin. Ask for something new from your phone in Seerr, and follow it until it is ready.</span>
+       <span data-l="fr">Regardez depuis le canapé dans Jellyfin. Demandez autre chose depuis votre téléphone dans Seerr, et suivez-le jusqu’à ce qu’il soit prêt.</span></p>
+  </div>
+  <div class="shots">
+    <figure>
+      <div class="device" aria-hidden="true">
+        <div class="glass tv">
+          <div class="feature">
+            <svg viewBox="0 0 400 160" preserveAspectRatio="xMidYMid slice"><circle cx="300" cy="70" r="46" fill="#e8b230" opacity=".85"/>
+              <path d="M0 120 C80 90 140 140 220 112 S330 96 400 118 V160 H0Z" fill="#0b2a36" opacity=".9"/>
+              <path d="M0 136 C90 118 170 150 260 132 S360 124 400 140 V160 H0Z" fill="#071a22"/>
+              <rect x="298" y="22" width="4" height="70" fill="#f4e3b0" opacity=".9"/></svg>
+            <div class="info"><h4>The Lighthouse Clock</h4>
+              <p><span data-l="en">Continue · 1 h 12 min left</span><span data-l="fr">Reprendre · il reste 1 h 12</span></p>
+              <span class="play"><i></i><span data-l="en">Play</span><span data-l="fr">Lire</span></span></div>
+          </div>
+          <div>
+            <div class="rowtitle"><span data-l="en">Recently added</span><span data-l="fr">Ajoutés récemment</span></div>
+            <div class="row">
+              <div class="poster-wrap"><div class="poster" style="--a:#1e5b45;--b:#0b2a20"><svg viewBox="0 0 60 90"><path d="M0 62 L18 40 L30 52 L44 30 L60 50 V90 H0Z" fill="#e8b230" opacity=".8"/><circle cx="44" cy="18" r="7" fill="#f4e3b0"/></svg><span>Copper Valley</span></div><div class="resume"><i style="--p:70%"></i></div></div>
+              <div class="poster-wrap"><div class="poster" style="--a:#22305e;--b:#0c1330"><svg viewBox="0 0 60 90"><circle cx="20" cy="22" r="3" fill="#fff"/><circle cx="38" cy="30" r="5" fill="#cfd6ff"/><circle cx="30" cy="48" r="9" fill="#9aa7ff" opacity=".8"/><circle cx="46" cy="60" r="4" fill="#fff" opacity=".7"/></svg><span>Nine Small Moons</span></div></div>
+              <div class="poster-wrap"><div class="poster" style="--a:#b8242f;--b:#4a0d14"><svg viewBox="0 0 60 90"><path d="M10 90 V40 A20 20 0 0 1 50 40 V90" fill="none" stroke="#f4c6a0" stroke-width="5"/></svg><span>The Orchard Line</span></div><div class="resume"><i style="--p:25%"></i></div></div>
+              <div class="poster-wrap"><div class="poster" style="--a:#13817c;--b:#062e2c"><svg viewBox="0 0 60 90"><path d="M0 50 Q15 40 30 50 T60 50 V90 H0Z" fill="#7fe0d8" opacity=".6"/><path d="M0 60 Q15 50 30 60 T60 60 V90 H0Z" fill="#0b4a46"/></svg><span>Saltwater Hours</span></div></div>
+              <div class="poster-wrap"><div class="poster" style="--a:#6b2d5c;--b:#1f0b1b"><svg viewBox="0 0 60 90"><rect x="14" y="20" width="32" height="40" rx="3" fill="none" stroke="#f0b0e0" stroke-width="3"/><path d="M22 34 h16 M22 42 h10" stroke="#f0b0e0" stroke-width="3"/></svg><span>Low Tide Radio</span></div></div>
+              <div class="poster-wrap"><div class="poster" style="--a:#c45a1c;--b:#3a1606"><svg viewBox="0 0 60 90"><path d="M0 70 H60" stroke="#ffd8a8" stroke-width="2"/><path d="M8 70 L20 34 L32 70 M28 70 L42 20 L56 70" fill="none" stroke="#ffd8a8" stroke-width="3"/></svg><span>Glass Harbour</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption class="cap"><b>Jellyfin</b> · <span data-l="en">watch</span><span data-l="fr">regarder</span></figcaption>
+    </figure>
+
+    <figure>
+      <div class="device phone" aria-hidden="true">
+        <div class="glass">
+          <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>orchard</div>
+          <div class="result">
+            <div class="poster" style="--a:#b8242f;--b:#4a0d14"><svg viewBox="0 0 60 90"><path d="M10 90 V40 A20 20 0 0 1 50 40 V90" fill="none" stroke="#f4c6a0" stroke-width="5"/></svg></div>
+            <div><h5>The Orchard Line</h5><div class="meta">2019 · <span data-l="en">Film</span><span data-l="fr">Film</span></div>
+              <span class="ask"><span data-l="en">Request</span><span data-l="fr">Demander</span></span></div>
+          </div>
+          <ul class="timeline">
+            <li><span class="k ok"></span><span data-l="en">Requested</span><span data-l="fr">Demandé</span></li>
+            <li><span class="k now"></span><div><span data-l="en">Downloading · 62%</span><span data-l="fr">Téléchargement · 62 %</span><div class="bar"><i></i></div></div></li>
+            <li><span class="k"></span><span class="dim"><span data-l="en">Available in Jellyfin</span><span data-l="fr">Disponible dans Jellyfin</span></span></li>
+          </ul>
+        </div>
+      </div>
+      <figcaption class="cap"><b>Seerr</b> · <span data-l="en">request</span><span data-l="fr">demander</span></figcaption>
+    </figure>
+  </div>
+  <p class="fineprint"><span data-l="en">Illustrations: titles and posters are invented.</span><span data-l="fr">Illustrations : titres et affiches inventés.</span></p>
 </section>
 
 <!-- how it works -->
