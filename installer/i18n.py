@@ -14,7 +14,8 @@ T: dict[str, dict[str, str]] = {
         "field_username": "Username",
         "field_password": "Password",
         "field_password2": "Password again",
-        "field_account_help": "One account for all seven apps.",
+        "field_account_help": "This username and password will open all seven apps, and this assistant. "
+                              "You can change them later in each app’s settings, one app at a time.",
         "field_vpn": "VPN",
         "field_vpn_help": "Downloads go through your VPN. Paste the details from your VPN account.",
         "vpn_none": "No VPN",
@@ -179,7 +180,8 @@ T: dict[str, dict[str, str]] = {
         "field_username": "Identifiant",
         "field_password": "Mot de passe",
         "field_password2": "Mot de passe, encore",
-        "field_account_help": "Un seul compte pour les sept applis.",
+        "field_account_help": "Cet identifiant et ce mot de passe ouvriront les sept applis, et cet assistant. "
+                              "Vous pourrez les changer ensuite dans les réglages de chaque appli, une par une.",
         "field_vpn": "VPN",
         "field_vpn_help": "Les téléchargements passent par votre VPN. Collez les informations de votre compte VPN.",
         "vpn_none": "Pas de VPN",
