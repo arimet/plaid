@@ -47,6 +47,19 @@ def load_settings(state_dir: str = STATE_DIR) -> Settings | None:
         return None
 
 
+def _prowlarr(dk, state_dir: str):
+    return apps.Arr("prowlarr", f"prowlarr:{PORTS['prowlarr']}", "v1",
+                    lambda *args: dk.compose(state_dir, *args).stdout)
+
+
+def tracker_catalog(dk=docker, state_dir: str = STATE_DIR) -> list[dict]:
+    return apps.list_public_indexers(_prowlarr(dk, state_dir))
+
+
+def add_tracker(definition: str, dk=docker, state_dir: str = STATE_DIR) -> None:
+    apps.add_indexer(_prowlarr(dk, state_dir), definition)
+
+
 def media_size(s: Settings, dk=docker) -> int:
     try:
         return dk.dir_state(dk.host_path(s.data_dir, s.platform))[1]

@@ -39,5 +39,6 @@ class DynamicKeysTest(unittest.TestCase):
     def test_app_and_vpn_field_keys(self):
         from installer.compose import SERVICES
         from installer.vpn import PROVIDERS
-        keys = {f"app_{s}" for s in SERVICES} | {f"vpnf_{f.lower()}" for p in PROVIDERS.values() for f in p.fields}
+        keys = {f"app_{s}" for s in SERVICES} | {f"appd_{s}" for s in SERVICES} | \
+            {f"vpnf_{f.lower()}" for p in PROVIDERS.values() for f in p.fields}
         self.assertEqual(keys - set(T["en"]), set())

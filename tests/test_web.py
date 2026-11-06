@@ -232,3 +232,58 @@ class ReviewFixesWebTest(WebTest):
         _, _, body = self.req("GET", "/api/uninstall-status", headers={"Cookie": self.login()})
         self.assertEqual(json.loads(body)["state"], "failed")
         self.assertIn("boom", json.loads(body)["detail"])
+
+
+class TrackersWebTest(WebTest):
+    def login(self):
+        form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
+        _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
+        return headers["Set-Cookie"].split(";")[0]
+
+    def flow(self):
+        flow = FakeFlow(installed=settings())
+        flow.added = []
+        flow.tracker_catalog = lambda: [{"id": "alpha", "name": "Alpha", "language": "en-US", "description": "a",
+                                         "added": False}]
+
+        def add(definition):
+            if definition != "alpha":
+                raise KeyError(definition)
+            flow.added.append(definition)
+        flow.add_tracker = add
+        return flow
+
+    def test_catalog_needs_login(self):
+        self.start(self.flow())
+        self.assertEqual(self.req("GET", "/api/trackers")[0], 401)
+        _, _, body = self.req("GET", "/api/trackers", headers={"Cookie": self.login()})
+        self.assertEqual(json.loads(body)["trackers"][0]["id"], "alpha")
+
+    def test_add_tracker(self):
+        flow = self.flow()
+        self.start(flow)
+        cookie = self.login()
+        self.assertEqual(self.req("POST", "/api/trackers", {"id": "alpha"}, {"Cookie": cookie})[0], 200)
+        self.assertEqual(flow.added, ["alpha"])
+        self.assertEqual(self.req("POST", "/api/trackers", {"id": "club"}, {"Cookie": cookie})[0], 404)
+        self.assertEqual(self.req("POST", "/api/trackers", {"id": "alpha"})[0], 401)
+
+    def test_panel_has_tracker_picker(self):
+        self.start(self.flow())
+        _, _, html = self.req("GET", "/?lang=fr", headers={"Cookie": self.login()})
+        self.assertIn('id="tracker-search"', html)
+
+
+class BeginnerPanelTest(WebTest):
+    def test_daily_apps_first_with_explanations(self):
+        self.start(FakeFlow(installed=settings()))
+        form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
+        _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
+        _, _, html = self.req("GET", "/?lang=fr", headers={"Cookie": headers["Set-Cookie"].split(";")[0]})
+        main = html.split('<script id="texts"')[0]
+        link = lambda svc: main.index(f"/static/icons/{svc}.svg")
+        self.assertLess(main.index("Au quotidien"), link("jellyfin"))
+        self.assertLess(link("jellyfin"), link("seerr"))
+        self.assertLess(link("seerr"), main.index("En coulisses"))
+        self.assertLess(main.index("En coulisses"), link("radarr"))
+        self.assertIn("Netflix", main)  # Jellyfin explained in plain words

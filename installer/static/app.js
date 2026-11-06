@@ -223,3 +223,55 @@
     });
   }
 })();
+
+// ---------------------------------------------------------------- tracker catalogue (panel)
+(() => {
+  const list = document.getElementById("tracker-list");
+  if (!list) return;
+  const T = JSON.parse(document.getElementById("texts").textContent);
+  const search = document.getElementById("tracker-search");
+  const more = document.getElementById("tracker-more");
+  const SHOWN = 30;
+  let all = [];
+
+  const add = async (tracker, button) => {
+    button.disabled = true;
+    const res = await fetch("/api/trackers", {method: "POST", credentials: "same-origin",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({id: tracker.id})});
+    if (res.ok) { tracker.added = true; button.textContent = T.tracker_added; }
+    else { button.disabled = false; more.textContent = T.trackers_error; }
+  };
+
+  const render = () => {
+    const q = search.value.trim().toLowerCase();
+    const found = all.filter((t) => !q || t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q));
+    list.innerHTML = "";
+    found.slice(0, SHOWN).forEach((t) => {
+      const li = document.createElement("li");
+      const name = document.createElement("span");
+      const b = document.createElement("b");
+      b.textContent = t.name;
+      const lang = document.createElement("span");
+      lang.className = "lang-tag";
+      lang.textContent = t.language;
+      name.append(b, lang);
+      const desc = document.createElement("small");
+      desc.textContent = t.description;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = t.added ? T.tracker_added : T.tracker_add;
+      button.disabled = t.added;
+      button.addEventListener("click", () => add(t, button));
+      li.append(name, button, desc);
+      list.append(li);
+    });
+    if (!found.length) list.innerHTML = `<li class="hint">${T.trackers_none}</li>`;
+    more.textContent = found.length > SHOWN ? T.trackers_more.replace("{n}", found.length - SHOWN) : "";
+  };
+
+  fetch("/api/trackers", {credentials: "same-origin"})
+    .then((r) => (r.ok ? r.json() : Promise.reject()))
+    .then((data) => { all = data.trackers; render(); })
+    .catch(() => { list.innerHTML = `<li class="hint">${T.trackers_error}</li>`; });
+  search.addEventListener("input", render);
+})();

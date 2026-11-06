@@ -40,10 +40,30 @@ class DemoFlow:
     def media_size(self, s):
         return 412 * 1024 ** 3
 
+    # Synthetic catalogue: the real one comes from Prowlarr.
+    catalogue = [{"id": f"demo{i}", "name": f"Demo tracker {i}", "language": "en-US",
+                  "description": "Synthetic entry for the demo.", "added": i == 1} for i in range(1, 41)]
+
+    def tracker_catalog(self):
+        return self.catalogue
+
+    def add_tracker(self, definition):
+        next(t for t in self.catalogue if t["id"] == definition)["added"] = True
+
+    def uninstall_status(self):
+        return "running", ""
+
 
 if __name__ == "__main__":
+    from installer.settings import Settings  # noqa: E402
+
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 7700
     platform = sys.argv[2] if len(sys.argv) > 2 else "mac"
     home = "/home/zoe" if platform == "linux" else "/Users/zoe"
     env = {"HOST_HOME": home, "HOST_PLATFORM": platform, "PUID": "501", "PGID": "20"}
-    web.make_server(port, DemoFlow(), env).serve_forever()
+    flow = DemoFlow()
+    if "installed" in sys.argv[3:]:  # straight to the panel; sign in with demo / demo-pass
+        flow.settings = Settings(data_dir=home + "/Plaid", username="demo", password="demo-pass",
+                                 vpn_provider=None, home=home, platform=platform, lang="fr")
+        flow.complete = True
+    web.make_server(port, flow, env).serve_forever()

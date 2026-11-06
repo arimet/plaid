@@ -22,6 +22,7 @@ from installer.vpn import PROVIDERS
 
 STATIC = Path(__file__).resolve().parent / "static"
 COOKIE = "plaid_session"
+DAILY_APPS = ("jellyfin", "seerr")
 APP_COLORS = {"jellyfin": "var(--plum)", "seerr": "var(--navy)", "radarr": "var(--gold)", "sonarr": "var(--teal)",
               "qbittorrent": "var(--green)", "prowlarr": "var(--rust)", "bazarr": "var(--red)"}
 PROVIDER_COLORS = {"protonvpn": "#6d4aff", "private internet access": "#4bb543", "mullvad": "#e8b230",
@@ -186,11 +187,20 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
 
 
 def panel_page(lang: str, s: Settings, host: str, media_size: int, complete: bool = True) -> str:
-    apps = "".join(
-        f'<a class="app" href="http://{E(host)}:{PORTS[svc]}" target="_blank" rel="noopener">'
-        f'<span class="ic" style="--c:{APP_COLORS[svc]}"><img src="/static/icons/{svc}.svg" alt="" width="28" height="28"></span>'
-        f'<span><b>{E(svc_name(svc))}</b><small>{E(t(lang, "app_" + svc))} · :{PORTS[svc]}</small></span>'
-        f'<span class="open">{E(t(lang, "done_open"))}</span></a>' for svc in SERVICES)
+    def app_link(svc: str, daily: bool) -> str:
+        return (f'<a class="app{" daily" if daily else ""}" href="http://{E(host)}:{PORTS[svc]}" target="_blank" '
+                f'rel="noopener"><span class="ic" style="--c:{APP_COLORS[svc]}"><img src="/static/icons/{svc}.svg" '
+                f'alt="" width="28" height="28"></span><span><b>{E(svc_name(svc))}</b> '
+                f'<span class="role">{E(t(lang, "app_" + svc))}</span><small>{E(t(lang, "appd_" + svc))}</small></span>'
+                f'<span class="open">{E(t(lang, "done_open"))}</span></a>')
+
+    # Beginners open two apps; the other five work on their own and are listed for when something needs a look.
+    daily = [svc for svc in SERVICES if svc in DAILY_APPS]
+    behind = [svc for svc in SERVICES if svc not in DAILY_APPS]
+    apps = (f'<h2>{E(t(lang, "apps_daily"))}</h2><div class="apps">{"".join(app_link(x, True) for x in daily)}</div>'
+            f'<p class="lead">{E(t(lang, "apps_flow"))}</p>'
+            f'<h2>{E(t(lang, "apps_behind"))}</h2><p class="hint">{E(t(lang, "apps_behind_help"))}</p>'
+            f'<div class="apps">{"".join(app_link(x, False) for x in behind)}</div>')
     steps = "".join(f"<li>{E(step)}</li>" for step in t(lang, "prowlarr_steps").split("|"))
     autostart = (f'<p class="note warn">{E(t(lang, "autostart_hint"))}</p>'
                  if s.platform in ("mac", "windows") else "")
@@ -203,9 +213,14 @@ def panel_page(lang: str, s: Settings, host: str, media_size: int, complete: boo
     if complete:
         top = f"""<h1>{E(t(lang, "done_title"))}</h1>
   <p class="lead">{E(t(lang, "done_lead"))} {t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
-  <div class="apps">{apps}</div>
+  {apps}
   {autostart}
   {remote}
+  <div class="tip" id="trackers"><h2>{E(t(lang, "trackers_title"))}</h2><p>{E(t(lang, "trackers_help"))}</p>
+  <input class="input" id="tracker-search" type="search" autocomplete="off" placeholder="{E(t(lang, "trackers_search"))}"
+   aria-label="{E(t(lang, "trackers_search"))}">
+  <ul class="trackers" id="tracker-list" aria-live="polite"><li class="hint">{E(t(lang, "trackers_loading"))}</li></ul>
+  <p class="hint" id="tracker-more"></p><p class="hint">{E(t(lang, "trackers_rights"))}</p></div>
   <div class="tip"><h2>{E(t(lang, "prowlarr_title"))}</h2><p>{E(t(lang, "prowlarr_default"))}</p><ol>{steps}</ol>
   <p>{E(t(lang, "prowlarr_cloudflare"))} <a href="https://wiki.servarr.com/prowlarr/indexers" target="_blank" rel="noopener">{E(t(lang, "prowlarr_docs"))}</a></p></div>
   <hr class="sep">"""
@@ -317,6 +332,13 @@ def make_handler(state: State):
                 return self.json(200, self.progress(lang))
             if path == "/api/ping":
                 return self.json(200, {"ok": True})
+            if path == "/api/trackers":
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                try:
+                    return self.json(200, {"trackers": state.flow.tracker_catalog()})
+                except Exception as e:  # Prowlarr still starting, or stopped
+                    return self.json(503, {"error": t(lang, "trackers_error"), "detail": str(e)})
             if path == "/api/uninstall-status":
                 if self.locked():
                     return self.json(401, {})
@@ -365,6 +387,16 @@ def make_handler(state: State):
                     return self.json(409, {"errors": blocking})
                 state.start_install(settings)
                 return self.json(202, {}, self.session_cookie())
+            if path == "/api/trackers":
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                try:
+                    state.flow.add_tracker(str(data.get("id", "")))
+                except KeyError:
+                    return self.json(404, {})
+                except Exception as e:
+                    return self.json(503, {"error": t(lang, "trackers_error"), "detail": str(e)})
+                return self.json(200, {"text": t(lang, "tracker_added")})
             if path == "/api/uninstall":
                 if self.locked() or s is None:
                     return self.json(401, {})

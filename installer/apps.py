@@ -234,17 +234,41 @@ def configure_arr(app: Arr, s: Settings, root: str, category_field: str, categor
     log(app.name)
 
 
+def _public(item: dict) -> bool:
+    # Public torrent trackers need no account: they can be added with their defaults. Private ones go
+    # through Prowlarr, where the user fills in their credentials.
+    return item.get("privacy") == "public" and item.get("protocol") == "torrent"
+
+
+def list_public_indexers(prowlarr: Arr) -> list[dict]:
+    """Prowlarr's whole public catalogue, alphabetical, none put forward."""
+    added = {i.get("definitionName") for i in prowlarr("GET", "/indexer")}
+    found = [{"id": t["definitionName"], "name": t["name"], "language": t.get("language") or "",
+              "description": t.get("description") or "", "added": t["definitionName"] in added}
+             for t in prowlarr("GET", "/indexer/schema") if _public(t)]
+    return sorted(found, key=lambda t: t["name"].lower())
+
+
+def add_indexer(prowlarr: Arr, definition: str) -> None:
+    """Adds a public tracker; Prowlarr then hands it to Radarr and Sonarr. KeyError if unknown or private."""
+    if any(i.get("definitionName") == definition for i in prowlarr("GET", "/indexer")):
+        return
+    item = next((t for t in prowlarr("GET", "/indexer/schema")
+                 if t.get("definitionName") == definition and _public(t)), None)
+    if item is None:
+        raise KeyError(definition)
+    # Saving an enabled indexer runs a live search that some sites take minutes to answer (archive.org on
+    # Docker Desktop, even with forceSave). A disabled one saves at once; the bulk edit enables it untested.
+    item.pop("presets", None)
+    item.update(enable=False, appProfileId=1)
+    created = prowlarr("POST", "/indexer", item)
+    prowlarr("PUT", "/indexer/bulk", {"ids": [created["id"]], "enable": True})
+
+
 def add_default_indexer(prowlarr: Arr) -> None:
     """Internet Archive: legal (public-domain films), so the stack works on day one. A plain Prowlarr
     indexer the user can disable or delete."""
-    if any(i["name"] == "Internet Archive" for i in prowlarr("GET", "/indexer")):
-        return
-    item = next(t for t in prowlarr("GET", "/indexer/schema") if t.get("definitionName") == "internetarchive")
-    # Saving an enabled indexer runs a live search that archive.org can take minutes to answer (seen on
-    # Docker Desktop, even with forceSave). A disabled one saves at once; the bulk edit enables it untested.
-    item.update(name="Internet Archive", enable=False, appProfileId=1)
-    created = prowlarr("POST", "/indexer", item)
-    prowlarr("PUT", "/indexer/bulk", {"ids": [created["id"]], "enable": True})
+    add_indexer(prowlarr, "internetarchive")
 
 
 def configure_prowlarr(prowlarr: Arr, s: Settings, radarr: Arr, sonarr: Arr, log: Log) -> None:
