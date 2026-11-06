@@ -156,6 +156,22 @@ section{padding:clamp(72px,10vw,120px) 0 0}
 .faq details[open] summary .icon{transform:rotate(45deg);color:var(--accent-text)}
 .faq details p{padding:0 26px 24px;font-size:15px}
 
+/* ----------------------------------------------------------------- terminal replay
+   A real terminal session, played back: the screen is always dark, framed by a raised shell. */
+.term{border-radius:var(--r-xl);box-shadow:var(--raised-lg);background:var(--surface);padding:16px;max-width:860px}
+.term-bar{display:flex;align-items:center;gap:8px;padding:4px 8px 14px}
+.term-bar i{width:12px;height:12px;border-radius:50%;box-shadow:var(--flat);background:var(--surface)}
+.term-bar span{margin-left:auto;font:600 12px/1 Inter,sans-serif;color:var(--muted);letter-spacing:.06em}
+.term-bar button{margin-left:12px}
+.screen{border-radius:var(--r-lg);background:#15181d;box-shadow:inset 4px 4px 12px rgba(0,0,0,.55),inset -2px -2px 6px rgba(255,255,255,.04);
+  padding:22px 22px 26px;height:430px;overflow:hidden;font:500 13.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9d1e0;
+  white-space:pre-wrap;word-break:break-word}
+.screen .p{color:#7f8aa3}.screen .c{color:#eef2fa}.screen .g{color:#5fd39a}.screen .gd{color:#e8b230}.screen .r{color:#ff7a70}
+.screen .t{color:#4fd1ec;text-decoration:underline;text-underline-offset:3px}.screen .d{color:#7f8aa3}.screen .b{font-weight:700;color:#fff}
+.screen .cursor{display:inline-block;width:.6em;height:1.15em;vertical-align:-.2em;background:#4fd1ec;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+@media (max-width:520px){.screen{font-size:11.5px;height:400px;padding:16px}}
+
 footer{padding:96px 0 48px;display:flex;flex-wrap:wrap;gap:16px 32px;justify-content:space-between;font-size:14px;color:var(--muted)}
 footer a{color:var(--text-2)}
 
@@ -297,6 +313,20 @@ footer a{color:var(--text-2)}
       <p><span data-l="en">A folder, a password, your VPN and, if you want, access away from home. You get the links to your seven apps.</span>
          <span data-l="fr">Un dossier, un mot de passe, votre VPN et, si vous voulez, l’accès hors de chez vous. Vous recevez les liens de vos sept applis.</span></p></li>
   </ol>
+</section>
+
+<!-- no screen on the machine? the same install, in a terminal -->
+<section class="reveal" id="terminal">
+  <div class="head">
+    <h2><span data-l="en">No screen? A terminal is enough</span><span data-l="fr">Pas d’écran ? Un terminal suffit</span></h2>
+    <p><span data-l="en">On a mini PC or a NAS, one command asks the same questions, one screen at a time, with the arrow keys. Ctrl-C at any point leaves the machine as it was.</span>
+       <span data-l="fr">Sur un mini PC ou un NAS, une commande pose les mêmes questions, un écran à la fois, aux flèches. Ctrl-C à tout moment laisse la machine comme avant.</span></p>
+  </div>
+  <div class="term">
+    <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>zoe@mini-pc</span>
+      <button class="pill" type="button" id="replay"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg><span data-l="en">Replay</span><span data-l="fr">Rejouer</span></button></div>
+    <div class="screen" id="screen" role="img" aria-label="Plaid installing in a terminal"></div>
+  </div>
 </section>
 
 <!-- install: one tab per system, the visitor's own selected first -->
@@ -457,6 +487,78 @@ footer a{color:var(--text-2)}
     const tick = () => { n = Math.min(target, n + 2); pct.firstChild.nodeValue = n; if (n < target) setTimeout(tick, 22); };
     setTimeout(tick, 250);
   }
+
+  // Terminal replay: what `get.sh --cli` really shows, played back once it comes into view.
+  const screen = document.getElementById("screen");
+  const T = {
+    en: { folder: "Media folder", user: "Username", pw: "Password", vpn: "VPN", key: "WireGuard private key",
+          none: "No VPN", pf: "opens a port", hint: "↑↓ to choose · Enter to confirm", install: "Installing",
+          steps: ["Preparing", "Creating the folders", "Downloading the apps", "Starting the apps", "Connecting the VPN", "Linking the apps"],
+          apps: "qBittorrent set up · Jellyfin set up · Radarr set up · Sonarr set up", ready: "Everything is ready",
+          login: "Sign in to every app with zoe and your password.", daily: "Every day", behind: "Behind the scenes",
+          roles: ["Watch", "Request", "Films", "Series", "Downloads", "Trackers", "Subtitles"],
+          again: "To see your apps again, add trackers or remove everything, run the same command again." },
+    fr: { folder: "Dossier des médias", user: "Identifiant", pw: "Mot de passe", vpn: "VPN", key: "Clé privée WireGuard",
+          none: "Pas de VPN", pf: "ouvre un port", hint: "↑↓ pour choisir · Entrée pour valider", install: "Installation",
+          steps: ["Préparation", "Création des dossiers", "Téléchargement des applis", "Démarrage des applis", "Connexion du VPN", "Liaison des applis"],
+          apps: "qBittorrent réglé · Jellyfin réglé · Radarr réglé · Sonarr réglé", ready: "Tout est prêt",
+          login: "Connectez-vous à chaque appli avec zoe et votre mot de passe.", daily: "Au quotidien", behind: "En coulisses",
+          roles: ["Regarder", "Demander", "Films", "Séries", "Téléchargements", "Trackers", "Sous-titres"],
+          again: "Pour revoir vos applis, ajouter des trackers ou tout supprimer, relancez la même commande." },
+  };
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const span = (cls, s) => `<span class="${cls}">${esc(s)}</span>`;
+  const stepBar = (n, total) => Array.from({ length: total }, (_, i) =>
+    i < n - 1 ? span("g", "━━━━━ ") : i === n - 1 ? span("r", "━━━━━ ") : span("d", "╍╍╍╍╍ ")).join("");
+  const head = (n, total) => `\n  ${span("g b", "Plaid")}${span("gd", `  ·  ${n}/${total}`)}\n  ${stepBar(n, total)}\n`;
+  let run = 0;
+  const wait = (ms) => new Promise((r) => setTimeout(r, still ? 0 : ms));  // no motion: straight to the end state
+  const play = async () => {
+    const id = ++run, L = T[html.dataset.lang === "fr" ? "fr" : "en"];
+    const alive = () => id === run;
+    const show = (h) => { if (alive()) screen.innerHTML = h; };
+    let out = span("p", "zoe@mini-pc ~ % ");
+    const cmd = "curl -fsSL https://arimet.github.io/plaid/get | sh -s -- --cli";
+    for (let i = 0; i <= cmd.length && alive(); i++) {
+      show(out + span("c", cmd.slice(0, i)) + '<span class="cursor"></span>');
+      await wait(i < 4 ? 120 : 28);
+    }
+    await wait(700);
+    const recap = [];
+    const page = (n, title, body) => head(n, 3) + recap.map(([k, v]) => `  ${span("g", "✓")} ${span("d", k + " : ")}${esc(v)}\n`).join("") +
+      `\n  ${span("g b", title)}\n\n${body}`;
+    show(page(1, L.folder, `  ${span("b", L.folder)}\n  ${span("g", "›")} /home/zoe/Plaid<span class="cursor"></span>`)); await wait(1400);
+    recap.push([L.folder, "/home/zoe/Plaid"]);
+    show(page(2, L.user + " · " + L.pw, `  ${span("b", L.user)}\n  ${span("g", "✓")} zoe\n  ${span("b", L.pw)}\n  ${span("g", "›")} ••••••••••<span class="cursor"></span>`)); await wait(1500);
+    recap.push([L.user, "zoe"]);
+    const vpns = ["Proton VPN", "Private Internet Access", "Mullvad", "NordVPN", L.none];
+    for (const pos of [0, 1, 0]) {
+      show(page(3, L.vpn, vpns.map((v, i) => i === pos ? `  ${span("g b", "❯ ■ " + v)}${i === 0 ? span("d", "  " + L.pf) : ""}` : `    ■ ${esc(v)}`).join("\n") + `\n  ${span("d", L.hint)}`));
+      await wait(700);
+    }
+    show(page(3, L.vpn, `  ${span("b", L.vpn)}\n  ${span("g", "✓")} Proton VPN\n\n  ${span("b", L.key)}\n  ${span("g", "›")} ••••••••••••••••••••<span class="cursor"></span>`)); await wait(1300);
+    const spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
+    for (let s = 0; s < L.steps.length && alive(); s++) {
+      for (let k = 0; k < (s === L.steps.length - 1 ? 14 : 6) && alive(); k++) {
+        const lines = L.steps.map((label, i) => i < s ? `  ${span("g b", "✓")} ${esc(label)}` :
+          i === s ? `  ${span("gd", spin[k % spin.length])} ${span("b", label)}` + (i === L.steps.length - 1 && k > 4 ? `\n    ${span("d", L.apps)}` : "")
+                  : `  ${span("d", "·")} ${esc(label)}`).join("\n");
+        show(`\n  ${span("g b", "Plaid")}\n\n  ${span("g b", L.install)}\n\n${lines}`);
+        await wait(110);
+      }
+    }
+    await wait(300);
+    const urls = [["Jellyfin", 8096, "plum"], ["Seerr", 5055, "navy"], ["Radarr", 7878], ["Sonarr", 8989], ["qBittorrent", 8080], ["Prowlarr", 9696], ["Bazarr", 6767]];
+    const row = ([name, port], i) => `  ${span("t", "■")} ${span("b", name.padEnd(13))}${esc(L.roles[i].padEnd(17))}${span("t", "http://192.168.1.20:" + port)}`;
+    show(out + span("c", cmd) + "\n\n" + `  ${span("gd b", L.ready)}\n  ${span("g", "✓")} ${esc(L.login)}\n\n  ${span("gd b", L.daily)}\n` +
+      urls.slice(0, 2).map(row).join("\n") + `\n\n  ${span("gd b", L.behind)}\n` + urls.slice(2).map((u, i) => row(u, i + 2)).join("\n") +
+      `\n\n  ${span("g", "✓")} ${esc(L.again)}\n\n` + span("p", "zoe@mini-pc ~ % ") + '<span class="cursor"></span>');
+  };
+  const restart = () => { screen.innerHTML = ""; play(); };
+  new IntersectionObserver((es, obs) => es.forEach((e) => { if (e.isIntersecting) { play(); obs.disconnect(); } }),
+                           { threshold: .35 }).observe(screen);
+  document.getElementById("replay").addEventListener("click", restart);
+  document.querySelectorAll("[data-set-lang]").forEach((b) => b.addEventListener("click", () => { if (screen.innerHTML) restart(); }));
 
   // Sections drift in as they come into view.
   const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && e.target.classList.add("is-visible")),
