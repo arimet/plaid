@@ -1,3 +1,4 @@
+import json
 import subprocess
 import unittest
 
@@ -137,3 +138,56 @@ class HelperTimeoutTest(unittest.TestCase):
         run = FakeRun()
         docker.wipe_dir("/srv/my arr", "/home/z", "linux", run=run)
         self.assertEqual(run.timeouts, [None])
+
+
+class GuardProbeTest(unittest.TestCase):
+    def test_marker_state(self):
+        for out, code, err, want in (("ok\n", 0, "", "ok"), ("unconfirmed\n", 0, "", "unconfirmed"),
+                                     ("missing\n", 0, "", "missing"),
+                                     ("", 125, "bind source path does not exist: /media/usb", "missing"),
+                                     ("", 125, "daemon hiccup", "unknown")):
+            run = FakeRun(code, out, err)
+            self.assertEqual(docker.marker_state("/srv/arr", run=run), want)
+        self.assertIn("type=bind,src=/srv/arr,dst=/m,readonly", run.calls[0])
+
+    def test_marker_state_timeout_is_unknown_and_cleans_up(self):
+        run = FakeRun(124, "", "timed out")
+        self.assertEqual(docker.marker_state("/srv/arr", run=run), "unknown")
+        self.assertEqual(run.calls[1][:3], ["docker", "rm", "-f"])
+
+    def test_write_marker(self):
+        run = FakeRun()
+        docker.write_marker("/srv/arr", run=run)
+        self.assertIn("/srv/arr:/m", run.calls[0])
+        self.assertEqual(run.calls[0][-2:], ["touch", "/m/.plaid"])
+
+    def test_ensure_data_dirs_writes_marker(self):
+        run = FakeRun()
+        docker.ensure_data_dirs("/srv/arr", 1000, 1000, run=run)
+        self.assertIn("touch /m/.plaid", run.calls[0][-1])
+
+    def test_stack_containers(self):
+        inspect = json.dumps([
+            {"Id": "g1", "State": {"Running": True, "StartedAt": "2026-11-06T10:00:00.1Z",
+                                   "Health": {"Status": "healthy"}},
+             "HostConfig": {"NetworkMode": "plaid_default"},
+             "Config": {"Labels": {"com.docker.compose.service": "gluetun"}}},
+            {"Id": "q1", "State": {"Running": False, "StartedAt": "2026-11-06T09:00:00Z"},
+             "HostConfig": {"NetworkMode": "container:g0"},
+             "Config": {"Labels": {"com.docker.compose.service": "qbittorrent"}}}])
+        run = FakeRun(0, inspect)  # the ps call gets this stdout too: its words become ids, harmless here
+        got = docker.stack_containers(run=run)
+        self.assertEqual(got["gluetun"], {"id": "g1", "running": True, "started": "2026-11-06T10:00:00.1Z",
+                                          "health": "healthy", "network": "plaid_default"})
+        self.assertEqual(got["qbittorrent"]["health"], "")
+        self.assertEqual(got["qbittorrent"]["network"], "container:g0")
+        self.assertIn("label=com.docker.compose.project=plaid", run.calls[0])
+
+    def test_stack_containers_empty(self):
+        self.assertEqual(docker.stack_containers(run=FakeRun(0, "")), {})
+
+    def test_sees_marker(self):
+        run = FakeRun(0)
+        self.assertTrue(docker.sees_marker("/state", "radarr", run=run))
+        self.assertEqual(run.calls[0][-5:], ["-T", "radarr", "test", "-e", "/data/.plaid"])
+        self.assertFalse(docker.sees_marker("/state", "radarr", run=FakeRun(1)))

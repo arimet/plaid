@@ -2,6 +2,7 @@
 installer itself runs in a container and only sees the host through the Docker socket."""
 from __future__ import annotations
 
+import json
 import ntpath
 import posixpath
 import socket
@@ -66,7 +67,50 @@ def ensure_data_dirs(src: str, puid: int, pgid: int, run: Run = default_run) -> 
     dirs = " ".join(f"/m/{d}" for d in ("torrents/movies", "torrents/tv", "media/movies", "media/tv"))
     owned = "/m /m/torrents /m/media " + dirs
     _check(run, ["docker", "run", "--rm", "-v", f"{src}:/m", HELPER, "sh", "-c",
-                 f"mkdir -p {dirs} && chown {puid}:{pgid} {owned}"], timeout=HELPER_TIMEOUT)
+                 f"mkdir -p {dirs} && chown {puid}:{pgid} {owned} && touch /m/{MARKER}"], timeout=HELPER_TIMEOUT)
+
+
+# The guard's proof that the media folder is the real disk, not the empty mount point under it.
+MARKER = ".plaid"
+_MARKER_SCRIPT = (f'if [ -e /m/{MARKER} ]; then echo ok; elif [ -n "$(ls -A /m)" ]; then echo unconfirmed; '
+                  'else echo missing; fi')
+
+
+def marker_state(src: str, run: Run = default_run) -> str:
+    """"ok", "missing" (folder gone or empty), "unconfirmed" (files but no marker) or "unknown" (probe failed)."""
+    name = f"plaid-probe-{uuid.uuid4().hex[:8]}"
+    result = run(["docker", "run", "--rm", "--name", name, "--mount", f"type=bind,src={src},dst=/m,readonly",
+                  HELPER, "sh", "-c", _MARKER_SCRIPT], timeout=PROBE_TIMEOUT)
+    if result.returncode == 0:
+        return result.stdout.strip()
+    if result.returncode == 124:  # timed out: the probe may sit in "Created" forever
+        run(["docker", "rm", "-f", name])
+        return "unknown"
+    return "missing" if "does not exist" in (result.stderr or "") else "unknown"
+
+
+def write_marker(src: str, run: Run = default_run) -> None:
+    _check(run, ["docker", "run", "--rm", "-v", f"{src}:/m", HELPER, "touch", f"/m/{MARKER}"], timeout=HELPER_TIMEOUT)
+
+
+def stack_containers(run: Run = default_run) -> dict[str, dict]:
+    """{compose service: {id, running, started, health, network}} for every container of the stack."""
+    ids = _check(run, ["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={PROJECT}"]).stdout.split()
+    if not ids:
+        return {}
+    found = {}
+    for c in json.loads(_check(run, ["docker", "inspect", *ids]).stdout):
+        state = c.get("State") or {}
+        found[c["Config"]["Labels"]["com.docker.compose.service"]] = {
+            "id": c["Id"], "running": bool(state.get("Running")), "started": state.get("StartedAt", ""),
+            "health": (state.get("Health") or {}).get("Status", ""), "network": c["HostConfig"]["NetworkMode"]}
+    return found
+
+
+def sees_marker(state_dir: str, svc: str, run: Run = default_run) -> bool:
+    """False when a running app lost the disk: a container keeps its old view of a mount that came back."""
+    return run(["docker", "compose", "-p", PROJECT, "-f", f"{state_dir}/compose.json", "exec", "-T", svc,
+                "test", "-e", f"/data/{MARKER}"], timeout=PROBE_TIMEOUT).returncode == 0
 
 
 def wipe_dir(path: str, home: str, platform: str, run: Run = default_run) -> None:
