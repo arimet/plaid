@@ -279,7 +279,7 @@ def print_apps(term, lang: str, host: str) -> None:
 
 def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     """What the web panel does, in the terminal: for machines without a screen or a browser."""
-    from installer.web import human_size
+    from installer.web import guard_notes, human_size
     lang, host = s.lang, env.get("HOST_ADDR", "localhost")
     size = lambda: human_size(flow.media_size(s), lang)
     code, notes = 0, []
@@ -290,11 +290,22 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
             if not complete:  # a failed install: removal is the only thing to do
                 term.page(t(lang, "progress_failed"), t(lang, "err_unexpected"))
                 code, notes = _remove_steps(term, flow, lang, s.data_dir, size())
+            flash = ""
             while complete:
                 term.page(t(lang, "panel_title"), intro=t(lang, "subtitle"))
-                choice = term.select(t(lang, "menu_title"), actions, hint=t(lang, "cli_select_hint"))
+                if flash:
+                    term.note(flash, "ok")
+                    flash = ""
+                status = flow.guard_status()
+                for title, text, _ in guard_notes(lang, s, status):
+                    term.note(f"{title}{' ' if title.endswith('?') else '. '}{text}", "warn")
+                confirm = [("confirm_disk", t(lang, "guard_disk_confirm"))] if status.get("disk") == "unconfirmed" else []
+                choice = term.select(t(lang, "menu_title"), confirm + actions, hint=t(lang, "cli_select_hint"))
                 if choice == "quit":
                     break
+                if choice == "confirm_disk":
+                    flow.confirm_disk(s)
+                    flash = t(lang, "guard_disk_confirmed")
                 if choice == "apps":
                     term.page(t(lang, "menu_apps"), t(lang, "apps_open_anywhere"))
                     print_apps(term, lang, host)

@@ -181,6 +181,12 @@ def installed_flow():
     flow.add_tracker = flow.added.append
     flow.uninstall_status = lambda: ("done", "")
     flow.media_size = lambda s: 0
+    flow.status, flow.confirmed = {"disk": "ok", "vpn": "off"}, False
+    flow.guard_status = lambda: flow.status
+
+    def confirm_disk(s):
+        flow.confirmed, flow.status = True, dict(flow.status, disk="ok")
+    flow.confirm_disk = confirm_disk
     return flow
 
 
@@ -214,3 +220,22 @@ class PanelCliTest(TuiCliTest):
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings, complete=False), 0)
         self.assertIs(flow.removed, False)
         self.assertIn("L’installation s’est arrêtée", out.getvalue())
+
+
+class GuardCliTest(TuiCliTest):
+    def test_menu_shows_missing_disk(self):
+        flow = installed_flow()
+        flow.status = {"disk": "missing", "vpn": "down"}
+        t, out = self.term("\x1b[A\r")  # quit
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertIn("Disque des médias introuvable. Plaid l’attend ici : /home/zoe/Plaid.", out.getvalue())
+        self.assertIn("VPN déconnecté.", out.getvalue())
+        self.assertFalse(flow.confirmed)
+
+    def test_menu_confirms_disk(self):
+        flow = installed_flow()
+        flow.status = {"disk": "unconfirmed", "vpn": "off"}
+        t, out = self.term("\r", "\x1b[A\r")  # the first action confirms · then quit
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertTrue(flow.confirmed)
+        self.assertIn("C’est noté.", out.getvalue())
