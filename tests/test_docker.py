@@ -158,7 +158,7 @@ class GuardProbeTest(unittest.TestCase):
     def test_write_marker(self):
         run = FakeRun()
         docker.write_marker("/srv/arr", run=run)
-        self.assertIn("/srv/arr:/m", run.calls[0])
+        self.assertIn("type=bind,src=/srv/arr,dst=/m", run.calls[0])  # --mount: a missing folder is an error, not created
         self.assertEqual(run.calls[0][-2:], ["touch", "/m/.plaid"])
 
     def test_ensure_data_dirs_writes_marker(self):

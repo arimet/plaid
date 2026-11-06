@@ -222,10 +222,18 @@ def save_guard_status(status: dict, state_dir: str = STATE_DIR) -> None:
     os.replace(path + ".tmp", path)  # the panel and the terminal never read half a file
 
 
-def confirm_disk(s: Settings, dk=docker, state_dir: str = STATE_DIR) -> None:
-    """The user says this folder holds their media: mark it, the guard starts the apps on its next round."""
-    dk.write_marker(dk.host_path(s.data_dir, s.platform))
+def confirm_disk(s: Settings, dk=docker, state_dir: str = STATE_DIR) -> bool:
+    """The user says this folder holds their media: mark it, the guard starts the apps on its next round.
+    False when the folder is no longer what the question was about (disk unplugged meanwhile) or cannot be written."""
+    src = dk.host_path(s.data_dir, s.platform)
+    if dk.marker_state(src) != "unconfirmed":
+        return False
+    try:
+        dk.write_marker(src)
+    except DockerError:
+        return False
     save_guard_status({**guard_status(state_dir), "disk": "ok"}, state_dir)
+    return True
 
 
 def pack_state(state_dir: str = STATE_DIR) -> str:

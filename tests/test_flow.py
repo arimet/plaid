@@ -54,6 +54,9 @@ class FakeDocker:
     def write_marker(self, src):
         self.calls.append(("marker", src))
 
+    def marker_state(self, src):
+        return getattr(self, "disk", "unconfirmed")
+
     def compose(self, state_dir, *args):
         self.calls.append(("compose",) + args)
         if args[:1] == ("up",) and self.up_error:
@@ -319,6 +322,27 @@ class GuardStatusTest(unittest.TestCase):
         dk = FakeDocker()
         with tempfile.TemporaryDirectory() as d:
             flow.save_guard_status({"disk": "unconfirmed", "vpn": "ok"}, d)
-            flow.confirm_disk(settings(), dk=dk, state_dir=d)
+            self.assertTrue(flow.confirm_disk(settings(), dk=dk, state_dir=d))
             self.assertIn(("marker", "/srv/arr"), dk.calls)
             self.assertEqual(flow.guard_status(d), {"disk": "ok", "vpn": "ok"})
+
+
+class ConfirmDiskSafetyTest(unittest.TestCase):
+    def test_confirm_refuses_when_disk_is_gone(self):
+        # The question was on screen, then the disk was unplugged: marking the empty mount point would
+        # start the apps on the system disk.
+        for disk in ("missing", "unknown", "ok"):
+            dk = FakeDocker(disk=disk)
+            with tempfile.TemporaryDirectory() as d:
+                flow.save_guard_status({"disk": "unconfirmed", "vpn": "off"}, d)
+                self.assertFalse(flow.confirm_disk(settings(), dk=dk, state_dir=d))
+                self.assertNotIn(("marker", "/srv/arr"), dk.calls)
+                self.assertEqual(flow.guard_status(d)["disk"], "unconfirmed")
+
+    def test_confirm_reports_a_failed_write(self):
+        dk = FakeDocker()
+        def fail(src):
+            raise DockerError("Read-only file system")
+        dk.write_marker = fail
+        with tempfile.TemporaryDirectory() as d:
+            self.assertFalse(flow.confirm_disk(settings(), dk=dk, state_dir=d))

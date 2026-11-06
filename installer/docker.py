@@ -90,7 +90,9 @@ def marker_state(src: str, run: Run = default_run) -> str:
 
 
 def write_marker(src: str, run: Run = default_run) -> None:
-    _check(run, ["docker", "run", "--rm", "-v", f"{src}:/m", HELPER, "touch", f"/m/{MARKER}"], timeout=HELPER_TIMEOUT)
+    # --mount, not -v: if the disk went away meanwhile, fail instead of creating an empty folder to mark.
+    _check(run, ["docker", "run", "--rm", "--mount", f"type=bind,src={src},dst=/m", HELPER, "touch", f"/m/{MARKER}"],
+           timeout=HELPER_TIMEOUT)
 
 
 def stack_containers(run: Run = default_run) -> dict[str, dict]:

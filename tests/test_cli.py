@@ -186,6 +186,7 @@ def installed_flow():
 
     def confirm_disk(s):
         flow.confirmed, flow.status = True, dict(flow.status, disk="ok")
+        return True
     flow.confirm_disk = confirm_disk
     return flow
 

@@ -303,8 +303,7 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                 choice = term.select(t(lang, "menu_title"), confirm + actions, hint=t(lang, "cli_select_hint"))
                 if choice == "quit":
                     break
-                if choice == "confirm_disk":
-                    flow.confirm_disk(s)
+                if choice == "confirm_disk" and flow.confirm_disk(s):  # False: the menu shows the fresh state again
                     flash = t(lang, "guard_disk_confirmed")
                 if choice == "apps":
                     term.page(t(lang, "menu_apps"), t(lang, "apps_open_anywhere"))
