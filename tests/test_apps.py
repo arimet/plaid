@@ -35,15 +35,18 @@ if __name__ == "__main__":
 
 
 class DefaultIndexerTest(unittest.TestCase):
-    def test_saved_without_live_search(self):
+    def test_saved_disabled_then_bulk_enabled(self):
         calls = []
 
         def prowlarr(method, path, body=None):
-            calls.append((method, path))
+            calls.append((method, path, body))
             if path == "/indexer":
-                return []
+                return [] if method == "GET" else {"id": 7}
             if path == "/indexer/schema":
                 return [{"definitionName": "internetarchive", "name": "x", "fields": []}]
         apps.add_default_indexer(prowlarr)
-        # archive.org can take minutes to answer Prowlarr's save-time test search
-        self.assertEqual(calls[-1], ("POST", "/indexer?forceSave=true"))
+        # Saving an enabled indexer runs a live search that archive.org can take minutes to answer;
+        # a disabled one saves at once, and the bulk edit enables it without testing.
+        post = next(c for c in calls if c[0] == "POST")
+        self.assertEqual((post[1], post[2]["enable"]), ("/indexer", False))
+        self.assertEqual(calls[-1], ("PUT", "/indexer/bulk", {"ids": [7], "enable": True}))

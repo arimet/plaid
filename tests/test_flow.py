@@ -82,7 +82,8 @@ class FlowTest(unittest.TestCase):
 
     def install(self, s, dk, configure=None):
         configure = configure or (lambda *a, **k: {})
-        return flow.install(s, self.events.append, dk=dk, configure=configure, state_dir=self.state, vpn_wait=0)
+        return flow.install(s, self.events.append, dk=dk, configure=configure, state_dir=self.state, vpn_wait=0,
+                            arch="x86_64")
 
     def test_preflight_existing_stack(self):
         self.assertIn("err_stack_exists", flow.preflight(settings(), dk=FakeDocker(stack=True)))
@@ -171,3 +172,14 @@ class FlowTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ArchTest(unittest.TestCase):
+    def test_no_hardware_transcoding_on_arm(self):
+        # A Raspberry Pi exposes /dev/dri, but Jellyfin's VAAPI path only works on Intel/AMD.
+        state, seen = tempfile.mkdtemp(), {}
+        flow.install(settings(), lambda p: None, dk=FakeDocker(), state_dir=state, vpn_wait=0, arch="aarch64",
+                     configure=lambda s, host_of, log, compose_out, has_dri: seen.update(dri=has_dri) or {})
+        self.assertEqual(seen, {"dri": False})
+        with open(os.path.join(state, "compose.json")) as f:
+            self.assertNotIn("devices", json.load(f)["services"]["jellyfin"])

@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import platform
 import re
 import time
 from dataclasses import dataclass
@@ -96,13 +97,15 @@ def _wait_gluetun(dk, state_dir: str, seconds: int) -> bool:
 
 
 def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all, state_dir: str = STATE_DIR,
-            vpn_wait: int = VPN_WAIT) -> dict[str, int] | None:
+            vpn_wait: int = VPN_WAIT, arch: str = platform.machine()) -> dict[str, int] | None:
     """Returns {app: port} once everything is linked, None on failure (the last Progress holds the error)."""
     step = "step_prepare"
     try:
         report(Progress(step))
         src = dk.host_path(s.data_dir, s.platform)
-        has_dri = s.platform in ("linux", "synology") and dk.has_device("/dev/dri")
+        # VAAPI only on Intel/AMD: a Raspberry Pi has /dev/dri too, but Jellyfin cannot transcode with it.
+        has_dri = (s.platform in ("linux", "synology") and arch in ("x86_64", "AMD64")
+                   and dk.has_device("/dev/dri"))
         _write_state(s, state_dir, src, has_dri)
 
         step = "step_folders"

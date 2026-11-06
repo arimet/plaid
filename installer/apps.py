@@ -240,9 +240,11 @@ def add_default_indexer(prowlarr: Arr) -> None:
     if any(i["name"] == "Internet Archive" for i in prowlarr("GET", "/indexer")):
         return
     item = next(t for t in prowlarr("GET", "/indexer/schema") if t.get("definitionName") == "internetarchive")
-    item.update(name="Internet Archive", enable=True, appProfileId=1)
-    # forceSave skips Prowlarr's save-time test search, which archive.org can take minutes to answer.
-    prowlarr("POST", "/indexer?forceSave=true", item)
+    # Saving an enabled indexer runs a live search that archive.org can take minutes to answer (seen on
+    # Docker Desktop, even with forceSave). A disabled one saves at once; the bulk edit enables it untested.
+    item.update(name="Internet Archive", enable=False, appProfileId=1)
+    created = prowlarr("POST", "/indexer", item)
+    prowlarr("PUT", "/indexer/bulk", {"ids": [created["id"]], "enable": True})
 
 
 def configure_prowlarr(prowlarr: Arr, s: Settings, radarr: Arr, sonarr: Arr, log: Log) -> None:
