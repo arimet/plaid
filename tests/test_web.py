@@ -19,6 +19,14 @@ class FakeFlow:
         self.installed = installed
         self.complete = complete
         self.uninstalled = None
+        self.status = {"disk": "ok", "vpn": "off"}
+        self.confirmed = False
+
+    def guard_status(self):
+        return self.status
+
+    def confirm_disk(self, s):
+        self.confirmed = True
 
     def is_complete(self):
         return self.installed is not None and self.complete
@@ -372,3 +380,47 @@ class LanAddressTest(WebTest):
     def test_localhost_without_known_address(self):
         html = self.panel(dict(ENV, HOST_ADDR="localhost"), "localhost:7575")
         self.assertIn('href="http://localhost:8096"', html)
+
+
+class GuardWebTest(WebTest):
+    def open_panel(self, **status):
+        self.flow = FakeFlow(installed=settings())
+        self.flow.status = dict(self.flow.status, **status)
+        self.start(self.flow)
+        form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
+        _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
+        self.cookie = headers["Set-Cookie"].split(";")[0]
+        return self.req("GET", "/", headers={"Cookie": self.cookie})[2]
+
+    def test_panel_warns_when_disk_missing(self):
+        html = self.open_panel(disk="missing")
+        self.assertIn("<b>Disque des médias introuvable</b>", html)
+        self.assertIn("Plaid l’attend ici : /home/zoe/Plaid.", html)
+        self.assertNotIn("/api/confirm-disk", html)
+
+    def test_panel_asks_to_confirm_unconfirmed_disk(self):
+        html = self.open_panel(disk="unconfirmed")
+        self.assertIn("<b>Ce dossier contient-il vos médias ?</b>", html)
+        self.assertIn('action="/api/confirm-disk"', html)
+
+    def test_panel_warns_when_vpn_down(self):
+        self.assertIn("<b>VPN déconnecté</b>", self.open_panel(vpn="down"))
+
+    def test_panel_quiet_when_all_ok(self):
+        for status in ({"disk": "ok", "vpn": "off"}, {"disk": "unknown", "vpn": "ok"}):
+            html = self.open_panel(**status)
+            self.assertNotIn('<div class="note warn"><div><b>', html)  # texts also sit in the page's JSON
+            self.server.shutdown()
+
+    def test_confirm_disk_route(self):
+        self.open_panel(disk="unconfirmed")
+        status, headers, _ = self.req("POST", "/api/confirm-disk", "",
+                                      {"Cookie": self.cookie, "Content-Type": "application/x-www-form-urlencoded"})
+        self.assertEqual((status, headers["Location"]), (303, "/"))
+        self.assertTrue(self.flow.confirmed)
+
+    def test_confirm_disk_needs_login(self):
+        self.open_panel(disk="unconfirmed")
+        status, _, _ = self.req("POST", "/api/confirm-disk", "")
+        self.assertEqual(status, 401)
+        self.assertFalse(self.flow.confirmed)

@@ -40,6 +40,16 @@ T: dict[str, dict[str, str]] = {
         "autostart_hint": "In Docker Desktop › Settings › General, tick “Start Docker Desktop when you sign in”, "
                           "or the apps stop when the computer restarts.",
         "panel_title": "Your stack",
+        "guard_disk_missing": "Media disk not found",
+        "guard_disk_missing_help": "Plaid expects it here: {path}. The apps that use it are stopped and start again "
+                                   "on their own once it is plugged in.",
+        "guard_disk_unconfirmed": "Does this folder hold your media?",
+        "guard_disk_unconfirmed_help": "{path} has files, but not Plaid’s marker. The apps that use it stay stopped "
+                                       "until you confirm.",
+        "guard_disk_confirm": "Yes, it is the right one",
+        "guard_disk_confirmed": "Noted. The apps start again within a minute.",
+        "guard_vpn_down": "VPN disconnected",
+        "guard_vpn_down_help": "Downloads resume once it reconnects.",
         "uninstall_title": "Remove the stack",
         "uninstall_text": "Removes the seven apps, their settings, your password and this assistant.",
         "uninstall_media": "Also delete the folder {path} ({size})",
@@ -195,6 +205,16 @@ T: dict[str, dict[str, str]] = {
         "autostart_hint": "Dans Docker Desktop › Settings › General, cochez « Start Docker Desktop when you sign "
                           "in », sinon les applis s’arrêtent au redémarrage de l’ordinateur.",
         "panel_title": "Votre stack",
+        "guard_disk_missing": "Disque des médias introuvable",
+        "guard_disk_missing_help": "Plaid l’attend ici : {path}. Les applis qui l’utilisent sont arrêtées et "
+                                   "repartiront toutes seules dès qu’il sera branché.",
+        "guard_disk_unconfirmed": "Ce dossier contient-il vos médias ?",
+        "guard_disk_unconfirmed_help": "{path} contient des fichiers, mais pas le repère de Plaid. Les applis qui "
+                                       "l’utilisent restent arrêtées tant que vous n’avez pas confirmé.",
+        "guard_disk_confirm": "Oui, c’est le bon",
+        "guard_disk_confirmed": "C’est noté. Les applis repartent dans moins d’une minute.",
+        "guard_vpn_down": "VPN déconnecté",
+        "guard_vpn_down_help": "Les téléchargements reprendront quand il se reconnectera.",
         "uninstall_title": "Supprimer la stack",
         "uninstall_text": "Retire les sept applis, leurs réglages, votre mot de passe et cet assistant.",
         "uninstall_media": "Supprimer aussi le dossier {path} ({size})",

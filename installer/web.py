@@ -202,7 +202,25 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
     return page(lang, body, cloth="part", p=40 if running else 8, foot=foot)
 
 
-def panel_page(lang: str, s: Settings, host: str, complete: bool = True) -> str:
+def guard_notes(lang: str, s: Settings, status: dict) -> list[tuple[str, str, bool]]:
+    """(title, help, show the confirm button) for each alert the guard raised, the disk first."""
+    notes = []
+    if status.get("disk") in ("missing", "unconfirmed"):
+        key = "guard_disk_" + status["disk"]
+        notes.append((t(lang, key), t(lang, key + "_help", path=s.data_dir), status["disk"] == "unconfirmed"))
+    if status.get("vpn") == "down":
+        notes.append((t(lang, "guard_vpn_down"), t(lang, "guard_vpn_down_help"), False))
+    return notes
+
+
+def guard_html(lang: str, s: Settings, status: dict) -> str:
+    button = (f'<form method="post" action="/api/confirm-disk"><button class="btn" type="submit">'
+              f'{E(t(lang, "guard_disk_confirm"))}</button></form>')
+    return "".join(f'<div class="note warn"><div><b>{E(title)}</b> {E(text)}{button if confirm else ""}</div></div>'
+                   for title, text, confirm in guard_notes(lang, s, status))
+
+
+def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status: dict | None = None) -> str:
     def app_link(svc: str, daily: bool) -> str:
         return (f'<a class="app{" daily" if daily else ""}" href="http://{E(host)}:{PORTS[svc]}" target="_blank" '
                 f'rel="noopener"><span class="ic" style="--c:{APP_COLORS[svc]}"><img src="/static/icons/{svc}.svg" '
@@ -224,6 +242,7 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True) -> str:
     autostart = (f'<p class="note warn">{E(t(lang, "autostart_hint"))}</p>'
                  if s.platform in ("mac", "windows") else "")
     body = f"""<h1>{E(t(lang, "done_title"))}</h1>
+  {guard_html(lang, s, status or {})}
   <p class="lead">{E(t(lang, "done_lead"))} {t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
   {apps}
   {autostart}"""
@@ -386,7 +405,7 @@ def make_handler(state: State):
             if host in ("localhost", "127.0.0.1", "[::1]") and state.env.get("HOST_ADDR", "localhost") != "localhost":
                 # Opened on the machine itself: the LAN address works here too, and from the TV or the phone.
                 host = state.env["HOST_ADDR"]
-            return self.send(200, panel_page(lang, s, host, state.flow.is_complete()))
+            return self.send(200, panel_page(lang, s, host, state.flow.is_complete(), state.flow.guard_status()))
 
         def do_POST(self):
             path = urllib.parse.urlparse(self.path).path
@@ -432,6 +451,11 @@ def make_handler(state: State):
                 except Exception as e:
                     return self.json(503, {"error": t(lang, "trackers_error"), "detail": str(e)})
                 return self.json(200, {"text": t(lang, "tracker_added")})
+            if path == "/api/confirm-disk":
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                state.flow.confirm_disk(s)
+                return self.send(303, "", headers={"Location": "/"})
             if path == "/api/uninstall":
                 if self.locked() or s is None:
                     return self.json(401, {})
