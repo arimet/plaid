@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import re
+import threading
 import time
 from dataclasses import dataclass
 from typing import Callable
@@ -122,28 +123,49 @@ def _wait_gluetun(dk, state_dir: str, seconds: int) -> bool:
         time.sleep(3)
 
 
+class Cancelled(Exception):
+    pass
+
+
+def created_folder(state_dir: str = STATE_DIR) -> bool:
+    """True when the install made the media folder itself, so undoing the install may delete it."""
+    return os.path.exists(os.path.join(state_dir, "created_folder"))
+
+
 def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all, state_dir: str = STATE_DIR,
-            vpn_wait: int = VPN_WAIT, arch: str = platform.machine()) -> dict[str, int] | None:
-    """Returns {app: port} once everything is linked, None on failure (the last Progress holds the error)."""
+            vpn_wait: int = VPN_WAIT, arch: str = platform.machine(),
+            cancel: threading.Event | None = None) -> dict[str, int] | None:
+    """Returns {app: port} once everything is linked, None on failure (the last Progress holds the error).
+    Setting `cancel` stops it at the next step; rollback() then undoes what was done."""
     step = "step_prepare"
+
+    def checkpoint(name: str) -> str:
+        if cancel is not None and cancel.is_set():
+            raise Cancelled
+        report(Progress(name))
+        return name
+
     try:
-        report(Progress(step))
+        step = checkpoint(step)
         src = dk.host_path(s.data_dir, s.platform)
         # VAAPI only on Intel/AMD: a Raspberry Pi has /dev/dri too, but Jellyfin cannot transcode with it.
         has_dri = (s.platform in ("linux", "synology") and arch in ("x86_64", "AMD64")
                    and dk.has_device("/dev/dri"))
         _write_state(s, state_dir, src, has_dri)
 
-        step = "step_folders"
-        report(Progress(step))
+        step = checkpoint("step_folders")
+        try:
+            was_empty = dk.dir_state(src)[0]
+        except DockerError:
+            was_empty = False  # unknown: never delete it on rollback
+        if was_empty:
+            open(os.path.join(state_dir, "created_folder"), "w").close()
         dk.ensure_data_dirs(src, s.puid, s.pgid)
 
-        step = "step_download"
-        report(Progress(step))
+        step = checkpoint("step_download")
         dk.compose(state_dir, "pull")
 
-        step = "step_start"
-        report(Progress(step))
+        step = checkpoint("step_start")
         try:
             dk.compose(state_dir, "up", "-d")
         except DockerError as e:
@@ -156,14 +178,12 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
         dk.connect_network(dk.self_container_id())
 
         if s.vpn_provider:
-            step = "step_vpn"
-            report(Progress(step))
+            step = checkpoint("step_vpn")
             if not _wait_gluetun(dk, state_dir, vpn_wait):
                 report(Progress(step, error="err_vpn_failed"))
                 return None
 
-        step = "step_configure"
-        report(Progress(step))
+        step = checkpoint("step_configure")
 
         def host_of(svc: str) -> str:
             name = "gluetun" if svc == "qbittorrent" and s.vpn_provider else svc
@@ -174,6 +194,9 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
         open(os.path.join(state_dir, "complete"), "w").close()
         report(Progress("step_done", done=True))
         return dict(PORTS)
+    except Cancelled:
+        report(Progress(step, error="err_cancelled"))
+        return None
     except Exception as e:  # shown to the user with its detail; the stack stays removable
         report(Progress(step, error="err_unexpected", detail=str(e)))
         return None
@@ -195,6 +218,11 @@ def uninstall(remove_media: bool, report: Report, dk=docker, state_dir: str = ST
     report(Progress("step_uninstall"))
     args = ["--uninstall-worker"] + (["--remove-media"] if remove_media else [])
     dk.run_detached(dk.own_image(), args, {"ARR_STATE": pack_state(state_dir)}, WORKER_NAME)
+
+
+def rollback(report: Report, dk=docker, state_dir: str = STATE_DIR) -> None:
+    """Undoes an interrupted install: everything goes, the media folder too if the install made it."""
+    uninstall(created_folder(state_dir), report, dk=dk, state_dir=state_dir)
 
 
 def uninstall_status(dk=docker) -> tuple[str, str]:

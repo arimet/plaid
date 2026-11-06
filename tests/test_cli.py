@@ -16,7 +16,7 @@ class FakeFlow:
     def preflight(self, s):
         return self.found
 
-    def install(self, s, report):
+    def install(self, s, report, cancel=None):
         self.got = s
         report(Progress("step_prepare"))
         report(Progress("step_done", done=True))
@@ -121,3 +121,35 @@ class FolderWarningCliTest(TuiCliTest):
         flow, out = FakeFlow(found=["warn_dir_not_empty"]), []
         cli.run_install(scripted("", "zoe", "longenough", "longenough", "0", "", "", ""), out.append, flow, ENV, "fr")
         self.assertTrue(any("/home/zoe/Plaid contient" in line for line in out))
+
+
+class RollbackCliTest(TuiCliTest):
+    def test_undo_stops_the_install_then_removes_everything(self):
+        import threading
+        flow = FakeFlow()
+        flow.rolled_back = False
+        flow.rollback = lambda report: setattr(flow, "rolled_back", True)
+        flow.uninstall_status = lambda: ("done", "")
+        cancel = threading.Event()
+        worker = threading.Thread(target=cancel.wait, daemon=True)  # an install that stops once cancelled
+        worker.start()
+        t, out = self.term()
+        self.assertEqual(cli.undo_install(t, flow, "fr", cancel, worker), 1)
+        self.assertTrue(cancel.is_set())
+        self.assertTrue(flow.rolled_back)
+        self.assertIn("la machine est comme avant", out.getvalue())
+
+
+class PlainRollbackTest(unittest.TestCase):
+    def test_ctrl_c_in_plain_mode_rolls_back(self):
+        flow, out = FakeFlow(), []
+        flow.rolled_back = False
+
+        def interrupted(s, report, cancel=None):
+            raise KeyboardInterrupt
+        flow.install = interrupted
+        flow.rollback = lambda report: setattr(flow, "rolled_back", True)
+        code = cli.run_install(scripted("", "zoe", "longenough", "longenough", "0", "", "", "o"), out.append, flow,
+                               ENV, "fr")
+        self.assertEqual(code, 1)
+        self.assertTrue(flow.rolled_back)

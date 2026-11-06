@@ -29,7 +29,7 @@ class FakeFlow:
     def preflight(self, s):
         return ["warn_no_vpn"]
 
-    def install(self, s, report):
+    def install(self, s, report, cancel=None):
         report(Progress("step_prepare"))
         self.installed = s
         report(Progress("step_done", done=True))

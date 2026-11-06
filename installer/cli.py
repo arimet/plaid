@@ -68,7 +68,13 @@ def run_install(inp: Ask, out: Out, flow, env: dict, lang: str, secret: Ask | No
         out(("✗ " if p.error else "· ") + t(lang, p.error or p.step))
         if p.detail:
             out(p.detail)
-    flow.install(s, report)
+    try:
+        flow.install(s, report)
+    except KeyboardInterrupt:  # Ctrl-C mid-install: leave the machine as it was
+        out(t(lang, "cli_rollback"))
+        flow.rollback(lambda p: None)
+        out(t(lang, "cli_rollback_done"))
+        return 1
     if not last or not last[-1].done:
         return 1
     host = env.get("HOST_ADDR", "localhost")
@@ -181,13 +187,19 @@ def run_install_tui(term, flow, env: dict, lang: str) -> int:
     term.note(t(lang, "progress_help"))
     steps = Steps(term, _steps_labels(lang, bool(s.vpn_provider)))
     events: queue.Queue = queue.Queue()
-    threading.Thread(target=flow.install, args=(s, events.put), daemon=True).start()
+    cancel = threading.Event()
+    worker = threading.Thread(target=flow.install, args=(s, events.put), kwargs={"cancel": cancel}, daemon=True)
+    worker.start()
     while True:
         try:
             p = events.get(timeout=0.12)
         except queue.Empty:
             steps.render()
             continue
+        except KeyboardInterrupt:  # Ctrl-C mid-install: leave the machine as it was
+            term._settle()
+            term.line()
+            return undo_install(term, flow, lang, cancel, worker)
         if p.step.startswith("step_app:"):
             steps.subs.append(t(lang, p.step))
         else:
@@ -269,5 +281,40 @@ def run_uninstall_tui(term, flow, lang: str, path: str = "", size: str = "") -> 
             steps.finish()
             term.note(t(lang, "uninstall_done"), "ok")
             return 0
+        steps.render()
+        time.sleep(0.12)
+
+
+def undo_install(term, flow, lang: str, cancel, worker) -> int:
+    """Stops the install at its next step, then removes everything it created (the media folder only
+    if the install made it). Returns 1: the install did not happen."""
+    import time
+
+    from installer.tui import Steps
+    cancel.set()
+    term.note(t(lang, "cli_rollback"), "warn")
+    steps = Steps(term, [("undo", t(lang, "cli_uninstall_wait"))])
+    while worker.is_alive():  # the current step ends (Ctrl-C also stopped its docker command)
+        steps.render()
+        worker.join(0.12)
+    while True:
+        try:
+            flow.rollback(lambda p: None)
+            break
+        except KeyboardInterrupt:
+            continue  # a second Ctrl-C must not leave half an install behind
+    while True:
+        state, detail = flow.uninstall_status()
+        if state == "failed":
+            steps.failed = True
+            steps.render()
+            term._settle()
+            term.note(t(lang, "err_uninstall_failed"), "error")
+            term.line("    " + term.style(detail, dim=True))
+            return 1
+        if state in ("done", "idle"):
+            steps.finish()
+            term.note(t(lang, "cli_rollback_done"), "ok")
+            return 1
         steps.render()
         time.sleep(0.12)

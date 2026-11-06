@@ -22,7 +22,7 @@ class DemoFlow:
     def preflight(self, s):
         return [] if s.vpn_provider else ["warn_no_vpn"]  # the demo has no real folder to look at
 
-    def install(self, s, report):
+    def install(self, s, report, cancel=None):
         self.settings = s
         steps = ["step_prepare", "step_folders", "step_download", "step_start"] + (["step_vpn"] if s.vpn_provider else [])
         for step in steps + ["step_configure"]:

@@ -257,3 +257,43 @@ class ReattachTest(unittest.TestCase):
         dk = FakeDocker()
         flow.reattach(dk=dk, state_dir=tempfile.mkdtemp())
         self.assertEqual(dk.calls, [])
+
+
+class CancelTest(unittest.TestCase):
+    # Ctrl-C during an install must leave the machine as it was.
+    def setUp(self):
+        import threading
+        self.state, self.events, self.cancel = tempfile.mkdtemp(), [], threading.Event()
+
+    def run_install(self, dk):
+        return flow.install(settings(), self.events.append, dk=dk, state_dir=self.state, vpn_wait=0, arch="x86_64",
+                            configure=lambda *a, **k: {}, cancel=self.cancel)
+
+    def test_stops_at_the_next_step(self):
+        dk = FakeDocker()
+        dk.ensure_data_dirs = lambda *a: self.cancel.set()  # Ctrl-C while the folders are being made
+        self.assertIsNone(self.run_install(dk))
+        self.assertEqual(self.events[-1].error, "err_cancelled")
+        self.assertFalse([c for c in dk.calls if c[0] == "compose"])
+
+    def test_remembers_a_folder_it_created(self):
+        self.run_install(FakeDocker(dir=(True, 0)))
+        self.assertTrue(flow.created_folder(self.state))
+
+    def test_keeps_a_folder_that_held_files(self):
+        self.run_install(FakeDocker(dir=(False, 10)))
+        self.assertFalse(flow.created_folder(self.state))
+
+    def test_rollback_deletes_only_a_folder_it_created(self):
+        self.run_install(FakeDocker(dir=(True, 0)))
+        seen = {}
+        dk = FakeDocker()
+        flow.rollback(lambda p: None, dk=dk, state_dir=self.state)
+        kind, image, args, env, name = dk.calls[-1]
+        self.assertIn("--remove-media", args)
+        other = tempfile.mkdtemp()
+        flow.install(settings(), lambda p: None, dk=FakeDocker(dir=(False, 10)), state_dir=other, vpn_wait=0,
+                     arch="x86_64", configure=lambda *a, **k: {})
+        dk = FakeDocker()
+        flow.rollback(lambda p: None, dk=dk, state_dir=other)
+        self.assertNotIn("--remove-media", dk.calls[-1][2])
