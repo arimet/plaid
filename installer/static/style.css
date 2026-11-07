@@ -312,3 +312,17 @@ fieldset.field legend{padding:0;margin-bottom:8px}
   body.wide .pcard{padding:22px 24px;border-radius:var(--r-lg);box-shadow:var(--inset);display:flex;flex-direction:column;gap:14px}
   body.wide .pcard .maint,body.wide .pcard.disk{margin-top:0}
 }
+
+/* the VPN's state, always at the top of the panel: one look says whether downloads are covered */
+.vpn{display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--r-lg);box-shadow:var(--inset);
+  font-size:14px;color:var(--text-2)}
+.vpn i{flex:none;width:12px;height:12px;margin-top:4px;border-radius:50%;background:var(--muted)}
+.vpn b{font:800 16px/1.3 Nunito,Inter,sans-serif;color:var(--text)}
+.vpn .vpn-name{font-weight:600;color:var(--text)}
+.vpn[data-vpn="ok"] i{background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.vpn[data-vpn="ok"] b{color:var(--accent-text)}
+.vpn[data-vpn="down"]{background:color-mix(in srgb,var(--danger) 7%,var(--surface));
+  box-shadow:var(--inset),0 0 0 1.5px color-mix(in srgb,var(--danger) 40%,transparent)}
+.vpn[data-vpn="down"] i{background:var(--danger)}
+.vpn[data-vpn="down"] b{color:var(--danger-text)}
+.vpn[data-vpn="off"] i{background:var(--warn)}

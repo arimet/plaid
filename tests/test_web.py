@@ -451,9 +451,6 @@ class GuardWebTest(WebTest):
         html = self.open_panel(vpn="down")  # downloads wait, but every app runs
         self.assertIn("<h1>Tout est prêt</h1>", html)
 
-    def test_panel_warns_when_vpn_down(self):
-        self.assertIn("<b>VPN déconnecté</b>", self.open_panel(vpn="down"))
-
     def test_panel_quiet_when_all_ok(self):
         for status in ({"disk": "ok", "vpn": "off"}, {"disk": "unknown", "vpn": "ok"}):
             html = self.open_panel(**status)
@@ -932,3 +929,30 @@ class BackupWebTest(unittest.TestCase):
         self.assertIn('id="backup_dir"', page)
         self.assertIn('data-for="backup_dir"', page)
         self.assertIn("/home/zoe/Plaid/backups", page)  # the default, as a placeholder
+
+
+class VpnBadgeTest(unittest.TestCase):
+    def panel(self, provider, vpn):
+        s = Settings(home="/home/zoe", platform="linux", **dict(FORM, lang="fr", vpn_provider=provider,
+                                                                 vpn_fields={"WIREGUARD_PRIVATE_KEY": "k"} if provider else {}))
+        return web.panel_page("fr", s, "192.168.1.20", True, {"disk": "ok", "vpn": vpn})
+
+    def test_on(self):
+        html = self.panel("protonvpn", "ok")
+        self.assertIn('data-vpn="ok"', html)
+        self.assertIn("<b>VPN actif</b>", html)
+        self.assertIn("Proton VPN", html)
+
+    def test_down_is_said_once(self):
+        html = self.panel("protonvpn", "down")
+        self.assertIn('data-vpn="down"', html)
+        self.assertEqual(html.count("<b>VPN déconnecté</b>"), 1)  # the badge, not also an alert
+
+    def test_none(self):
+        html = self.panel(None, "off")
+        self.assertIn('data-vpn="off"', html)
+        self.assertIn("<b>Pas de VPN</b>", html)
+        self.assertIn('href="/settings"', html)
+
+    def test_not_looked_yet(self):
+        self.assertIn('data-vpn="checking"', self.panel("protonvpn", "off"))  # the guard's default before its first round

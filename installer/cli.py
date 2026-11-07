@@ -331,7 +331,7 @@ def print_apps(term, lang: str, host: str, states: dict | None = None) -> None:
 
 def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     """What the web panel does, in the terminal: for machines without a screen or a browser."""
-    from installer.web import guard_notes, human_size
+    from installer.web import guard_notes, human_size, vpn_state, vpn_texts
     lang, host = s.lang, env.get("HOST_ADDR", "localhost")
     size = lambda: human_size(flow.media_size(s), lang)
     code, notes = 0, []
@@ -352,7 +352,11 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     term.note(flash, "ok")
                     flash = ""
                 status = flow.guard_status()
-                for title, text, _ in guard_notes(lang, s, status):
+                state = vpn_state(s, status)
+                title, text = vpn_texts(lang, s, state)
+                name = f" · {PROVIDERS[s.vpn_provider].label}" if s.vpn_provider in PROVIDERS else ""
+                term.note(f"{title}{name}. {text}", {"ok": "ok", "down": "error", "off": "warn"}.get(state, "info"))
+                for title, text, _ in guard_notes(lang, s, status, vpn=False):
                     term.note(f"{title}{' ' if title.endswith('?') else '. '}{text}", "warn")
                 confirm = [("confirm_disk", t(lang, "guard_disk_confirm"))] if status.get("disk") == "unconfirmed" else []
                 choice = term.select(t(lang, "menu_title"), confirm + actions, hint=t(lang, "cli_select_hint"))

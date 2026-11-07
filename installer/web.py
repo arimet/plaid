@@ -281,13 +281,42 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
     return page(lang, body, cloth="part", p=40 if running else 8, foot=foot, wide=True)
 
 
-def guard_notes(lang: str, s: Settings, status: dict) -> list[tuple[str, str, bool]]:
-    """(title, help, show the confirm button) for each alert the guard raised, the disk first."""
+def vpn_state(s: Settings, status: dict) -> str:
+    """"ok", "down", "checking" (a VPN, the guard has not looked yet) or "off" (none)."""
+    if not s.vpn_provider:
+        return "off"
+    return status.get("vpn") if status.get("vpn") in ("ok", "down") else "checking"
+
+
+def vpn_texts(lang: str, s: Settings, state: str) -> tuple[str, str]:
+    """(title, help) of the VPN's state, for the panel's badge and the terminal's menu."""
+    provider = PROVIDERS[s.vpn_provider].label if s.vpn_provider in PROVIDERS else ""
+    return {"ok": (t(lang, "vpn_on"), t(lang, "vpn_on_help", provider=provider)),
+            "down": (t(lang, "guard_vpn_down"), t(lang, "guard_vpn_down_help")),
+            "checking": (t(lang, "vpn_checking"), t(lang, "vpn_checking_help")),
+            "off": (t(lang, "vpn_none"), t(lang, "warn_no_vpn"))}[state]
+
+
+def vpn_html(lang: str, s: Settings, status: dict) -> str:
+    """Whether downloads go through a VPN, at the top of the panel, always: refreshed with the app states."""
+    state = vpn_state(s, status)
+    title, text = vpn_texts(lang, s, state)
+    provider = PROVIDERS[s.vpn_provider].label if s.vpn_provider in PROVIDERS else ""
+    name = f' · {E(provider)}' if provider else ""
+    add = f' <a href="/settings">{E(t(lang, "vpn_add"))}</a>' if state == "off" else ""
+    return (f'<div class="vpn" data-vpn="{state}" data-provider="{E(provider)}" role="status"><i></i><div>'
+            f'<b>{E(title)}</b><span class="vpn-name">{name}</span><br><span class="vpn-help">{E(text)}</span>{add}'
+            f'</div></div>')
+
+
+def guard_notes(lang: str, s: Settings, status: dict, vpn: bool = True) -> list[tuple[str, str, bool]]:
+    """(title, help, show the confirm button) for each alert the guard raised, the disk first. `vpn=False`: the
+    page shows the VPN's state on its own."""
     notes = []
     if status.get("disk") in ("missing", "unconfirmed"):
         key = "guard_disk_" + status["disk"]
         notes.append((t(lang, key), t(lang, key + "_help", path=s.data_dir), status["disk"] == "unconfirmed"))
-    if status.get("vpn") == "down":
+    if vpn and status.get("vpn") == "down":
         notes.append((t(lang, "guard_vpn_down"), t(lang, "guard_vpn_down_help"), False))
     return notes
 
@@ -296,7 +325,7 @@ def guard_html(lang: str, s: Settings, status: dict) -> str:
     button = (f'<form method="post" action="/api/confirm-disk"><button class="btn" type="submit">'
               f'{E(t(lang, "guard_disk_confirm"))}</button></form>')
     return "".join(f'<div class="note alert"><div><b>{E(title)}</b><br>{E(text)}{button if confirm else ""}</div></div>'
-                   for title, text, confirm in guard_notes(lang, s, status))
+                   for title, text, confirm in guard_notes(lang, s, status, vpn=False))
 
 
 FULL_DISK = 20 * 10 ** 9  # under this, downloads soon stop
@@ -414,6 +443,7 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
     stopped = (status or {}).get("disk") in ("missing", "unconfirmed")
     title, lead = ("panel_title", "") if stopped else ("done_title", E(t(lang, "done_lead")) + " ")
     body = f"""<h1>{E(t(lang, title))}</h1>
+  {vpn_html(lang, s, status or {})}
   {guard_html(lang, s, status or {})}
   <p class="lead">{lead}{t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
   {apps}

@@ -241,7 +241,6 @@ class GuardCliTest(TuiCliTest):
         t, out = self.term("\x1b[A\r")  # quit
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIn("Disque des médias introuvable. Plaid l’attend ici : /home/zoe/Plaid.", out.getvalue())
-        self.assertIn("VPN déconnecté.", out.getvalue())
         self.assertFalse(flow.confirmed)
 
     def test_menu_confirms_disk(self):
@@ -487,3 +486,29 @@ class BackupCliTest(TuiCliTest):
         t, out = self.term("\x1b[B" * 7 + "\r", "\r", "\x1b[D\r", "\r", "\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIn("restored", out.getvalue())
+
+
+class VpnLineCliTest(TuiCliTest):
+    def test_menu_says_the_vpn_state(self):
+        from dataclasses import replace
+        flow = installed_flow()
+        flow.settings = replace(flow.settings, vpn_provider="protonvpn", vpn_fields={"WIREGUARD_PRIVATE_KEY": "k"})
+        flow.status = {"disk": "ok", "vpn": "ok"}
+        t, out = self.term("\x1b[A\r")
+        cli.run_panel_tui(t, flow, ENV, flow.settings)
+        self.assertIn("VPN actif · Proton VPN", out.getvalue())
+
+    def test_menu_says_it_dropped(self):
+        from dataclasses import replace
+        flow = installed_flow()
+        flow.settings = replace(flow.settings, vpn_provider="protonvpn", vpn_fields={"WIREGUARD_PRIVATE_KEY": "k"})
+        flow.status = {"disk": "ok", "vpn": "down"}
+        t, out = self.term("\x1b[A\r")
+        cli.run_panel_tui(t, flow, ENV, flow.settings)
+        self.assertIn("VPN déconnecté · Proton VPN.", out.getvalue())
+
+    def test_menu_says_there_is_none(self):
+        flow = installed_flow()
+        t, out = self.term("\x1b[A\r")
+        cli.run_panel_tui(t, flow, ENV, flow.settings)
+        self.assertIn("Pas de VPN", out.getvalue())
