@@ -667,8 +667,9 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
             extra += f'<p class="hint">{E(t(lang, "settings_other_version"))}</p>'
     else:
         error = last.get("error") or ""
-        title = t(lang, error if kind in ("backup", "restore") and error.startswith("err_") else
-                  "err_update_failed" if updating else "err_apply_failed")
+        # A crashed worker gets the settings' generic error: a backup or a restore says its own.
+        own = kind in ("backup", "restore") and error.startswith("err_") and error != "err_apply_failed"
+        title = t(lang, error if own else f"err_{kind}_failed" if kind else "err_apply_failed")
         head = ""
         extra = f'<pre class="detail">{E(last.get("detail") or "")}</pre>'
     body = f'<h1>{E(title)}</h1><ul class="steps">{steps}</ul>{extra}'
@@ -939,7 +940,7 @@ def make_handler(state: State):
                     return self.json(401, {})
                 name = str(data.get("name", ""))
                 if path == "/api/restore" and name not in [b["name"] for b in state.flow.list_backups(s)]:
-                    return self.json(404, {})
+                    return self.send(303, "", headers={"Location": "/backups"})  # gone meanwhile: the list again
                 try:
                     state.flow.start_backup() if path == "/api/backup" else state.flow.start_restore(name)
                 except WorkerBusy:  # one operation at a time: show the running one

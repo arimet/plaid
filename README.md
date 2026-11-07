@@ -310,9 +310,9 @@ They keep sharing until you remove them. **Clean up finished torrents**, on the 
 <details>
 <summary><b>Are my settings backed up?</b></summary>
 
-Yes, every night after 3:00 in the stack's time zone. Plaid stops the apps for a few seconds and saves their settings: the lists of films and series, Seerr's requests and users, Jellyfin's accounts and watch history, Prowlarr's trackers, qBittorrent's torrents, and Plaid's own settings. It keeps the last seven. Your film and series files are not in it.
+When you ask: Plaid never backs up on its own. On the main page, **Back up now** stops the apps for a few seconds and saves their settings: the lists of films and series, Seerr's requests and users, Jellyfin's accounts and watch history, Prowlarr's trackers, qBittorrent's torrents, and Plaid's own settings. Plaid keeps the last seven. Your film and series files are not in it.
 
-Backups go to `backups` inside your media folder. To keep one when the media disk breaks down, pick a folder on another disk in **⋯ › Settings › Backups**. On the main page, **Back up now** makes one at once, and **Restore a backup** puts the apps and Plaid back as they were that night.
+Backups go to `backups` inside your media folder. To keep one when the media disk breaks down, pick a folder on another disk in **⋯ › Settings › Backups**. **Restore a backup** puts the apps and Plaid back as they were then; the media folder, the backup folder, the VPN and Tailscale stay as they are today.
 
 </details>
 

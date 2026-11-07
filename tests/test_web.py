@@ -909,8 +909,8 @@ class BackupWebTest(unittest.TestCase):
 
     def test_restore_only_a_listed_backup(self):
         self.open_panel()
-        status, _, _ = self.req("POST", "/api/restore", *self.form("name=plaid-backup-2020-01-01-0300.tar.gz"))
-        self.assertEqual((status, self.started), (404, []))
+        status, headers, _ = self.req("POST", "/api/restore", *self.form("name=plaid-backup-2020-01-01-0300.tar.gz"))
+        self.assertEqual((status, headers["Location"], self.started), (303, "/backups", []))  # a page, not JSON
         self.assertEqual(self.req("POST", "/api/restore", "name=" + self.NAME)[0], 401)
 
     def test_progress_pages(self):
@@ -920,6 +920,9 @@ class BackupWebTest(unittest.TestCase):
         self.assertIn("Sauvegarde faite", web.settings_progress("fr", done))
         failed = {"state": "failed", "events": [{"step": "step_backup_stop", "error": "err_backup_disk"}]}
         self.assertIn("Le disque des médias est absent", web.settings_progress("fr", failed))
+        crashed = {"state": "failed", "events": [{"step": "step_backup_stop"},
+                                                 {"step": "step_backup_copy", "error": "err_apply_failed"}]}
+        self.assertIn("<h1>La sauvegarde n’a pas abouti", web.settings_progress("fr", crashed))
         restored = {"state": "done", "events": [{"step": "step_restore_stop"},
                                                 {"step": "step_done", "done": True, "detail": self.NAME}]}
         self.assertIn("8 novembre 2026", web.settings_progress("fr", restored))

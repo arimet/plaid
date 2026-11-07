@@ -240,3 +240,17 @@ class RoomTest(unittest.TestCase):
     def test_room_of_a_present_disk(self):
         status = guard.cycle(FakeDk(disk="ok"), FakeFlow(), "/state")
         self.assertEqual((status["free"], status["total"]), (60, 100))
+
+
+class StartOthersTest(unittest.TestCase):
+    def test_stopped_apps_off_the_disk_start_again(self):
+        # A backup whose restart failed leaves Seerr and Prowlarr stopped: the guard brings them back.
+        acts, _ = guard.decide("missing", False, {"seerr": Q(running=False), "prowlarr": Q(running=False),
+                                                  "radarr": Q(running=False), "jellyfin": Q()}, set())
+        self.assertEqual(acts, [("stop",), ("start_others", "prowlarr", "seerr")])
+        self.assertEqual(guard.decide("ok", False, {"seerr": Q()}, set())[0], [("up",)])
+
+    def test_cycle_runs_it(self):
+        dk = FakeDk(containers={"seerr": Q(running=False)})
+        guard.cycle(dk, FakeFlow(), "/state")
+        self.assertIn(("up", "-d", "seerr"), dk.calls)

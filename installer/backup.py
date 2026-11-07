@@ -20,12 +20,6 @@ STATE_FILE = "backup.json"
 STOP_TIMEOUT = 300
 
 
-class BackupError(Exception):
-    def __init__(self, key: str):
-        super().__init__(key)
-        self.key = key
-
-
 def status(state_dir: str = flow.STATE_DIR) -> dict:
     """{"at", "name", "size", "dir"} of the last backup, {"failed_at", "error"} of the last failure."""
     try:
@@ -99,7 +93,7 @@ def _operate(kind: str, work, report: Report, dk, state_dir: str, s: Settings) -
                 _start_again(s, dk, state_dir)
             except Exception:
                 pass  # the guard's next round starts the disk apps; the error below says what broke
-        report(Progress(step, error=e.key if isinstance(e, BackupError) else f"err_{kind}_failed", detail=str(e)))
+        report(Progress(step, error=f"err_{kind}_failed", detail=str(e)))
         if kind == "backup":
             note(state_dir, failed_at=datetime.now().timestamp(), error=str(e))
         return False

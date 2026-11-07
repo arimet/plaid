@@ -49,6 +49,10 @@ def decide(disk: str, vpn_on: bool, containers: dict, blind: set[str]) -> tuple[
         actions += [("restart", svc) for svc in sorted(blind)]
     elif disk in ("missing", "unconfirmed") and any(containers.get(svc, {}).get("running") for svc in DISK_APPS):
         actions.append(("stop",))
+    # The others never wait for the disk: one left stopped (a backup's restart that failed) starts again.
+    stopped = sorted(svc for svc, c in containers.items() if svc not in DISK_APPS and not c["running"])
+    if stopped:
+        actions.append(("start_others", *stopped))
     return actions, vpn
 
 
@@ -81,7 +85,8 @@ def _cycle(dk, fl, state_dir: str) -> dict | None:
             return None
         try:
             # A bind of a disk that just vanished can hang Docker: a stuck call must not stop the guard for good.
-            dk.compose(state_dir, *(commands.get(action[0]) or action), timeout=docker.HELPER_TIMEOUT)
+            args = ("up", "-d", *action[1:]) if action[0] == "start_others" else commands.get(action[0]) or action
+            dk.compose(state_dir, *args, timeout=docker.HELPER_TIMEOUT)
         except DockerError as e:  # the next action, and the next round, may still fix things
             print(f"guard: {action[0]} failed: {e}", file=sys.stderr)
     status = {"disk": disk, "vpn": vpn, "apps": app_states(containers), "free": free, "total": total}
