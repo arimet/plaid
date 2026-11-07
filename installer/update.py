@@ -63,7 +63,7 @@ def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, wait=time.sl
     return changed
 
 
-def _pull(dk, state_dir: str, services: list[str], wait) -> list[str]:
+def _pull(dk, state_dir: str, services: list[str], wait, errors: dict | None = None) -> list[str]:
     """One app at a time, three tries each: a registry refusing one app does not hold back the others. Returns the
     apps left on their old version; raises when none could be downloaded (no network)."""
     skipped, error = [], None
@@ -74,6 +74,8 @@ def _pull(dk, state_dir: str, services: list[str], wait) -> list[str]:
                 break
             except DockerError as e:
                 error = e
+                if errors is not None:
+                    errors[svc] = str(e)
                 if "timed out" in str(e):  # stalled: another try would stall as long
                     skipped.append(svc)
                     break

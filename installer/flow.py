@@ -163,7 +163,7 @@ def created_folder(state_dir: str = STATE_DIR) -> bool:
 
 def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all, state_dir: str = STATE_DIR,
             vpn_wait: int = VPN_WAIT, arch: str = platform.machine(),
-            cancel: threading.Event | None = None) -> dict[str, int] | None:
+            cancel: threading.Event | None = None, wait=time.sleep) -> dict[str, int] | None:
     """Returns {app: port} once everything is linked, None on failure (the last Progress holds the error).
     Setting `cancel` stops it at the next step; rollback() then undoes what was done."""
     step = "step_prepare"
@@ -192,7 +192,14 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
         dk.ensure_data_dirs(src, s.puid, s.pgid)
 
         step = checkpoint("step_download")
-        dk.compose(state_dir, "pull")
+        # One app at a time, three tries each, as an update does: lscr.io drops a connection now and then.
+        from installer import update
+        with open(os.path.join(state_dir, "compose.json"), encoding="utf-8") as f:
+            services = list(json.load(f)["services"])
+        errors: dict[str, str] = {}
+        missing = update._pull(dk, state_dir, services, wait, errors)
+        if missing:  # every app is needed to install
+            raise DockerError("\n".join(f"{svc}: {errors[svc]}" for svc in missing))
 
         step = checkpoint("step_start")
         try:

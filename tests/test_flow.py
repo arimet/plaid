@@ -66,8 +66,12 @@ class FakeDocker:
     def marker_state(self, src):
         return getattr(self, "disk", "unconfirmed")
 
-    def compose(self, state_dir, *args):
+    def compose(self, state_dir, *args, timeout=None):
         self.calls.append(("compose",) + args)
+        fails = getattr(self, "pull_fail", {})
+        if args[:1] == ("pull",) and fails.get(args[-1], 0) > 0:
+            fails[args[-1]] -= 1
+            raise DockerError("net/http: TLS handshake timeout")
         if args[:1] == ("up",) and self.up_error:
             raise DockerError(self.up_error)
         if args[:1] == ("ps",):
@@ -107,7 +111,7 @@ class FlowTest(unittest.TestCase):
     def install(self, s, dk, configure=None):
         configure = configure or (lambda *a, **k: {})
         return flow.install(s, self.events.append, dk=dk, configure=configure, state_dir=self.state, vpn_wait=0,
-                            arch="x86_64")
+                            arch="x86_64", wait=lambda seconds: None)
 
     def test_preflight_existing_stack(self):
         self.assertIn("err_stack_exists", flow.preflight(settings(), dk=FakeDocker(stack=True)))
@@ -148,6 +152,22 @@ class FlowTest(unittest.TestCase):
         self.assertTrue(flow.is_complete(self.state))
         for name in ("compose.json", "settings.json"):
             self.assertTrue(os.path.exists(os.path.join(self.state, name)), name)
+
+    def test_install_downloads_each_app_and_tries_again(self):
+        # lscr.io times out now and then: one app's hiccup must not stop the whole install (seen 07/11).
+        dk = FakeDocker(pull_fail={"radarr": 1})
+        self.assertIsNotNone(self.install(settings(), dk, configure=lambda *a, **k: {}))
+        pulls = [c for c in dk.calls if c[:2] == ("compose", "pull")]
+        self.assertEqual(len([c for c in pulls if c[-1] == "radarr"]), 2)
+        self.assertIn(("compose", "pull", "jellyfin"), pulls)
+
+    def test_install_stops_when_an_app_never_comes(self):
+        dk = FakeDocker(pull_fail={"radarr": 9})
+        self.assertIsNone(self.install(settings(), dk, configure=lambda *a, **k: {}))
+        self.assertEqual(self.events[-1].step, "step_download")
+        self.assertIn("radarr", self.events[-1].detail)
+        self.assertIn("TLS handshake timeout", self.events[-1].detail)
+        self.assertFalse([c for c in dk.calls if c[:2] == ("compose", "up")])
 
     def test_install_saves_media_choices(self):
         ids = {"radarr": {"formats": {"lang": 1}, "profiles": {"mine-1080p": 9}}}
