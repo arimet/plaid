@@ -499,3 +499,13 @@ class BackupDirSettingTest(unittest.TestCase):
         self.assertEqual(reconfigure.check(settings(), new, FakeDocker(folder="missing")), ["err_folder_missing"])
         self.assertEqual(reconfigure.check(settings(), new, FakeDocker(folder="other")), [])
         self.assertIn("err_path_absolute", reconfigure.check(settings(), settings(backup_dir="rel"), FakeDocker()))
+
+
+class MetadataOpTest(unittest.TestCase):
+    def test_changing_the_descriptions_language_changes_seerr_too(self):
+        from unittest import mock
+        done = []
+        with mock.patch("installer.apps.set_metadata_lang", lambda s, login, host: done.append(("jellyfin", host))), \
+                mock.patch("installer.apps.set_seerr_lang", lambda s, login, host: done.append(("seerr", host))):
+            reconfigure.default_ops(settings(), FakeDocker(), "/state").metadata(settings(), settings(metadata_lang="es"))
+        self.assertEqual(done, [("jellyfin", "jellyfin:8096"), ("seerr", "seerr:5055")])

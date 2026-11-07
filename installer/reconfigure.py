@@ -150,7 +150,9 @@ def default_ops(new: Settings, dk, state_dir: str) -> SimpleNamespace:
         rescan=lambda s: apps.rescan_all(s, host_of, compose_out),
         profiles=lambda login, target: _profiles(target, login, host_of, compose_out),
         subtitles=lambda target: apps.set_subtitles(target, host_of("bazarr"), compose_out),
-        metadata=lambda login, target: apps.set_metadata_lang(target, login, host_of("jellyfin")))
+        # Jellyfin's descriptions, then Seerr's: one language for both.
+        metadata=lambda login, target: (apps.set_metadata_lang(target, login, host_of("jellyfin")),
+                                        apps.set_seerr_lang(target, login, host_of("seerr"))))
 
 
 def _profiles(target: Settings, login: Settings, host_of, compose_out) -> tuple[dict, list[str]]:

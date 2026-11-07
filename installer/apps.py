@@ -457,6 +457,20 @@ def seerr_default(s: Settings, login: Settings, host: str, arr_ids: dict) -> Non
             call("PUT", f"{base}/settings/{app}/{sid}", server)
 
 
+def _seerr_lang(s: Settings) -> dict:
+    lang = media.effective(s).metadata_lang
+    return {"locale": lang, "discoverRegion": media.COUNTRY[lang], "streamingRegion": media.COUNTRY[lang]}
+
+
+def set_seerr_lang(s: Settings, login: Settings, host: str) -> None:
+    """Seerr in the descriptions' language: its interface, titles and summaries, and the suggestions and streaming
+    services of that language's country. Seerr signs in through Jellyfin: with `login`, the account it has now."""
+    base = f"http://{host}/api/v1"
+    wait_for(base + "/status")
+    call("POST", base + "/auth/jellyfin", {"username": login.username, "password": login.password})
+    call("POST", base + "/settings/main", _seerr_lang(s))
+
+
 def set_metadata_lang(s: Settings, login: Settings, host: str) -> None:
     """Jellyfin's fiches in the chosen language: server, each library, then a full refresh in the background."""
     base = f"http://{host}"
@@ -487,6 +501,7 @@ def configure_seerr(s: Settings, host: str, radarr: Arr, sonarr: Arr, log: Log, 
         login.update(hostname="jellyfin", port=8096, useSsl=False, urlBase="", serverType=2,
                      email=f"{s.username}@localhost")
     call("POST", base + "/auth/jellyfin", login)
+    call("POST", base + "/settings/main", _seerr_lang(s))  # the descriptions' language, as Jellyfin's
 
     call("POST", base + "/settings/jellyfin/library/sync")
     for lib in call("GET", base + "/settings/jellyfin/library"):

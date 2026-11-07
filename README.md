@@ -272,7 +272,7 @@ At install, and later in the settings, you pick:
 - **the language of the audio**, among French, English, Spanish, German and Italian;
 - **your profiles**: one or more of *My language*, *Original + subtitles* and *MULTi* (both tracks in one file), each in 720p, 1080p or 4K, and the one Seerr pre-selects;
 - **the subtitle languages**, fetched by Bazarr for every film and series, even when the audio is already in that language;
-- **the language of the descriptions** in Jellyfin (titles, plots, posters).
+- **the language of the descriptions** in Jellyfin (titles, plots, posters), which is also the language of Seerr and of its suggestions.
 
 Each time you ask for a film in Seerr, you pick one of your profiles. A profile never waits for a language: when your language does not exist yet, it takes the original with subtitles, then sticks to it. The quality is strict: a 4K request waits for a 4K file. Remuxes and disc images are left out.
 
@@ -289,7 +289,7 @@ Yes. In the assistant, open **⋯ › Settings**; in the terminal, run the same 
 - **The media folder**: Plaid points to the new folder and moves nothing. Copy your library there first; the old folder is left as it is.
 - **The language** is the assistant's and the terminal's. The audio, subtitles and descriptions have their own settings, under **Films and series**.
 - **The profiles**: a profile you untick is removed from Radarr and Sonarr, unless films or series still use it; Plaid then says which ones it kept.
-- **The descriptions' language**: Jellyfin downloads every description again, over the next minutes or hours.
+- **The descriptions' language**: Jellyfin downloads every description again, over the next minutes or hours, and Seerr switches to it at once.
 
 Each app's own settings stay editable in the app.
 

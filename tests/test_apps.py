@@ -2,6 +2,7 @@ import json
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from installer import apps
@@ -434,6 +435,32 @@ class MediaAppsTest(unittest.TestCase):
         refresh = [c[1] for c in self.seen if "/Refresh?" in c[1]]
         self.assertEqual(len(refresh), 2)
         self.assertIn("replaceAllMetadata=true", refresh[0])
+
+
+class SeerrLanguageTest(MediaAppsTest):
+    def test_seerr_follows_the_descriptions_language(self):
+        self.run_patched(self.fake_call(), lambda: apps.set_seerr_lang(chosen(metadata_lang="de"),
+                                                                        acct(username="old", password="pw"), "seerr:5055"))
+        login = next(c for c in self.seen if c[1].endswith("/auth/jellyfin"))
+        self.assertEqual(login[2], {"username": "old", "password": "pw"})
+        main = next(c for c in self.seen if c[1].endswith("/settings/main"))
+        self.assertEqual((main[0], main[2]), ("POST", {"locale": "de", "discoverRegion": "DE", "streamingRegion": "DE"}))
+
+    def test_install_sets_it(self):
+        def call(method, url, body=None, headers=None, form=False):
+            self.seen.append((method, url, body))
+            if url.endswith("/settings/public"):
+                return {"initialized": True, "mediaServerType": 2}
+            if url.endswith("/settings/jellyfin/library"):
+                return []
+            if url.endswith("/settings/radarr") or url.endswith("/settings/sonarr"):
+                return [{"id": 0}]
+        self.seen = []
+        arr = lambda name: SimpleNamespace(name=name, key="k")
+        self.run_patched(call, lambda: apps.configure_seerr(chosen(metadata_lang="it"), "seerr:5055", arr("radarr"),
+                                                            arr("sonarr"), lambda *a: None, {}))
+        main = next(c for c in self.seen if c[1].endswith("/settings/main"))
+        self.assertEqual(main[2]["locale"], "it")
 
 
 class DeleteErrorTest(unittest.TestCase):
