@@ -263,13 +263,31 @@ qBittorrent stops downloading: it only reaches the internet through the VPN, so 
 </details>
 
 <details>
+<summary><b>Which version of a film do I get?</b></summary>
+
+At install, and later in the settings, you pick:
+
+- **the language of the audio**, among French, English, Spanish, German and Italian;
+- **your profiles**: one or more of *My language*, *Original + subtitles* and *MULTi* (both tracks in one file), each in 720p, 1080p or 4K, and the one Seerr pre-selects;
+- **the subtitle languages**, fetched by Bazarr for every film and series, even when the audio is already in that language;
+- **the language of the descriptions** in Jellyfin (titles, plots, posters).
+
+Each time you ask for a film in Seerr, you pick one of your profiles. A profile never waits for a language: when your language does not exist yet, it takes the original with subtitles, then sticks to it. The quality is strict: a 4K request waits for a 4K file. Remuxes and disc images are left out.
+
+To get another version of a film you already have, open Radarr (Sonarr for a series), give it another profile and search again. Plaid never swaps a file on its own.
+
+</details>
+
+<details>
 <summary><b>Can I change a setting later?</b></summary>
 
-Yes. In the assistant, open **⋯ › Settings**; in the terminal, run the same command again and pick **Change a setting**. You can change the language, the time zone, the media folder, the username and password, the VPN (new key, other provider, add or remove it) and Tailscale. Plaid shows what will change and how long the apps stop, then applies it all at once. If something fails, your previous settings come back.
+Yes. In the assistant, open **⋯ › Settings**; in the terminal, run the same command again and pick **Change a setting**. You can change the language, the time zone, the media folder, the username and password, the VPN (new key, other provider, add or remove it), Tailscale, and the films and series choices. Plaid shows what will change and how long the apps stop, then applies it all at once. If something fails, your previous settings come back.
 
 - **The password** changes in all seven apps and in the assistant. If you changed it by hand in Jellyfin or qBittorrent, Plaid asks for the one they use now.
 - **The media folder**: Plaid points to the new folder and moves nothing. Copy your library there first; the old folder is left as it is.
-- **The language** is the assistant's and the terminal's. Jellyfin and Bazarr keep the language chosen at install.
+- **The language** is the assistant's and the terminal's. The audio, subtitles and descriptions have their own settings, under **Films and series**.
+- **The profiles**: a profile you untick is removed from Radarr and Sonarr, unless films or series still use it; Plaid then says which ones it kept.
+- **The descriptions' language**: Jellyfin downloads every description again, over the next minutes or hours.
 
 Each app's own settings stay editable in the app.
 
@@ -278,7 +296,7 @@ Each app's own settings stay editable in the app.
 <details>
 <summary><b>Does Plaid update the apps?</b></summary>
 
-No. No 4K profile and no FlareSolverr either, for now.
+No. No FlareSolverr either, for now.
 
 </details>
 
