@@ -282,49 +282,62 @@ def _field(label: str, name: str, value: str = "", kind: str = "text", hint: str
             f'spellcheck="false">{f"<p class={chr(34)}hint{chr(34)}>{E(hint)}</p>" if hint else ""}</div>')
 
 
-def settings_page(lang: str, s: Settings, note: str = "") -> str:
-    """Every setting, filled in. Secrets are never sent back: an empty field keeps the current one."""
+def settings_page(lang: str, s: Settings, note: str = "", shown: Settings | None = None) -> str:
+    """Every setting, filled in (with `shown`, what the user typed before going back from the summary).
+    Secrets are never sent back: an empty field keeps the current one."""
+    shown = shown or s
     keep = t(lang, "settings_keep_secret")
-    langs = "".join(f'<option value="{code}"{" selected" if code == s.lang else ""}>{name}</option>'
+    langs = "".join(f'<option value="{code}"{" selected" if code == shown.lang else ""}>{name}</option>'
                     for code, name in LANG_NAMES.items())
-    options = "".join(f'<option value="{pid}"{" selected" if pid == s.vpn_provider else ""}>{E(p.label)}</option>'
+    options = "".join(f'<option value="{pid}"{" selected" if pid == shown.vpn_provider else ""}>{E(p.label)}</option>'
                       for pid, p in PROVIDERS.items())
-    options += f'<option value=""{"" if s.vpn_provider else " selected"}>{E(t(lang, "vpn_none"))}</option>'
+    options += f'<option value=""{"" if shown.vpn_provider else " selected"}>{E(t(lang, "vpn_none"))}</option>'
     vpn_fields = "".join(
         f'<div class="vpnf" data-for="{pid}">' + "".join(
             _field(t(lang, "vpnf_" + f.lower()), f"vpn_{pid}_{f}", kind="password" if "KEY" in f or "PASSWORD" in f
-                   else "text", hint=keep if pid == s.vpn_provider else "") for f in p.fields) + "</div>"
+                   else "text", hint=t(lang, "settings_keep_key") if pid == s.vpn_provider else "")
+            for f in p.fields) + "</div>"
         for pid, p in PROVIDERS.items())
     # Without JavaScript: only the chosen provider's fields show.
-    shown = "".join(f'form:has(#vpn_provider option[value="{pid}"]:checked) .vpnf[data-for="{pid}"]{{display:block}}'
+    visible = "".join(f'form:has(#vpn_provider option[value="{pid}"]:checked) .vpnf[data-for="{pid}"]{{display:block}}'
                     for pid in PROVIDERS)
+    def group(title: str, desc: str, fields: str) -> str:
+        return (f'<section class="sgroup"><header><h2>{E(title)}</h2><p class="hint">{E(desc)}</p></header>'
+                f'{fields}</section>')
     remote = ""
     if s.platform in REMOTE_PLATFORMS:
-        drop = (f'<label class="check"><input type="checkbox" name="remove_tailscale"> '
-                f'{E(t(lang, "settings_remove_tailscale"))}</label>' if s.tailscale_key else "")
-        remote = (f'<h2>{E(t(lang, "field_remote"))}</h2>'
-                  + _field(t(lang, "field_tailscale_key"), "tailscale_key", kind="password",
-                           hint=keep if s.tailscale_key else "") + drop)
+        drop = (f'<label class="check"><input type="checkbox" name="remove_tailscale"><div>'
+                f'<b>{E(t(lang, "settings_remove_tailscale"))}</b>'
+                f'<span>{E(t(lang, "settings_remove_tailscale_help"))}</span></div></label>' if s.tailscale_key else "")
+        remote = group(t(lang, "settings_remote_title"), t(lang, "nav_remote_desc"),
+                       _field(t(lang, "field_tailscale_key"), "tailscale_key", kind="password",
+                              hint=t(lang, "settings_keep_key") if s.tailscale_key else t(lang, "settings_optional"))
+                       + drop)
+    sep = '<hr class="sep">'
     body = f"""<h1>{E(t(lang, "nav_settings"))}</h1>
-  <p class="lead">{E(t(lang, "nav_settings_desc"))}</p>
+  <p class="lead">{E(t(lang, "settings_lead"))}</p>
   {f'<p class="note">{E(note)}</p>' if note else ""}
-  <form method="post" action="/settings" class="field-group settings">
-  <div class="field"><label class="l" for="lang">{E(t(lang, "settings_lang"))}</label>
-  <select class="input" id="lang" name="lang">{langs}</select></div>
-  {_field(t(lang, "field_timezone"), "timezone", s.timezone, hint=t(lang, "settings_timezone_help"))}
-  {_field(t(lang, "field_folder"), "data_dir", s.data_dir, hint=t(lang, "settings_folder_help"))}
-  <h2>{E(t(lang, "field_username"))} · {E(t(lang, "field_password"))}</h2>
-  {_field(t(lang, "field_username"), "username", s.username)}
-  {_field(t(lang, "field_password"), "password", kind="password", hint=keep)}
-  {_field(t(lang, "field_password2"), "password2", kind="password")}
-  <h2>{E(t(lang, "field_vpn"))}</h2>
-  <div class="field"><select class="input" id="vpn_provider" name="vpn_provider"
-  aria-label="{E(t(lang, "field_vpn"))}">{options}</select></div>
-  {vpn_fields}
-  {remote}
-  <button class="btn primary" type="submit">{E(t(lang, "btn_check"))}</button>
+  <form method="post" action="/settings" class="settings">
+  {group(t(lang, "settings_group_general"), t(lang, "settings_group_general_desc"),
+         f'<div class="field"><label class="l" for="lang">{E(t(lang, "settings_lang"))}</label>'
+         f'<select class="input" id="lang" name="lang">{langs}</select></div>'
+         + _field(t(lang, "field_timezone"), "timezone", shown.timezone, hint=t(lang, "settings_timezone_help")))}
+  {sep}
+  {group(t(lang, "field_folder"), t(lang, "settings_folder_desc"),
+         _field(t(lang, "settings_folder_label"), "data_dir", shown.data_dir, hint=t(lang, "settings_folder_help")))}
+  {sep}
+  {group(t(lang, "settings_group_account"), t(lang, "settings_group_account_desc"),
+         _field(t(lang, "field_username"), "username", shown.username)
+         + _field(t(lang, "settings_new_password"), "password", kind="password", hint=keep)
+         + _field(t(lang, "settings_new_password2"), "password2", kind="password"))}
+  {sep}
+  {group(t(lang, "field_vpn"), t(lang, "settings_vpn_desc"),
+         f'<div class="field"><label class="l" for="vpn_provider">{E(t(lang, "settings_vpn_provider"))}</label>'
+         f'<select class="input" id="vpn_provider" name="vpn_provider">{options}</select></div>' + vpn_fields)}
+  {sep + remote if remote else ""}
+  <button class="btn primary" type="submit">{E(t(lang, "settings_review"))}</button>
   </form>"""
-    return subpage(lang, body, head=f"<style>.vpnf{{display:none}}{shown}</style>")
+    return subpage(lang, body, head=f"<style>.vpnf{{display:none}}{visible}</style>")
 
 
 def change_lines(lang: str, chg: dict[str, str], new: Settings) -> list[str]:
@@ -334,29 +347,69 @@ def change_lines(lang: str, chg: dict[str, str], new: Settings) -> list[str]:
             for key, kind in chg.items()]
 
 
-def settings_summary(lang: str, form: dict, chg: dict[str, str], new: Settings, found: list[str],
+ARROW = ('<svg class="arrow" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">'
+         '<path d="M3 8h9M8.5 4.5L12 8l-3.5 3.5" stroke-width="1.8" fill="none" stroke-linecap="round" '
+         'stroke-linejoin="round"/></svg>')
+CLOCK = ('<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.2" '
+         'stroke-width="1.6" fill="none"/><path d="M9 5v4l2.6 1.6" stroke-width="1.6" fill="none" '
+         'stroke-linecap="round"/></svg>')
+
+
+def change_rows(lang: str, chg: dict[str, str], old: Settings, new: Settings) -> list[tuple[str, str, str]]:
+    """(what, before, after) for each change; before is "" when it means nothing to show (a new key)."""
+    vpn = lambda x: PROVIDERS[x.vpn_provider].label if x.vpn_provider else t(lang, "vpn_none")
+    on_off = lambda key: t(lang, "settings_on") if key else t(lang, "settings_off")
+    rows = []
+    if "lang" in chg:
+        rows.append((t(lang, "settings_lang"), LANG_NAMES[old.lang], LANG_NAMES[new.lang]))
+    if "timezone" in chg:
+        rows.append((t(lang, "field_timezone"), old.timezone, new.timezone))
+    if "folder" in chg:
+        rows.append((t(lang, "field_folder"), old.data_dir, new.data_dir))
+    if old.username != new.username:
+        rows.append((t(lang, "field_username"), old.username, new.username))
+    if old.password != new.password:
+        rows.append((t(lang, "field_password"), "", t(lang, "settings_password_new")))
+    if "vpn" in chg:
+        rows.append((t(lang, "field_vpn"), "", t(lang, "settings_new_key")) if chg["vpn"] == "change" and
+                    old.vpn_provider == new.vpn_provider else (t(lang, "field_vpn"), vpn(old), vpn(new)))
+    if "tailscale" in chg:
+        rows.append(("Tailscale", "", t(lang, "settings_new_key")) if chg["tailscale"] == "change" else
+                    ("Tailscale", on_off(old.tailscale_key), on_off(new.tailscale_key)))
+    return rows
+
+
+def settings_summary(lang: str, form: dict, chg: dict[str, str], old: Settings, new: Settings, found: list[str],
                      ask: list[str]) -> str:
-    """What will change, the outage, the checks; the Apply form carries back only what was typed."""
+    """What will change (before → after), the outage, the checks. The form carries back only what was typed,
+    to Apply or to Edit (which reopens the settings with it)."""
     from installer.reconfigure import outage
-    items = "".join(f"<li>{E(line)}</li>" for line in change_lines(lang, chg, new))
+    rows = "".join(
+        f'<li><span class="k">{E(what)}</span><span class="v">'
+        + (f"<del>{E(before)}</del>{ARROW}" if before else "") + f"<b>{E(after)}</b></span></li>"
+        for what, before, after in change_rows(lang, chg, old, new))
+    downtime = outage(chg)
     notes = "".join(f'<div class="note {"alert" if k.startswith("err_") else "warn"}"><div>'
                     f'{E(t(lang, k, path=new.data_dir))}</div></div>' for k in found)
     blocked = any(k.startswith("err_") for k in found)
     hidden = "".join(f'<input type="hidden" name="{E(k)}" value="{E(v)}">' for k, v in form.items())
-    prompts = "".join(_field(t(lang, "settings_current_password", app=APP_NAMES[app]), f"current_{app}",
-                             kind="password", hint=t(lang, "settings_current_password_help", app=APP_NAMES[app]))
-                      for app in ask)
-    apply = "" if blocked else f"""<form method="post" action="/settings/apply" class="field-group">{hidden}{prompts}
-  <button class="btn primary" type="submit">{E(t(lang, "settings_apply"))}</button></form>"""
+    prompts = "" if blocked else "".join(
+        _field(t(lang, "settings_current_password", app=APP_NAMES[app]), f"current_{app}", kind="password",
+               hint=t(lang, "settings_current_password_help", app=APP_NAMES[app])) for app in ask)
+    apply = "" if blocked else f'<button class="btn primary" type="submit">{E(t(lang, "settings_apply"))}</button>'
     body = f"""<h1>{E(t(lang, "settings_summary"))}</h1>
-  <ul class="changes">{items}</ul>
-  <p class="lead">{E(t(lang, outage(chg)))}</p>
-  {notes}{apply}
-  <p><a href="/settings">{E(t(lang, "btn_back"))}</a></p>"""
+  <p class="lead">{E(t(lang, "settings_summary_lead"))}</p>
+  <ul class="diff">{rows}</ul>
+  <div class="note{"" if downtime == "outage_none" else " warn"} outage">{CLOCK}<span>{E(t(lang, downtime))}</span></div>
+  {notes}
+  <form method="post" action="/settings/apply" class="settings">{hidden}{prompts}
+  <div class="actions">{apply}
+  <button class="btn" type="submit" formaction="/settings/edit">{E(t(lang, "settings_edit"))}</button></div>
+  </form>"""
     return subpage(lang, body)
 
 
-def settings_progress(lang: str, status: dict) -> str:
+def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
     events, state_ = status.get("events", []), status.get("state")
     last = events[-1] if events else {}
     shown = [e for e in events if e.get("step") != "step_done" and not e.get("error")]
@@ -369,10 +422,13 @@ def settings_progress(lang: str, status: dict) -> str:
     if state_ == "running" or (state_ == "idle" and not events):
         title, extra, head = t(lang, "settings_running"), "", '<meta http-equiv="refresh" content="2">'
     elif state_ == "done":
-        missed = [APP_NAMES.get(a, a) for a in (last.get("detail") or "").split(",") if a]
+        missed = [a for a in (last.get("detail") or "").split(",") if a in PORTS]
         title, head = t(lang, "settings_done"), ""
-        extra = (f'<div class="note warn"><div>{E(t(lang, "settings_not_changed", apps=", ".join(missed)))}</div></div>'
-                 if missed else "")
+        # The apps that kept the old password: one row each, with a link to change it there.
+        rows = "".join(f'<li class="app-row"><b>{E(APP_NAMES[a])}</b><a class="btn" href="http://{E(host)}:{PORTS[a]}" '
+                       f'target="_blank" rel="noopener">{E(t(lang, "done_open"))}</a></li>' for a in missed)
+        extra = (f'<div class="note warn"><div><b>{E(t(lang, "settings_manual_title"))}</b><br>'
+                 f'{E(t(lang, "settings_manual_help"))}</div></div><ul class="manual">{rows}</ul>' if missed else "")
     else:
         title, head = t(lang, "err_apply_failed"), ""
         extra = f'<pre class="detail">{E(last.get("detail") or "")}</pre>'
@@ -525,7 +581,8 @@ def make_handler(state: State):
             if path == "/settings":
                 return self.send(200, settings_page(lang, s))
             if path == "/settings/progress":
-                return self.send(200, settings_progress(lang, state.flow.apply_status()))
+                host = (self.headers.get("Host") or "localhost").rsplit(":", 1)[0]
+                return self.send(200, settings_progress(lang, state.flow.apply_status(), host))
             if path == "/trackers":
                 return self.send(200, trackers_page(lang))
             if path == "/remove":
@@ -585,11 +642,13 @@ def make_handler(state: State):
                     return self.json(401, {})
                 state.flow.confirm_disk(s)
                 return self.send(303, "", headers={"Location": "/"})
-            if path in ("/settings", "/settings/apply"):
+            if path in ("/settings", "/settings/apply", "/settings/edit"):
                 if self.locked() or s is None:
                     return self.json(401, {})
                 from installer import reconfigure
                 new = reconfigure.merge(s, settings_data(data))
+                if path == "/settings/edit":  # back from the summary, with what was typed
+                    return self.send(200, settings_page(lang, s, shown=new))
                 found = (["err_passwords_differ"] if data.get("password") and
                          data.get("password") != data.get("password2") else [])
                 chg = reconfigure.changes(s, new)
@@ -598,7 +657,7 @@ def make_handler(state: State):
                 found += state.flow.settings_check(s, new)
                 if path == "/settings":
                     ask = [a for a in state.flow.check_logins(s) if a in ACCOUNT_PROMPTS] if "account" in chg else []
-                    return self.send(200, settings_summary(lang, data, chg, new, found, ask))
+                    return self.send(200, settings_summary(lang, data, chg, s, new, found, ask))
                 if any(k.startswith("err_") for k in found) or state.flow.apply_status()["state"] == "running":
                     return self.json(409, {})
                 current = {a: data[f"current_{a}"] for a in ACCOUNT_PROMPTS if data.get(f"current_{a}")}

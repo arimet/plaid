@@ -365,7 +365,7 @@ def _settings_tui(term, flow, env: dict, s) -> tuple[int, Notes] | None:
         if pick == "back":
             return None
         if pick == "apply":
-            result = _apply_tui(term, flow, lang, s, new, chg)
+            result = _apply_tui(term, flow, lang, s, new, chg, env.get("HOST_ADDR", "localhost"))
             if result is not None:
                 return result
         elif pick == "lang":
@@ -418,7 +418,7 @@ def _change_names(lang: str, chg: dict, new) -> list[str]:
     return change_lines(lang, chg, new)
 
 
-def _apply_tui(term, flow, lang: str, s, new, chg) -> tuple[int, Notes] | None:
+def _apply_tui(term, flow, lang: str, s, new, chg, host: str = "localhost") -> tuple[int, Notes] | None:
     """Summary, checks, current passwords if needed, then the worker's progress. None: back to the settings."""
     import time
     from installer import reconfigure
@@ -452,10 +452,12 @@ def _apply_tui(term, flow, lang: str, s, new, chg) -> tuple[int, Notes] | None:
             steps.advance(events[-1]["step"])
         if status["state"] == "done":
             steps.finish()
-            missed = [APP_NAMES.get(a, a) for a in (events[-1].get("detail") or "").split(",") if a]
+            missed = [a for a in (events[-1].get("detail") or "").split(",") if a in PORTS]
             notes = [(t(lang, "settings_done"), "ok")]
-            if missed:
-                notes.append((t(lang, "settings_not_changed", apps=", ".join(missed)), "warn"))
+            if missed:  # one line per app, with where to change it by hand
+                colon = " : " if lang == "fr" else ": "
+                notes.append((t(lang, "settings_manual_title") + colon + t(lang, "settings_manual_help"), "warn"))
+                notes += [(f"{APP_NAMES[a]}  http://{host}:{PORTS[a]}", "info") for a in missed]
             return 0, notes
         if status["state"] == "failed":
             steps.failed = True

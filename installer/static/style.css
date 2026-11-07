@@ -130,9 +130,29 @@ label.l{font:700 14px/1.2 Nunito,sans-serif;color:var(--text)}
 .note.alert::before{content:"";flex:none;width:8px;height:8px;margin-top:7px;border-radius:50%;background:var(--danger)}
 .note.alert b{color:var(--danger-text)}
 .note form{margin-top:12px}
-.settings h2{margin:24px 0 0}
-.settings .btn.primary{margin-top:16px}
-.check{display:flex;gap:10px;align-items:center;font-size:14px}
+/* settings: groups split by the same groove as the removal page; more air above a heading than under it */
+.settings{display:flex;flex-direction:column;gap:28px}
+.sgroup{display:flex;flex-direction:column;gap:18px}
+.sgroup header{display:flex;flex-direction:column;gap:4px}
+.vpnf{flex-direction:column;gap:18px}
+.settings .btn.primary{align-self:flex-start}
+/* summary: each change as before → after, in the same inset well as the install steps */
+.diff{list-style:none;padding:6px 20px;border-radius:var(--r-lg);box-shadow:var(--inset)}
+.diff li{display:flex;flex-direction:column;gap:4px;padding:14px 0}
+.diff li+li{border-top:1px solid var(--shadow-dark)}
+.diff .k{font:700 13px/1.2 Nunito,sans-serif;color:var(--text-2)}
+.diff .v{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;overflow-wrap:anywhere}
+.diff del{color:var(--muted);text-decoration-thickness:1px}
+.diff b{font-weight:600;color:var(--text)}
+.diff .arrow{flex:none;stroke:var(--accent-text)}
+.note.outage svg{stroke:var(--text-2)}
+.note.warn.outage svg{stroke:var(--warn)}
+.note.warn.outage::before{display:none}
+.actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.manual{list-style:none;padding:6px 20px;border-radius:var(--r-lg);box-shadow:var(--inset)}
+.app-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0}
+.app-row+.app-row{border-top:1px solid var(--shadow-dark)}
+.app-row b{font-weight:600;color:var(--text)}
 .changes{padding-left:20px;line-height:1.7}
 
 /* ----------------------------------------------------------------- buttons */

@@ -277,3 +277,14 @@ class SettingsCliTest(TuiCliTest):
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIsNone(flow.started)
         self.assertIn("Dossier introuvable", out.getvalue())
+
+
+class ManualPasswordCliTest(TuiCliTest):
+    def test_apps_to_change_by_hand_are_listed(self):
+        flow = installed_flow()
+        flow.apply_status = lambda: {"state": "done", "events": [{"step": "step_account"},
+                                                                  {"step": "step_done", "done": True, "detail": "jellyfin"}]}
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
+        cli.run_panel_tui(t, flow, dict(ENV, HOST_ADDR="192.168.1.20"), flow.settings)
+        cli._print_notes(t, [])
+        self.assertIn("Jellyfin  http://192.168.1.20:8096", out.getvalue())

@@ -499,7 +499,9 @@ class SettingsWebTest(WebTest):
     def test_settings_summary_lists_changes(self):
         self.open()
         _, _, html = self.post("/settings", {"timezone": "America/Montreal", "vpn_provider": ""})
-        self.assertIn("Fuseau horaire : America/Montreal", html)
+        self.assertIn('<span class="k">Fuseau horaire</span>', html)
+        self.assertIn('<del>Europe/Paris</del>', html)  # before → after
+        self.assertIn('<b>America/Montreal</b>', html)
         self.assertIn("Les applis sont indisponibles quelques dizaines de secondes.", html)
         self.assertIn('action="/settings/apply"', html)
         self.assertIn('name="timezone" value="America/Montreal"', html)
@@ -509,13 +511,14 @@ class SettingsWebTest(WebTest):
         self.flow.found = ["err_folder_missing"]
         _, _, html = self.post("/settings", {"data_dir": "/media/usb", "vpn_provider": ""})
         self.assertIn("Dossier introuvable", html)
-        self.assertNotIn('action="/settings/apply"', html)
+        self.assertNotIn("Appliquer les changements</button>", html)
+        self.assertIn('formaction="/settings/edit"', html)  # going back to fix it stays possible
 
     def test_settings_passwords_must_match(self):
         self.open()
         _, _, html = self.post("/settings", {"password": "new-pass1", "password2": "other-pass", "vpn_provider": ""})
         self.assertIn("Les mots de passe diffèrent.", html)
-        self.assertNotIn('action="/settings/apply"', html)
+        self.assertNotIn("Appliquer les changements</button>", html)
 
     def test_settings_asks_current_password(self):
         self.open()
@@ -555,3 +558,36 @@ class SettingsWebTest(WebTest):
     def test_menu_has_settings(self):
         self.open()
         self.assertIn('href="/settings"', self.get("/")[2])
+
+
+class SettingsSummaryTest(SettingsWebTest):
+    def test_password_row_never_shows_it(self):
+        self.open()
+        _, _, html = self.post("/settings", {"password": "new-pass1", "password2": "new-pass1", "vpn_provider": ""})
+        self.assertIn('<span class="k">Mot de passe</span>', html)
+        self.assertEqual(html.count("new-pass1"), 2)  # only the two hidden fields that carry it to Apply
+
+    def test_edit_keeps_what_was_typed(self):
+        self.open()
+        _, _, html = self.post("/settings/edit", {"timezone": "America/Montreal", "data_dir": "/srv/new",
+                                                  "vpn_provider": ""})
+        self.assertIn('value="America/Montreal"', html)
+        self.assertIn('value="/srv/new"', html)
+        self.assertIn('action="/settings"', html)
+
+    def test_summary_offers_edit(self):
+        self.open()
+        _, _, html = self.post("/settings", {"timezone": "America/Montreal", "vpn_provider": ""})
+        self.assertIn('formaction="/settings/edit"', html)
+
+
+class ManualPasswordTest(SettingsWebTest):
+    def test_done_lists_apps_to_change_by_hand_with_links(self):
+        self.open()
+        self.flow.apply_state = {"state": "done", "events": [
+            {"step": "step_account"}, {"step": "step_done", "done": True, "detail": "jellyfin,qbittorrent"}]}
+        _, _, html = self.get("/settings/progress")
+        self.assertIn('<ul class="manual">', html)
+        self.assertIn(':8096"', html)  # Jellyfin's address
+        self.assertIn(':8080"', html)  # qBittorrent's
+        self.assertEqual(html.count('<li class="app-row">'), 2)
