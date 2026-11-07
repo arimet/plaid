@@ -156,6 +156,18 @@ def _media_summary(lang: str, e) -> str:
                      [t(lang, "lang_" + c) for c in e.subtitle_langs])
 
 
+def _disk_lines(flow, env: dict, lang: str) -> list[str]:
+    """One line per disk, shown above the folder question. Never in the way: no list when Docker cannot tell."""
+    from installer.web import human_size
+    try:
+        disks = flow.disks(env.get("HOST_PLATFORM", "linux"), env.get("HOST_HOME", ""))
+    except Exception:
+        return []
+    return [f"{t(lang, 'picker_system') if d['system'] else d['name']} · {d['path']} · "
+            f"{t(lang, 'picker_free', free=human_size(d['free'], lang), total=human_size(d['total'], lang))}"
+            for d in disks]
+
+
 def _ask(term, flow, env: dict, lang: str):
     """The questions, one page each. Returns (settings, notes); settings is None when nothing will be installed."""
     from installer.settings import is_absolute, is_dangerous_path
@@ -168,6 +180,8 @@ def _ask(term, flow, env: dict, lang: str):
     data = {"lang": lang}
 
     term.page(t(lang, "field_folder"), t(lang, "field_folder_help"), step=(1, total), intro=t(lang, "subtitle"))
+    for line in _disk_lines(flow, env, lang):
+        term.note(line)
     data["data_dir"] = term.text(
         t(lang, "field_folder"), default=default_data_dir(env),
         validate=lambda v: t(lang, "err_path_absolute") if not is_absolute(v)
@@ -415,6 +429,8 @@ def _settings_tui(term, flow, env: dict, s) -> tuple[int, Notes] | None:
                                          hint=t(lang, "settings_timezone_help"))
         elif pick == "folder":
             term.note(t(lang, "settings_folder_help"))
+            for line in _disk_lines(flow, env, lang):
+                term.note(line)
             data["data_dir"] = term.text(
                 t(lang, "field_folder"), default=new.data_dir,
                 validate=lambda v: t(lang, "err_path_absolute") if not is_absolute(v)

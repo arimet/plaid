@@ -12,7 +12,8 @@
   // ---------------------------------------------------------------- folder picker (wizard and settings)
   const bytes = (n) => {
     const nf = new Intl.NumberFormat(document.documentElement.lang, {maximumFractionDigits: 1});
-    return n >= 1e12 ? `${nf.format(n / 1e12)} ${T.unit_tb}` : `${nf.format(Math.round(n / 1e9))} ${T.unit_gb}`;
+    const tb = 1024 ** 4, gb = 1024 ** 3;  // as the removal page counts (web.human_size)
+    return n >= tb ? `${nf.format(n / tb)} ${T.unit_tb}` : `${nf.format(Math.round(n / gb))} ${T.unit_gb}`;
   };
   $$("[data-picker]").forEach((picker) => {
     const field = $("#data_dir"), panel = $(".picker-panel", picker), list = $(".picker-list", picker);

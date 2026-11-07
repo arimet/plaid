@@ -332,3 +332,22 @@ class MediaCliTest(TuiCliTest):
         cli.run_panel_tui(t, flow, ENV, flow.settings)
         cli._print_notes(t, [])
         self.assertIn("VO sous-titrée · 4K", out.getvalue())
+
+
+class DiskLinesTest(unittest.TestCase):
+    def test_disk_lines(self):
+        flow = FakeFlow()
+        flow.disks = lambda platform, home: [
+            {"path": "/", "name": "", "free": 5 * 10 ** 10, "total": 2 * 10 ** 11, "system": True},
+            {"path": "/mnt/films", "name": "films", "free": 3 * 10 ** 12, "total": 4 * 10 ** 12, "system": False}]
+        lines = cli._disk_lines(flow, ENV, "fr")
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("Cet ordinateur · /"))
+        self.assertIn("/mnt/films", lines[1])
+        self.assertIn("libres sur", lines[1])
+
+    def test_disk_lines_never_block(self):  # no disk list, or Docker failing: the question still comes
+        self.assertEqual(cli._disk_lines(FakeFlow(), ENV, "fr"), [])
+        flow = FakeFlow()
+        flow.disks = lambda platform, home: 1 / 0
+        self.assertEqual(cli._disk_lines(flow, ENV, "fr"), [])
