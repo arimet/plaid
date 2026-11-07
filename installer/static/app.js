@@ -17,7 +17,7 @@
     return `${nf.format(value < 10 ? value : Math.round(value))}\u00a0${unit}`;
   };
   $$("[data-picker]").forEach((picker) => {
-    const field = $("#data_dir"), panel = $(".picker-panel", picker), list = $(".picker-list", picker);
+    const field = $("#" + (picker.dataset.for || "data_dir")), panel = $(".picker-panel", picker), list = $(".picker-list", picker);
     const where = $(".picker-where", picker), actions = $(".picker-actions", picker);
     const toggle = $("[data-picker-open]", picker), here = $("[data-here]", picker);
     let current = null, ticket = 0;

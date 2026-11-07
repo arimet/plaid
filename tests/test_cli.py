@@ -220,7 +220,7 @@ class PanelCliTest(TuiCliTest):
     def test_remove_from_the_menu(self):
         flow = installed_flow()
         # remove · confirm (left = yes) · keep the media folder (Enter = no)
-        t, out = self.term("\x1b[B" * 6 + "\r", "\x1b[D\r", "\r")
+        t, out = self.term("\x1b[B" * 8 + "\r", "\x1b[D\r", "\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIs(flow.removed, False)
 
@@ -445,3 +445,35 @@ class WorkerGoneCliTest(TuiCliTest):
         t, out = self.term("\x1b[B" * 4 + "\r", "\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIn("Un autre changement est en cours", out.getvalue())
+
+
+class BackupCliTest(TuiCliTest):
+    NAME = "plaid-backup-2026-11-08-0300.tar.gz"
+
+    def flow(self, state="done"):
+        flow = installed_flow()
+        flow.started = []
+        flow.start_backup = lambda: flow.started.append("backup")
+        flow.start_restore = lambda name: flow.started.append(name)
+        flow.list_backups = lambda s: [{"name": self.NAME, "size": 5 * 1024 ** 2}]
+        flow.backup_status = lambda: {}
+        first = "step_restore_stop" if state == "restored" else "step_backup_stop"
+        flow.apply_status = lambda: {"state": "done" if flow.started else "idle", "events": [
+            {"step": first}, {"step": "step_done", "done": True, "detail": self.NAME}]}
+        return flow
+
+    # Menu: apps, trackers, remote, settings, update, torrents, backup, restore, remove, quit.
+    def test_backup_now(self):
+        flow = self.flow()
+        t, out = self.term("\x1b[B" * 6 + "\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertEqual(flow.started, ["backup"])
+        self.assertIn("Enregistrée : plaid-backup-2026-11-08-0300.tar.gz.", out.getvalue())
+
+    def test_restore(self):
+        flow = self.flow("restored")
+        # restore · pick the only backup · yes · quit
+        t, out = self.term("\x1b[B" * 7 + "\r", "\r", "\x1b[D\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertEqual(flow.started, [self.NAME])
+        self.assertIn("8 novembre 2026", out.getvalue())

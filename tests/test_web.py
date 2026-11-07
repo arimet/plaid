@@ -72,6 +72,10 @@ class FakeFlow:
 
     updated = None
     update_started = False
+    backup = {}
+
+    def backup_status(self):
+        return self.backup
 
     def last_update(self):
         return self.updated
@@ -857,3 +861,71 @@ class BusyWebTest(unittest.TestCase):
         status, headers, _ = self.req("POST", "/api/update", "", {"Cookie": self.cookie,
                                                                   "Content-Type": "application/x-www-form-urlencoded"})
         self.assertEqual((status, headers["Location"]), (303, "/settings/progress"))
+
+
+class BackupWebTest(unittest.TestCase):
+    start, req = WebTest.start, WebTest.req
+    open_panel = GuardWebTest.open_panel
+    NAME = "plaid-backup-2026-11-08-0300.tar.gz"
+
+    def setUp(self):
+        FakeFlow.list_backups = lambda flow, s: [{"name": self.NAME, "size": 5 * 1024 ** 2}]
+        FakeFlow.start_backup = lambda flow: self.started.append("backup")
+        FakeFlow.start_restore = lambda flow, name: self.started.append(name)
+        self.started = []
+        self.addCleanup(lambda: [delattr(FakeFlow, k) for k in ("list_backups", "start_backup", "start_restore")])
+        self.addCleanup(lambda: setattr(FakeFlow, "backup", {}))
+
+    def form(self, body=""):
+        return body, {"Cookie": self.cookie, "Content-Type": "application/x-www-form-urlencoded"}
+
+    def test_panel_backup_block(self):
+        html = self.open_panel()
+        self.assertIn('action="/api/backup"', html)
+        self.assertIn('href="/backups"', html)
+        self.assertIn("la première se fera cette nuit", html)
+        self.server.shutdown()
+        FakeFlow.backup = {"at": 1794110400, "name": self.NAME, "size": 5 * 1024 ** 2}
+        self.assertIn("Dernière sauvegarde le ", self.open_panel())
+        self.server.shutdown()
+        FakeFlow.backup = {"at": 1794110400, "failed_at": 1794196800, "error": "err_backup_disk", "name": self.NAME}
+        self.assertIn("La sauvegarde de cette nuit a échoué", self.open_panel())
+
+    def test_backup_now(self):
+        self.open_panel()
+        status, headers, _ = self.req("POST", "/api/backup", *self.form())
+        self.assertEqual((status, headers["Location"], self.started), (303, "/settings/progress", ["backup"]))
+        self.assertEqual(self.req("POST", "/api/backup", "")[0], 401)
+
+    def test_backups_page_and_restore(self):
+        self.open_panel()
+        _, _, html = self.req("GET", "/backups", headers={"Cookie": self.cookie})
+        self.assertIn("8 novembre 2026", html)
+        self.assertIn("/backups/confirm?name=" + self.NAME, html)
+        _, _, html = self.req("GET", "/backups/confirm?name=" + self.NAME, headers={"Cookie": self.cookie})
+        self.assertIn('name="name" value="' + self.NAME, html)
+        status, headers, _ = self.req("POST", "/api/restore", *self.form("name=" + self.NAME))
+        self.assertEqual((status, headers["Location"], self.started), (303, "/settings/progress", [self.NAME]))
+
+    def test_restore_only_a_listed_backup(self):
+        self.open_panel()
+        status, _, _ = self.req("POST", "/api/restore", *self.form("name=plaid-backup-2020-01-01-0300.tar.gz"))
+        self.assertEqual((status, self.started), (404, []))
+        self.assertEqual(self.req("POST", "/api/restore", "name=" + self.NAME)[0], 401)
+
+    def test_progress_pages(self):
+        done = {"state": "done", "events": [{"step": "step_backup_stop"}, {"step": "step_backup_copy"},
+                                            {"step": "step_backup_start"},
+                                            {"step": "step_done", "done": True, "detail": self.NAME}]}
+        self.assertIn("Sauvegarde faite", web.settings_progress("fr", done))
+        failed = {"state": "failed", "events": [{"step": "step_backup_stop", "error": "err_backup_disk"}]}
+        self.assertIn("Le disque des médias est absent", web.settings_progress("fr", failed))
+        restored = {"state": "done", "events": [{"step": "step_restore_stop"},
+                                                {"step": "step_done", "done": True, "detail": self.NAME}]}
+        self.assertIn("8 novembre 2026", web.settings_progress("fr", restored))
+
+    def test_settings_backup_folder(self):
+        page = web.settings_page("fr", settings())
+        self.assertIn('id="backup_dir"', page)
+        self.assertIn('data-for="backup_dir"', page)
+        self.assertIn("/home/zoe/Plaid/backups", page)  # the default, as a placeholder

@@ -338,6 +338,7 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     actions = [("apps", t(lang, "menu_apps")), ("trackers", t(lang, "menu_trackers")),
                ("remote", t(lang, "menu_remote")), ("settings", t(lang, "menu_settings")),
                ("update", t(lang, "update_btn")), ("torrents", t(lang, "torrents_link")),
+               ("backup", t(lang, "menu_backup")), ("restore", t(lang, "menu_restore")),
                ("remove", t(lang, "menu_remove")), ("quit", t(lang, "menu_quit"))]
     with term.fullscreen():
         try:
@@ -387,6 +388,10 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     flash = _update_tui(term, flow, lang)
                 elif choice == "torrents":
                     flash = _torrents_tui(term, flow, lang, s)
+                elif choice == "backup":
+                    flash = _backup_tui(term, flow, lang)
+                elif choice == "restore":
+                    flash = _restore_tui(term, flow, lang, s)
                 elif choice == "remove":
                     term.page(t(lang, "uninstall_title"), t(lang, "uninstall_text"))
                     code, notes = _remove_steps(term, flow, lang, s.data_dir, size())
@@ -399,19 +404,18 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     return code
 
 
-def _update_tui(term, flow, lang: str) -> str:
-    """Runs the apps' update in the worker and follows it. Returns the line the menu shows next."""
+def _follow(term, flow, lang: str, start, step_keys: tuple, failed_key: str, done) -> str:
+    """Starts an operation in the worker and follows it. Returns the line the menu shows next."""
     import time
-    from installer.tui import Steps
-    term.page(t(lang, "update_running"), t(lang, "update_help"))
     from installer.flow import WorkerBusy
+    from installer.tui import Steps
     try:
-        flow.start_update()
+        start()
     except WorkerBusy:  # one operation at a time
         term.note(t(lang, "update_busy"), "warn")
         term.pause(t(lang, "cli_back"))
         return ""
-    steps = Steps(term, [(k, t(lang, k)) for k in ("step_pull", "step_recreate", "step_cleanup_images")])
+    steps = Steps(term, [(k, t(lang, k)) for k in step_keys])
     while True:
         status = flow.apply_status()
         events = status["events"]
@@ -419,17 +423,52 @@ def _update_tui(term, flow, lang: str) -> str:
             steps.advance(events[-1]["step"])
         if status["state"] == "done":
             steps.finish()
-            from installer.web import update_lines
-            return " ".join(text for text, _ in update_lines(lang, events[-1]))
+            return done(events[-1])
         if status["state"] in ("failed", "idle"):  # idle: the worker went away, its last word read elsewhere
             steps.failed = True
             steps.render()
-            term.note(t(lang, "err_update_failed"), "error")
+            error = (events[-1].get("error") or "") if events else ""
+            term.note(t(lang, error if error in ("err_backup_disk", "err_backup_failed", "err_restore_failed")
+                        else failed_key), "error")
             term.note(events[-1].get("detail", "") if events else "")
             term.pause(t(lang, "cli_back"))
             return ""
         steps.render()
         time.sleep(0.3)
+
+
+def _update_tui(term, flow, lang: str) -> str:
+    from installer.web import update_lines
+    term.page(t(lang, "update_running"), t(lang, "update_help"))
+    return _follow(term, flow, lang, flow.start_update, ("step_pull", "step_recreate", "step_cleanup_images"),
+                   "err_update_failed", lambda last: " ".join(text for text, _ in update_lines(lang, last)))
+
+
+def _backup_tui(term, flow, lang: str) -> str:
+    term.page(t(lang, "backup_running"), t(lang, "backup_help"))
+    return _follow(term, flow, lang, flow.start_backup, ("step_backup_stop", "step_backup_copy", "step_backup_start"),
+                   "err_backup_failed", lambda last: t(lang, "backup_saved", name=last.get("detail") or ""))
+
+
+def _restore_tui(term, flow, lang: str, s) -> str:
+    from installer import backup
+    from installer.web import backup_date, human_size
+    term.page(t(lang, "backups_title"), t(lang, "backups_help"))
+    found = flow.list_backups(s)
+    if not found:
+        term.note(t(lang, "backups_none", folder=backup.where(s)))
+        term.pause(t(lang, "cli_back"))
+        return ""
+    options = [(b["name"], backup_date(lang, b["name"]), None, human_size(b["size"], lang)) for b in found]
+    name = term.select(t(lang, "backups_pick"), options + [("back", t(lang, "btn_back"))],
+                       hint=t(lang, "cli_select_hint"))
+    if name == "back" or not term.confirm(t(lang, "backups_confirm", date=backup_date(lang, name)),
+                                          t(lang, "cli_yes_word"), t(lang, "cli_no_word"), default=False):
+        return ""
+    term.page(t(lang, "restore_running"))
+    return _follow(term, flow, lang, lambda: flow.start_restore(name),
+                   ("step_restore_stop", "step_restore_copy", "step_restore_start"), "err_restore_failed",
+                   lambda last: t(lang, "restore_back", date=backup_date(lang, last.get("detail") or name)))
 
 
 def _torrents_tui(term, flow, lang: str, s) -> str:

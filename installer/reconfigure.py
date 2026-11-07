@@ -11,7 +11,7 @@ from typing import Callable
 from installer import apps, docker, flow, media
 from installer.compose import PORTS
 from installer.flow import Progress
-from installer.settings import Settings, validate
+from installer.settings import Settings, is_absolute, validate
 
 STEPS_ORDER = ("step_folder", "step_compose", "step_vpn", "step_download_client", "step_tailscale",
                "step_rescan", "step_profiles", "step_subtitles", "step_metadata", "step_account", "step_save")
@@ -33,6 +33,8 @@ def merge(old: Settings, data: dict) -> Settings:
             fields = {**old.vpn_fields, **given}
     tailscale = "" if data.get("remove_tailscale") else text("tailscale_key", old.tailscale_key)
     chosen = {k: data[k] for k in MEDIA_FIELDS if k in data}  # absent: as it was (None stays never chosen)
+    if "backup_dir" in data:  # blank: back to the default, in the media folder
+        chosen["backup_dir"] = str(data["backup_dir"] or "").strip() or None
     return replace(old, **chosen, data_dir=text("data_dir", old.data_dir), username=text("username", old.username),
                    password=str(data.get("password") or "") or old.password, vpn_provider=provider,
                    vpn_fields=fields, timezone=text("timezone", old.timezone),
@@ -54,6 +56,7 @@ def changes(old: Settings, new: Settings) -> dict[str, str]:
         "tailscale": _kind(old.tailscale_key, new.tailscale_key),
         "account": "change" if (old.username, old.password) != (new.username, new.password) else None,
         "folder": "change" if old.data_dir != new.data_dir else None,
+        "backup": "change" if old.backup_dir != new.backup_dir else None,
         # A new interface language renames Plaid's profiles.
         "profiles": "change" if (old.audio_lang, old.profiles, old.default_profile) !=
         (new.audio_lang, new.profiles, new.default_profile) or (old.lang != new.lang and media.configured(new))
@@ -121,6 +124,13 @@ def check(old: Settings, new: Settings, dk=docker) -> list[str]:
             found.append(FOLDER_CHECK[state])
         if state not in ("missing", "unknown"):
             found += flow.disk_warnings(new, dk)
+    if "backup" in chg and new.backup_dir:  # used as it is: it must be there
+        if not is_absolute(new.backup_dir):
+            found.append("err_path_absolute")
+        else:
+            state = dk.folder_state(dk.host_path(new.backup_dir, new.platform))
+            if state in ("missing", "unknown"):
+                found.append(FOLDER_CHECK[state])
     return found
 
 

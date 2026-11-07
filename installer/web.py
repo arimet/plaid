@@ -11,6 +11,7 @@ import threading
 import time
 import urllib.parse
 from dataclasses import asdict
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -157,11 +158,11 @@ def media_fields(lang: str, s: Settings) -> str:
   {_lang_select(lang, "metadata_lang", e.metadata_lang)}<p class="hint">{E(t(lang, "field_metadata_lang_help"))}</p></div>"""
 
 
-def picker_html(lang: str, create: bool) -> str:
+def picker_html(lang: str, create: bool, field: str = "data_dir") -> str:
     """The disks and folders panel under a folder field; app.js fills it. `create`: offer a new Plaid folder."""
     here = (f'<button type="button" class="btn small" data-here>{E(t(lang, "picker_here"))}</button>'
             if create else "")
-    flag = ' data-create="1"' if create else ""
+    flag = (' data-create="1"' if create else "") + (f' data-for="{field}"' if field != "data_dir" else "")
     return (f'<div class="picker" data-picker{flag}>'
             f'<button type="button" class="linkish" data-picker-open aria-expanded="false">{E(t(lang, "picker_open"))}</button>'
             f'<div class="picker-panel" hidden><p class="picker-where" aria-live="polite"></p><ul class="picker-list"></ul>'
@@ -283,6 +284,59 @@ def guard_html(lang: str, s: Settings, status: dict) -> str:
 FULL_DISK = 20 * 10 ** 9  # under this, downloads soon stop
 
 
+def backup_where(s: Settings) -> str:
+    from installer import backup
+    return backup.where(s)
+
+
+def long_date(lang: str, when: datetime) -> str:
+    month = t(lang, "months").split("|")[when.month - 1]
+    return f"{when.day} {month} {when.year}" if lang == "fr" else f"{month} {when.day}, {when.year}"
+
+
+def backup_date(lang: str, name: str) -> str:
+    """"8 novembre 2026, 03:00" from plaid-backup-2026-11-08-0300.tar.gz."""
+    when = datetime.strptime(name[len("plaid-backup-"):len("plaid-backup-") + 15], "%Y-%m-%d-%H%M")
+    return f"{long_date(lang, when)}, {when:%H:%M}"
+
+
+def backup_html(lang: str, s: Settings, st: dict) -> str:
+    """The panel's backup block: the last one, or why last night's failed."""
+    from installer import backup
+    if st.get("failed_at") and (not st.get("at") or st["failed_at"] > st["at"]):
+        reason = st.get("error") or ""
+        line = t(lang, "backup_failed", reason=t(lang, reason) if reason.startswith("err_") else reason)
+        kind = "note warn"
+    elif st.get("at"):
+        line = t(lang, "backup_last", date=long_date(lang, datetime.fromtimestamp(st["at"])),
+                 size=human_size(st.get("size") or 0, lang), folder=backup.where(s))
+        kind = "hint"
+    else:
+        line, kind = t(lang, "backup_none"), "hint"
+    return (f'<h2>{E(t(lang, "backup_title"))}</h2><div class="maint"><p class="hint">{E(t(lang, "backup_help"))}</p>'
+            f'<p class="{kind}">{E(line)}</p><form method="post" action="/api/backup"><button class="btn" '
+            f'type="submit">{E(t(lang, "backup_btn"))}</button></form>'
+            f'<a href="/backups">{E(t(lang, "backup_restore_link"))}</a></div>')
+
+
+def backups_page(lang: str, s: Settings, found: list[dict]) -> str:
+    from installer import backup
+    head = f'<h1>{E(t(lang, "backups_title"))}</h1><p class="lead">{E(t(lang, "backups_help"))}</p>'
+    if not found:
+        return subpage(lang, head + f'<p class="hint">{E(t(lang, "backups_none", folder=backup.where(s)))}</p>')
+    rows = "".join(f'<li class="app-row"><span><b>{E(backup_date(lang, b["name"]))}</b><br><small>'
+                   f'{E(human_size(b["size"], lang))}</small></span><a class="btn" href="/backups/confirm?name='
+                   f'{E(urllib.parse.quote(b["name"]))}">{E(t(lang, "backups_pick"))}</a></li>' for b in found)
+    return subpage(lang, head + f'<ul class="manual">{rows}</ul>')
+
+
+def restore_confirm_page(lang: str, name: str) -> str:
+    return subpage(lang, f'<h1>{E(t(lang, "backups_confirm", date=backup_date(lang, name)))}</h1>'
+                         f'<p class="lead">{E(t(lang, "backups_help"))}</p><form method="post" action="/api/restore">'
+                         f'<input type="hidden" name="name" value="{E(name)}"><button class="btn danger" '
+                         f'type="submit">{E(t(lang, "backups_confirm_btn"))}</button></form>')
+
+
 def disk_html(lang: str, s: Settings, status: dict) -> str:
     """The media disk's room, from the guard's last round. None on a Mac external disk: no bar then."""
     free, total = status.get("free"), status.get("total")
@@ -310,7 +364,7 @@ def maintenance_html(lang: str, last: dict | None) -> str:
 
 
 def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status: dict | None = None,
-               last_update: dict | None = None) -> str:
+               last_update: dict | None = None, backup_status: dict | None = None) -> str:
     states = (status or {}).get("apps") or {}
 
     def app_link(svc: str, daily: bool) -> str:
@@ -345,6 +399,7 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
   {apps}
   {disk_html(lang, s, status or {})}
   {maintenance_html(lang, last_update)}
+  {backup_html(lang, s, backup_status or {})}
   {autostart}"""
     return subpage(lang, body, back=False)
 
@@ -365,7 +420,8 @@ def settings_data(form: dict) -> dict:
     """The settings form as reconfigure.merge reads it: VPN fields are named vpn_<provider>_<FIELD>."""
     provider = form.get("vpn_provider", "")
     prefix = f"vpn_{provider}_"
-    return {**{k: form[k] for k in ("data_dir", "username", "password", "timezone", "lang", "tailscale_key")
+    return {**{k: form[k] for k in ("data_dir", "username", "password", "timezone", "lang", "tailscale_key",
+                                    "backup_dir")
                if k in form},
             "vpn_provider": provider,
             "vpn_fields": {k[len(prefix):]: v for k, v in form.items() if provider and k.startswith(prefix)},
@@ -436,6 +492,12 @@ def settings_page(lang: str, s: Settings, note: str = "", shown: Settings | None
          _field(t(lang, "settings_folder_label"), "data_dir", shown.data_dir, hint=t(lang, "settings_folder_help"))
          + picker_html(lang, False))}
   {sep}
+  {group(t(lang, "backup_title"), t(lang, "backup_help"),
+         f'<div class="field"><label class="l" for="backup_dir">{E(t(lang, "field_backup_dir"))}</label>'
+         f'<input class="input" id="backup_dir" name="backup_dir" value="{E(shown.backup_dir or "")}" '
+         f'placeholder="{E(backup_where(shown))}" autocomplete="off" spellcheck="false">'
+         f'<p class="hint">{E(t(lang, "field_backup_dir_help"))}</p></div>' + picker_html(lang, False, "backup_dir"))}
+  {sep}
   {group(t(lang, "settings_group_account"), t(lang, "settings_group_account_desc"),
          _field(t(lang, "field_username"), "username", shown.username)
          + _field(t(lang, "settings_new_password"), "password", kind="password", hint=keep)
@@ -452,6 +514,7 @@ def settings_page(lang: str, s: Settings, note: str = "", shown: Settings | None
 
 def change_lines(lang: str, chg: dict[str, str], new: Settings) -> list[str]:
     value = {"lang": LANG_NAMES[new.lang], "timezone": new.timezone, "folder": new.data_dir,
+             "backup": backup_where(new),
              "vpn": PROVIDERS[new.vpn_provider].label if new.vpn_provider else ""}
     return [t(lang, f"change_{key}" + (f"_{kind}" if key in ("vpn", "tailscale") else ""), value=value.get(key, ""))
             for key, kind in chg.items()]
@@ -476,6 +539,8 @@ def change_rows(lang: str, chg: dict[str, str], old: Settings, new: Settings) ->
         rows.append((t(lang, "field_timezone"), old.timezone, new.timezone))
     if "folder" in chg:
         rows.append((t(lang, "field_folder"), old.data_dir, new.data_dir))
+    if "backup" in chg:
+        rows.append((t(lang, "field_backup_dir"), backup_where(old), backup_where(new)))
     if old.username != new.username:
         rows.append((t(lang, "field_username"), old.username, new.username))
     if old.password != new.password:
@@ -570,10 +635,18 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
             return f'<span class="knot ok">{CHECK}</span>'
         return '<span class="knot bad"></span>' if state_ == "failed" else '<span class="knot now"></span>'
     steps = "".join(f'<li>{knot(i)}<span>{E(t(lang, e["step"]))}</span></li>' for i, e in enumerate(shown))
-    updating = bool(events) and events[0].get("step") == "step_pull"
+    kind = {"step_pull": "update", "step_backup_stop": "backup", "step_restore_stop": "restore"}.get(
+        events[0].get("step") if events else "")
+    updating = kind == "update"
     if state_ == "running" or (state_ == "idle" and not events):
-        title = t(lang, "update_running" if updating else "settings_running")
+        title = t(lang, f"{kind}_running" if kind else "settings_running")
         extra, head = "", '<meta http-equiv="refresh" content="2">'
+    elif state_ == "done" and kind in ("backup", "restore"):
+        name = last.get("detail") or ""
+        title, head = t(lang, f"{kind}_done"), ""
+        text = (t(lang, "backup_saved", name=name) if kind == "backup"
+                else t(lang, "restore_back", date=backup_date(lang, name)))
+        extra = f'<p class="lead">{E(text)}</p>'
     elif state_ == "done" and updating:
         title, head = t(lang, "update_done"), ""
         extra = "".join(f'<p class="{"lead" if kind == "ok" else "note warn"}">{E(text)}</p>'
@@ -593,7 +666,10 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
         if any(e.get("step") == "step_profiles" for e in events):
             extra += f'<p class="hint">{E(t(lang, "settings_other_version"))}</p>'
     else:
-        title, head = t(lang, "err_update_failed" if updating else "err_apply_failed"), ""
+        error = last.get("error") or ""
+        title = t(lang, error if kind in ("backup", "restore") and error.startswith("err_") else
+                  "err_update_failed" if updating else "err_apply_failed")
+        head = ""
         extra = f'<pre class="detail">{E(last.get("detail") or "")}</pre>'
     body = f'<h1>{E(title)}</h1><ul class="steps">{steps}</ul>{extra}'
     return subpage(lang, body, head=head)
@@ -766,7 +842,8 @@ def make_handler(state: State):
                     return self.json(401, {})
                 status, detail = state.flow.uninstall_status()
                 return self.json(200, {"state": status, "detail": detail, "text": t(lang, "err_uninstall_failed")})
-            if path not in ("/", "/remote", "/trackers", "/torrents", "/remove", "/settings", "/settings/progress"):
+            if path not in ("/", "/remote", "/trackers", "/torrents", "/backups", "/backups/confirm", "/remove",
+                            "/settings", "/settings/progress"):
                 return self.send(404, "Not found", "text/plain")
             if self.locked():
                 return self.send(303, "", headers={"Location": "/login"})
@@ -783,6 +860,13 @@ def make_handler(state: State):
                 return self.send(200, settings_progress(lang, state.flow.apply_status(), host))
             if path == "/trackers":
                 return self.send(200, trackers_page(lang))
+            if path == "/backups":
+                return self.send(200, backups_page(lang, s, state.flow.list_backups(s)))
+            if path == "/backups/confirm":
+                name = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("name", [""])[0]
+                if name not in [b["name"] for b in state.flow.list_backups(s)]:
+                    return self.send(303, "", headers={"Location": "/backups"})
+                return self.send(200, restore_confirm_page(lang, name))
             if path == "/torrents":
                 try:
                     found = state.flow.finished_torrents(s)
@@ -796,7 +880,7 @@ def make_handler(state: State):
                 # Opened on the machine itself: the LAN address works here too, and from the TV or the phone.
                 host = state.env["HOST_ADDR"]
             return self.send(200, panel_page(lang, s, host, state.flow.is_complete(), state.flow.guard_status(),
-                                             state.flow.last_update()))
+                                             state.flow.last_update(), state.flow.backup_status()))
 
         def do_POST(self):
             path = urllib.parse.urlparse(self.path).path
@@ -850,6 +934,17 @@ def make_handler(state: State):
                     return self.send(200, torrents_page(lang, [], state.flow.clean_torrents(s, hashes)))
                 except Exception:
                     return self.send(200, torrents_page(lang, None))
+            if path in ("/api/backup", "/api/restore"):
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                name = str(data.get("name", ""))
+                if path == "/api/restore" and name not in [b["name"] for b in state.flow.list_backups(s)]:
+                    return self.json(404, {})
+                try:
+                    state.flow.start_backup() if path == "/api/backup" else state.flow.start_restore(name)
+                except WorkerBusy:  # one operation at a time: show the running one
+                    pass
+                return self.send(303, "", headers={"Location": "/settings/progress"})
             if path == "/api/update":
                 if self.locked() or s is None:
                     return self.json(401, {})

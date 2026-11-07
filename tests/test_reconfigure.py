@@ -482,3 +482,20 @@ class OneWorkerTest(unittest.TestCase):
             with self.assertRaises(flow.WorkerBusy):
                 flow.start_apply(settings(lang="fr"), {}, dk=dk, state_dir=d)
             self.assertFalse(os.path.exists(os.path.join(d, "apply-request.json")))
+
+
+class BackupDirSettingTest(unittest.TestCase):
+    def test_backup_dir_is_saved_only(self):
+        new = reconfigure.merge(settings(), {"backup_dir": " /mnt/other "})
+        self.assertEqual(new.backup_dir, "/mnt/other")
+        chg = reconfigure.changes(settings(), new)
+        self.assertEqual(chg, {"backup": "change"})
+        self.assertEqual(reconfigure.steps(chg, False), ["step_save"])
+        self.assertIsNone(reconfigure.merge(new, {"backup_dir": ""}).backup_dir)  # blank: back to the default
+        self.assertEqual(reconfigure.merge(new, {}).backup_dir, "/mnt/other")  # absent: as it was
+
+    def test_backup_dir_must_exist(self):
+        new = settings(backup_dir="/mnt/gone")
+        self.assertEqual(reconfigure.check(settings(), new, FakeDocker(folder="missing")), ["err_folder_missing"])
+        self.assertEqual(reconfigure.check(settings(), new, FakeDocker(folder="other")), [])
+        self.assertIn("err_path_absolute", reconfigure.check(settings(), settings(backup_dir="rel"), FakeDocker()))
