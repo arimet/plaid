@@ -131,15 +131,23 @@ class BackupTest(unittest.TestCase):
 
 
 class ScheduleTest(unittest.TestCase):
-    def test_maybe_backup_starts_once_and_notes_the_night(self):
+    def installed(self):
         d = tempfile.mkdtemp()
+        flow.write_json(os.path.join(d, "settings.json"), json.loads(settings().to_json()))
+        return d
+
+    def test_nothing_installed_nothing_due(self):
+        self.assertFalse(flow.maybe_backup(tempfile.mkdtemp(), now=lambda: NIGHT, start=lambda: 1 / 0))
+
+    def test_maybe_backup_starts_once_and_notes_the_night(self):
+        d = self.installed()
         started = []
         flow.maybe_backup(d, now=lambda: NIGHT, start=lambda: started.append(1))
         flow.maybe_backup(d, now=lambda: NIGHT, start=lambda: started.append(1))
         self.assertEqual(started, [1])
 
     def test_busy_worker_tries_next_round(self):
-        d = tempfile.mkdtemp()
+        d = self.installed()
         def busy():
             raise flow.WorkerBusy()
         flow.maybe_backup(d, now=lambda: NIGHT, start=busy)
@@ -150,3 +158,12 @@ class ScheduleTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LocalTimeTest(unittest.TestCase):
+    def test_the_night_is_the_stack_time_zone_s(self):
+        from datetime import timezone
+        paris = backup.local_now(settings(timezone="Europe/Paris"), utc=datetime(2026, 11, 8, 2, 30, tzinfo=timezone.utc))
+        self.assertEqual((paris.hour, paris.minute), (3, 30))  # 2:30 UTC is past 3:00 in Paris
+        bad = backup.local_now(settings(timezone="Mars/Olympus"), utc=datetime(2026, 11, 8, 2, 30, tzinfo=timezone.utc))
+        self.assertEqual(bad.hour, 2)  # an unknown zone: UTC rather than no backup at all

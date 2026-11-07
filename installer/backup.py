@@ -6,7 +6,8 @@ import json
 import ntpath
 import os
 import posixpath
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from installer import docker, flow
 from installer.compose import DISK_APPS
@@ -35,6 +36,15 @@ def status(state_dir: str = flow.STATE_DIR) -> dict:
 
 def note(state_dir: str, **fields) -> None:
     flow.write_json(os.path.join(state_dir, STATE_FILE), {**status(state_dir), **fields})
+
+
+def local_now(s: Settings, utc: datetime | None = None) -> datetime:
+    """The time in the stack's zone (the one chosen in Plaid), not the container's: the night is the user's."""
+    utc = utc or datetime.now(timezone.utc)
+    try:
+        return utc.astimezone(ZoneInfo(s.timezone))
+    except Exception:  # an unknown zone: UTC rather than no backup at all
+        return utc
 
 
 def due(now: datetime, st: dict) -> bool:
@@ -95,10 +105,10 @@ def _operate(kind: str, work, report: Report, dk, state_dir: str, s: Settings) -
         return False
 
 
-def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, now=datetime.now) -> str | None:
+def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, now=None) -> str | None:
     """One backup. Returns its file name, or None on failure."""
     s = flow.load_settings(state_dir)
-    when = now()
+    when = now() if now else local_now(s)
     note(state_dir, tried=when.date().isoformat())
     name = when.strftime(f"{docker.BACKUP_PREFIX}%Y-%m-%d-%H%M.tar.gz")
     dest, sub, on_media = target(s, dk)

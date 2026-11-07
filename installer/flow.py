@@ -340,9 +340,11 @@ def list_backups(s: Settings, dk=docker) -> list[dict]:
 def maybe_backup(state_dir: str = STATE_DIR, now=None, start=None) -> bool:
     """The guard's nightly check: starts a backup once a day after 3:00. The night is noted only once it started,
     so a busy worker means "next round", and a crash does not mean "every 30 s"."""
-    from datetime import datetime
     from installer import backup
-    when = (now or datetime.now)()
+    s = load_settings(state_dir)
+    if s is None:
+        return False
+    when = now() if now else backup.local_now(s)
     if not backup.due(when, backup.status(state_dir)):
         return False
     try:

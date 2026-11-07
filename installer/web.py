@@ -11,7 +11,7 @@ import threading
 import time
 import urllib.parse
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -308,7 +308,7 @@ def backup_html(lang: str, s: Settings, st: dict) -> str:
         line = t(lang, "backup_failed", reason=t(lang, reason) if reason.startswith("err_") else reason)
         kind = "note warn"
     elif st.get("at"):
-        line = t(lang, "backup_last", date=long_date(lang, datetime.fromtimestamp(st["at"])),
+        line = t(lang, "backup_last", date=long_date(lang, backup.local_now(s, datetime.fromtimestamp(st["at"], timezone.utc))),
                  size=human_size(st.get("size") or 0, lang), folder=backup.where(s))
         kind = "hint"
     else:
