@@ -57,7 +57,12 @@ T: dict[str, dict[str, str]] = {
         "settings_lang": "Language",
         "settings_timezone_help": "Written as Continent/City, for example Europe/Paris.",
         "settings_folder_help": "Plaid uses this folder as it is and copies or moves nothing. Put your library there before you change it.",
-        "settings_lead": "Change only what needs to change. Before anything is applied, Plaid shows you what will happen.",
+        "settings_lead": "Change only what needs to change. Before anything is applied, Plaid shows you what will happen. "
+                         "Everything else is in each app's own settings.",
+        "apps_your_way": "Plaid sets the basics, so everything works from the start. Each app keeps all of its own "
+                         "settings: open it to go further, with finer quality rules in Radarr and Sonarr, more trackers in "
+                         "Prowlarr, family accounts in Jellyfin, speed limits in qBittorrent. What you change there stays, "
+                         "unless you change the same thing again on Plaid's settings page.",
         "settings_group_general": "Language and time zone",
         "settings_group_general_desc": "For this assistant and the terminal menu. Jellyfin and Bazarr keep their own language.",
         "settings_folder_desc": "Where films, series and downloads live.",
@@ -416,7 +421,13 @@ T: dict[str, dict[str, str]] = {
         "settings_lang": "Langue",
         "settings_timezone_help": "Au format Continent/Ville, par exemple Europe/Paris.",
         "settings_folder_help": "Plaid utilise ce dossier tel quel, sans rien copier ni déplacer. Mettez-y votre bibliothèque avant de le changer.",
-        "settings_lead": "Changez seulement ce qui doit changer. Avant d’appliquer quoi que ce soit, Plaid vous montre ce qui va se passer.",
+        "settings_lead": "Changez seulement ce qui doit changer. Avant d’appliquer quoi que ce soit, Plaid vous montre ce qui va se passer. "
+                         "Tout le reste se règle dans chaque appli.",
+        "apps_your_way": "Plaid fait les réglages de base, pour que tout marche dès le départ. Chaque appli garde tous ses "
+                         "réglages : ouvrez-la pour aller plus loin, avec des règles de qualité plus fines dans Radarr et "
+                         "Sonarr, d’autres trackers dans Prowlarr, les comptes de la famille dans Jellyfin, des limites de "
+                         "vitesse dans qBittorrent. Ce que vous y changez reste, sauf si vous changez la même chose dans les "
+                         "réglages de Plaid.",
         "settings_group_general": "Langue et fuseau horaire",
         "settings_group_general_desc": "Pour cet assistant et le menu du terminal. Jellyfin et Bazarr gardent leur propre langue.",
         "settings_folder_desc": "Là où vivent films, séries et téléchargements.",

@@ -61,6 +61,8 @@ It is powerful, and long to set up by hand. Plaid does the setup.
 </tr>
 </table>
 
+**Plaid sets the basics; each app keeps all of its settings.** Plaid makes the choices that suit most homes, so everything works from the first evening. To go further, open the app itself: finer quality rules in Radarr and Sonarr, more trackers in Prowlarr, family accounts and plugins in Jellyfin, speed limits in qBittorrent, subtitle sources in Bazarr. What you change there stays. Plaid only changes what you set again on its own settings page: its quality profiles, the subtitle and description languages, the account.
+
 ## The seven apps
 
 You open two of them. The other five work on their own.

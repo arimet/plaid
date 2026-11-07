@@ -364,6 +364,7 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     term.page(t(lang, "menu_apps"), t(lang, "apps_open_anywhere"))
                     print_apps(term, lang, host, status.get("apps"))
                     term.line()
+                    term.note(t(lang, "apps_your_way"))
                     if status.get("free") is not None and status.get("total"):
                         colon = " : " if lang == "fr" else ": "
                         term.note(t(lang, "panel_disk") + colon + t(lang, "picker_free", free=human_size(

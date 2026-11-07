@@ -401,7 +401,7 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
     daily = [svc for svc in SERVICES if svc in DAILY_APPS]
     behind = [svc for svc in SERVICES if svc not in DAILY_APPS]
     apps = (f'<h2>{E(t(lang, "apps_daily"))}</h2><div class="apps daily-apps">{"".join(app_link(x, True) for x in daily)}</div>'
-            f'<p class="lead">{E(t(lang, "apps_flow"))}</p>'
+            f'<p class="lead">{E(t(lang, "apps_flow"))}</p><p class="note">{E(t(lang, "apps_your_way"))}</p>'
             f'<h2>{E(t(lang, "apps_behind"))}</h2><p class="hint">{E(t(lang, "apps_behind_help"))}</p>'
             f'<div class="apps behind-apps">{"".join(app_link(x, False) for x in behind)}</div>')
     if not complete:  # a failed install: removal is the only thing to do
