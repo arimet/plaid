@@ -70,6 +70,15 @@ class FakeFlow:
     def media_size(self, s):
         return 412 * 1024 ** 3
 
+    updated = None
+    update_started = False
+
+    def last_update(self):
+        return self.updated
+
+    def start_update(self):
+        self.update_started = True
+
 
 def settings():
     return Settings(home="/home/zoe", platform="linux", **dict(FORM, lang="fr"))
@@ -738,3 +747,42 @@ class StatusWebTest(unittest.TestCase):
         status, _, body = self.req("GET", "/api/status", headers={"Cookie": self.cookie})
         self.assertEqual((status, json.loads(body)["apps"]), (200, {"radarr": "running"}))
         self.assertEqual(self.req("GET", "/api/status")[0], 401)
+
+
+class UpdateWebTest(unittest.TestCase):
+    start, req = WebTest.start, WebTest.req
+    open_panel = GuardWebTest.open_panel
+
+    def test_panel_offers_the_update(self):
+        html = self.open_panel()
+        self.assertIn('action="/api/update"', html)
+        self.assertIn("Pas encore mis à jour", html)
+        self.server.shutdown()
+        FakeFlow.updated = {"at": 1794050000, "updated": ["radarr"]}
+        self.addCleanup(lambda: setattr(FakeFlow, "updated", None))
+        self.assertIn("Dernière mise à jour le ", self.open_panel())
+
+    def test_update_route(self):
+        self.open_panel()
+        status, headers, _ = self.req("POST", "/api/update", "", {"Cookie": self.cookie,
+                                                                  "Content-Type": "application/x-www-form-urlencoded"})
+        self.assertEqual((status, headers["Location"]), (303, "/settings/progress"))
+        self.assertTrue(self.flow.update_started)
+
+    def test_update_route_needs_login_and_waits_its_turn(self):
+        self.open_panel()
+        self.assertEqual(self.req("POST", "/api/update", "")[0], 401)
+        self.flow.apply_state = {"state": "running", "events": []}
+        self.req("POST", "/api/update", "", {"Cookie": self.cookie, "Content-Type": "application/x-www-form-urlencoded"})
+        self.assertFalse(self.flow.update_started)  # a settings change runs: its progress page, nothing new
+
+    def test_update_progress_page(self):
+        done = {"state": "done", "events": [{"step": "step_pull"}, {"step": "step_recreate"},
+                                            {"step": "step_done", "done": True, "detail": "seerr,radarr"}]}
+        html = web.settings_progress("fr", done)
+        self.assertIn("Applis à jour", html)
+        self.assertIn("Mises à jour : Seerr, Radarr.", html)
+        none = {"state": "done", "events": [{"step": "step_pull"}, {"step": "step_done", "done": True, "detail": ""}]}
+        self.assertIn("Tout était déjà à jour.", web.settings_progress("fr", none))
+        failed = {"state": "failed", "events": [{"step": "step_pull", "error": "err_update_failed", "detail": "boom"}]}
+        self.assertIn("La mise à jour n’a pas abouti", web.settings_progress("fr", failed))

@@ -308,7 +308,8 @@ def stack_containers(run: Run = default_run) -> dict[str, dict]:
             continue
         found[service] = {
             "id": c["Id"], "running": bool(state.get("Running")), "started": state.get("StartedAt", ""),
-            "health": (state.get("Health") or {}).get("Status", ""), "network": c["HostConfig"]["NetworkMode"]}
+            "health": (state.get("Health") or {}).get("Status", ""), "network": c["HostConfig"]["NetworkMode"],
+            "image": c.get("Image", "")}
     return found
 
 

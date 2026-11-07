@@ -8,6 +8,7 @@ import mimetypes
 import os
 import secrets
 import threading
+import time
 import urllib.parse
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -297,7 +298,19 @@ def disk_html(lang: str, s: Settings, status: dict) -> str:
     return f'<div class="disk" data-disk><h2>{E(t(lang, "panel_disk"))}</h2>{room}{full}</div>'
 
 
-def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status: dict | None = None) -> str:
+def maintenance_html(lang: str, last: dict | None) -> str:
+    """Updating the apps, with the date of the last update that went through."""
+    when = (t(lang, "update_last", date=time.strftime("%d/%m/%Y" if lang == "fr" else "%Y-%m-%d",
+                                                      time.localtime(last["at"])))
+            if last else t(lang, "update_never"))
+    return (f'<h2>{E(t(lang, "maint_title"))}</h2><div class="maint">'
+            f'<p class="hint">{E(t(lang, "update_help"))} {E(when)}</p>'
+            f'<form method="post" action="/api/update"><button class="btn" type="submit">{E(t(lang, "update_btn"))}'
+            f'</button></form></div>')
+
+
+def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status: dict | None = None,
+               last_update: dict | None = None) -> str:
     states = (status or {}).get("apps") or {}
 
     def app_link(svc: str, daily: bool) -> str:
@@ -331,6 +344,7 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
   <p class="lead">{lead}{t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
   {apps}
   {disk_html(lang, s, status or {})}
+  {maintenance_html(lang, last_update)}
   {autostart}"""
     return subpage(lang, body, back=False)
 
@@ -542,8 +556,14 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
             return f'<span class="knot ok">{CHECK}</span>'
         return '<span class="knot bad"></span>' if state_ == "failed" else '<span class="knot now"></span>'
     steps = "".join(f'<li>{knot(i)}<span>{E(t(lang, e["step"]))}</span></li>' for i, e in enumerate(shown))
+    updating = bool(events) and events[0].get("step") == "step_pull"
     if state_ == "running" or (state_ == "idle" and not events):
-        title, extra, head = t(lang, "settings_running"), "", '<meta http-equiv="refresh" content="2">'
+        title = t(lang, "update_running" if updating else "settings_running")
+        extra, head = "", '<meta http-equiv="refresh" content="2">'
+    elif state_ == "done" and updating:
+        changed = [APP_NAMES.get(a, a) for a in (last.get("detail") or "").split(",") if a]
+        title, head = t(lang, "update_done"), ""
+        extra = f'<p class="lead">{E(t(lang, "update_changed", apps=", ".join(changed)) if changed else t(lang, "update_none"))}</p>'
     elif state_ == "done":
         missed = [a for a in (last.get("detail") or "").split(",") if a in PORTS]
         title, head = t(lang, "settings_done"), ""
@@ -559,7 +579,7 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
         if any(e.get("step") == "step_profiles" for e in events):
             extra += f'<p class="hint">{E(t(lang, "settings_other_version"))}</p>'
     else:
-        title, head = t(lang, "err_apply_failed"), ""
+        title, head = t(lang, "err_update_failed" if updating else "err_apply_failed"), ""
         extra = f'<pre class="detail">{E(last.get("detail") or "")}</pre>'
     body = f'<h1>{E(title)}</h1><ul class="steps">{steps}</ul>{extra}'
     return subpage(lang, body, head=head)
@@ -735,7 +755,8 @@ def make_handler(state: State):
             if host in ("localhost", "127.0.0.1", "[::1]") and state.env.get("HOST_ADDR", "localhost") != "localhost":
                 # Opened on the machine itself: the LAN address works here too, and from the TV or the phone.
                 host = state.env["HOST_ADDR"]
-            return self.send(200, panel_page(lang, s, host, state.flow.is_complete(), state.flow.guard_status()))
+            return self.send(200, panel_page(lang, s, host, state.flow.is_complete(), state.flow.guard_status(),
+                                             state.flow.last_update()))
 
         def do_POST(self):
             path = urllib.parse.urlparse(self.path).path
@@ -781,6 +802,12 @@ def make_handler(state: State):
                 except Exception as e:
                     return self.json(503, {"error": t(lang, "trackers_error"), "detail": str(e)})
                 return self.json(200, {"text": t(lang, "tracker_added")})
+            if path == "/api/update":
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                if state.flow.apply_status()["state"] != "running":  # one operation at a time: show the running one
+                    state.flow.start_update()
+                return self.send(303, "", headers={"Location": "/settings/progress"})
             if path == "/api/confirm-disk":
                 if self.locked() or s is None:
                     return self.json(401, {})

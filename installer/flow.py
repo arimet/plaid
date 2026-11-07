@@ -283,7 +283,21 @@ def write_json(path: str, data, mode: int = 0o600) -> None:
 
 def start_apply(new: Settings, current: dict[str, str], dk=docker, state_dir: str = STATE_DIR) -> None:
     """Hands a settings change to a detached container that mounts the state volume."""
-    write_json(os.path.join(state_dir, APPLY_REQUEST), {"settings": json.loads(new.to_json()), "current": current})
+    _start_worker({"settings": json.loads(new.to_json()), "current": current}, dk, state_dir)
+
+
+def last_update(state_dir: str = STATE_DIR) -> dict | None:
+    from installer import update
+    return update.last(state_dir)
+
+
+def start_update(dk=docker, state_dir: str = STATE_DIR) -> None:
+    """The apps' update runs in the same worker: one operation on the stack at a time."""
+    _start_worker({"kind": "update"}, dk, state_dir)
+
+
+def _start_worker(request: dict, dk, state_dir: str) -> None:
+    write_json(os.path.join(state_dir, APPLY_REQUEST), request)
     write_json(os.path.join(state_dir, APPLY_FILE), [])
     with OPS_LOCK:  # a running guard round finishes first; the next one sees the worker and stands back
         dk.run_detached(dk.own_image(), ["--apply-worker"], {}, dk.APPLY_WORKER,

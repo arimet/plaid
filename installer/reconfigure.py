@@ -288,11 +288,14 @@ def run_worker(dk=docker, state_dir: str = flow.STATE_DIR) -> int:
     with open(path, encoding="utf-8") as f:
         request = json.load(f)
     os.remove(path)  # it holds secrets
-    old, new = flow.load_settings(state_dir), Settings(**request["settings"])
     events: list[dict] = []
 
     def report(p: Progress) -> None:
         events.append(asdict(p))
         flow.write_json(os.path.join(state_dir, flow.APPLY_FILE), events)
     dk.connect_network(dk.self_container_id())
+    if request.get("kind") == "update":
+        from installer import update
+        return 0 if update.run(report, dk=dk, state_dir=state_dir) is not None else 1
+    old, new = flow.load_settings(state_dir), Settings(**request["settings"])
     return 0 if apply(old, new, request.get("current") or {}, report, dk=dk, state_dir=state_dir) is not None else 1

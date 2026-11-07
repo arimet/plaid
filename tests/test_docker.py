@@ -170,7 +170,7 @@ class GuardProbeTest(unittest.TestCase):
 
     def test_stack_containers(self):
         inspect = json.dumps([
-            {"Id": "g1", "State": {"Running": True, "StartedAt": "2026-11-06T10:00:00.1Z",
+            {"Id": "g1", "Image": "sha256:abc", "State": {"Running": True, "StartedAt": "2026-11-06T10:00:00.1Z",
                                    "Health": {"Status": "healthy"}},
              "HostConfig": {"NetworkMode": "plaid_default"},
              "Config": {"Labels": {"com.docker.compose.service": "gluetun"}}},
@@ -180,7 +180,7 @@ class GuardProbeTest(unittest.TestCase):
         run = FakeRun(0, inspect)  # the ps call gets this stdout too: its words become ids, harmless here
         got = docker.stack_containers(run=run)
         self.assertEqual(got["gluetun"], {"id": "g1", "running": True, "started": "2026-11-06T10:00:00.1Z",
-                                          "health": "healthy", "network": "plaid_default"})
+                                          "health": "healthy", "network": "plaid_default", "image": "sha256:abc"})
         self.assertEqual(got["qbittorrent"]["health"], "")
         self.assertEqual(got["qbittorrent"]["network"], "container:g0")
         self.assertIn("label=com.docker.compose.project=plaid", run.calls[0])

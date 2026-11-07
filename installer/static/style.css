@@ -283,3 +283,4 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 .state[data-state="failing"] i,.state[data-state="stopped"] i{background:var(--danger)}
 .state[data-state="failing"],.state[data-state="stopped"]{color:var(--danger-text)}
 .disk{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.maint{display:flex;flex-direction:column;gap:12px;align-items:flex-start}
