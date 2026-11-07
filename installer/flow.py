@@ -32,6 +32,7 @@ class Progress:
     detail: str = ""
     kept: list[str] = field(default_factory=list)  # quality profiles left in place: films or series still use them
     skipped: list[str] = field(default_factory=list)  # apps an update could not download
+    waiting: list[str] = field(default_factory=list)  # disk apps an update left for the guard: the disk is away
 
 
 Report = Callable[[Progress], None]
@@ -291,7 +292,9 @@ def _torrent_apps(s: Settings, dk, state_dir: str):
     from installer.reconfigure import host_of_for
     host_of = host_of_for(s)
     compose_out = lambda *args: dk.compose(state_dir, *args).stdout
-    return host_of("qbittorrent"), [apps.Arr(name, host_of(name), "v3", compose_out) for name in ("radarr", "sonarr")]
+    # Someone waits on the page: a stopped Radarr (disk away) answers "try again" in seconds, not in minutes.
+    return host_of("qbittorrent"), [apps.Arr(name, host_of(name), "v3", compose_out, seconds=10)
+                                    for name in ("radarr", "sonarr")]
 
 
 def finished_torrents(s: Settings, dk=docker, state_dir: str = STATE_DIR) -> list[dict]:

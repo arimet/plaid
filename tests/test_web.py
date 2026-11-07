@@ -787,6 +787,11 @@ class UpdateWebTest(unittest.TestCase):
         refused = {"state": "done", "events": [{"step": "step_pull"},
                                                {"step": "step_done", "done": True, "detail": "", "skipped": ["sonarr"]}]}
         self.assertIn("Pas pu télécharger la nouvelle version de : Sonarr.", web.settings_progress("fr", refused))
+        later = {"state": "done", "events": [{"step": "step_pull"},
+                                             {"step": "step_done", "done": True, "detail": "", "waiting": ["radarr"]}]}
+        html = web.settings_progress("fr", later)
+        self.assertIn("Radarr redémarrera sur sa nouvelle version quand le disque des médias reviendra.", html)
+        self.assertNotIn("<p class=\"lead\">Tout était", html)  # the texts also sit in the page JSON
         failed = {"state": "failed", "events": [{"step": "step_pull", "error": "err_update_failed", "detail": "boom"}]}
         self.assertIn("La mise à jour n’a pas abouti", web.settings_progress("fr", failed))
 

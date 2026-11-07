@@ -142,6 +142,10 @@ def finished_torrents(s: Settings, host: str, arrs: list) -> list[dict]:
     they never imported (added by hand, still to sort) is never listed."""
     imported = {h["downloadId"].upper() for arr in arrs
                 for h in arr("GET", f"/history/since?date=2000-01-01&eventType={IMPORTED}") or [] if h.get("downloadId")}
+    # Still in a queue: some files not imported yet (blocked episodes, a pack being copied). Those stay whole.
+    queued = {r["downloadId"].upper() for arr in arrs
+              for r in (arr("GET", "/queue?pageSize=1000") or {}).get("records", []) if r.get("downloadId")}
+    imported -= queued
     if not _qbit_login(host, s.username, s.password):
         raise RuntimeError("qBittorrent refused the login")
     torrents = call("GET", f"http://{host}/api/v2/torrents/info?filter=completed", headers={"Host": host}) or []
@@ -223,11 +227,12 @@ def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log) -> tuple
 # ---------------------------------------------------------------- Radarr, Sonarr, Prowlarr
 
 class Arr:
-    def __init__(self, name: str, host: str, version: str, compose_out: ComposeOut):
+    def __init__(self, name: str, host: str, version: str, compose_out: ComposeOut, seconds: int = WAIT):
+        """`seconds`: how long to wait for an app still starting (short for a page someone is looking at)."""
         self.name = name
         self.base = f"http://{host}/api/{version}"
-        self.key = read_when(compose_out, name, "/config/config.xml", r"<ApiKey>([^<]+)</ApiKey>")
-        wait_for(f"{self.base}/system/status?apikey={self.key}")
+        self.key = read_when(compose_out, name, "/config/config.xml", r"<ApiKey>([^<]+)</ApiKey>", seconds)
+        wait_for(f"{self.base}/system/status?apikey={self.key}", seconds=seconds)
 
     def __call__(self, method, path, body=None):
         return call(method, self.base + path, body, {"X-Api-Key": self.key})

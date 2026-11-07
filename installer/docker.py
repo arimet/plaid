@@ -330,6 +330,12 @@ def wipe_dir(path: str, home: str, platform: str, run: Run = default_run) -> Non
     _check(run, ["docker", "run", "--rm", "-v", f"{parent}:/p", HELPER, "rm", "-rf", f"/p/{name}"])
 
 
+def image_id(ref: str, run: Run = default_run) -> str:
+    """The image a tag points to now ("" when there is none)."""
+    result = run(["docker", "image", "inspect", "-f", "{{.Id}}", ref])
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
 def stack_exists(run: Run = default_run) -> bool:
     out = _check(run, ["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={PROJECT}"]).stdout
     return bool(out.strip())

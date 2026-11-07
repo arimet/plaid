@@ -449,14 +449,16 @@ class DeleteErrorTest(unittest.TestCase):
 
 
 class HistoryArr(FakeArr):
-    def __init__(self, name, imported):
+    def __init__(self, name, imported, queued=()):
         super().__init__(name)
-        self.imported = imported
+        self.imported, self.queued = imported, queued
 
     def __call__(self, method, path, body=None):
         self.calls.append((method, path, body))
         if path.startswith("/history/since"):
             return [{"downloadId": h, "eventType": "downloadFolderImported"} for h in self.imported]
+        if path.startswith("/queue"):
+            return {"records": [{"downloadId": h} for h in self.queued]}
 
 
 class TorrentCleanupTest(unittest.TestCase):
@@ -483,6 +485,13 @@ class TorrentCleanupTest(unittest.TestCase):
         self.assertEqual([t["name"] for t in got], ["Dune.2024.1080p", "Show.S01.1080p"])
         self.assertEqual(radarr.calls[0][1], "/history/since?date=2000-01-01&eventType=3")
         self.assertIn(("GET", "http://qbittorrent:8080/api/v2/torrents/info?filter=completed", None), self.seen)
+
+    def test_a_torrent_still_in_a_queue_stays(self):
+        # A season pack with two episodes left to import, or a pack still being copied: in Sonarr's queue until done.
+        radarr, sonarr = HistoryArr("radarr", ["AAA"]), HistoryArr("sonarr", ["BBB"], queued=["BBB"])
+        with mock.patch("installer.apps.call", self.fake_call()):
+            got = apps.finished_torrents(acct(), "qbittorrent:8080", [radarr, sonarr])
+        self.assertEqual([t["hash"] for t in got], ["aaa"])
 
     def test_delete_with_files(self):
         with mock.patch("installer.apps.call", self.fake_call()):

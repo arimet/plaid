@@ -13,6 +13,8 @@ from installer.flow import Progress, Report
 
 UPDATE_FILE = "update.json"
 RETRY_WAITS = (5, 15)  # seconds before the 2nd and 3rd try: lscr.io refuses bursts ("retry-after")
+# The guard stands back while the worker runs: a stalled download must not keep it away for hours.
+PULL_TIMEOUT, UP_TIMEOUT = 600, 600
 
 
 def last(state_dir: str = flow.STATE_DIR) -> dict | None:
@@ -28,7 +30,9 @@ def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, wait=time.sl
     """The services whose image changed, or None on failure. Nothing is undone: a pulled image only takes room."""
     s = flow.load_settings(state_dir)
     with open(os.path.join(state_dir, "compose.json"), encoding="utf-8") as f:
-        services = list(json.load(f)["services"])
+        refs = {svc: spec.get("image", "") for svc, spec in json.load(f)["services"].items()}
+    services = list(refs)
+    stale = (last(state_dir) or {}).get("stale", [])
     images = lambda: {svc: c.get("image") for svc, c in dk.stack_containers().items()}
     step = "step_pull"
     try:
@@ -39,18 +43,23 @@ def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, wait=time.sl
         report(Progress(step))
         # The disk apps only on the disk: otherwise the guard starts them on their new image when it comes back.
         disk_ok = dk.marker_state(dk.host_path(s.data_dir, s.platform)) == "ok"
-        dk.compose(state_dir, "up", "-d", *[svc for svc in services if svc not in DISK_APPS or disk_ok])
+        up = [svc for svc in services if svc not in DISK_APPS or disk_ok]
+        dk.compose(state_dir, "up", "-d", *up, timeout=UP_TIMEOUT)
         after = images()
         changed = [svc for svc in services if before.get(svc) and after.get(svc) and before[svc] != after[svc]]
+        # Left for the guard with a new image ready: their old image goes at the next update, once replaced.
+        waiting = [svc for svc in services if svc not in up and svc not in skipped and before.get(svc)
+                   and dk.image_id(refs[svc]) not in ("", before[svc])]
         step = "step_cleanup_images"
         report(Progress(step))
-        for svc in changed:
-            dk.remove("image", before[svc])  # best effort: another container may still use it
+        for image in [before[svc] for svc in changed] + stale:
+            dk.remove("image", image)  # best effort: a container still using it keeps it
     except Exception as e:
         report(Progress(step, error="err_update_failed", detail=str(e)))
         return None
-    flow.write_json(os.path.join(state_dir, UPDATE_FILE), {"at": time.time(), "updated": changed})
-    report(Progress("step_done", done=True, detail=",".join(changed), skipped=skipped))
+    flow.write_json(os.path.join(state_dir, UPDATE_FILE),
+                    {"at": time.time(), "updated": changed, "stale": [before[svc] for svc in waiting]})
+    report(Progress("step_done", done=True, detail=",".join(changed), skipped=skipped, waiting=waiting))
     return changed
 
 
@@ -61,10 +70,13 @@ def _pull(dk, state_dir: str, services: list[str], wait) -> list[str]:
     for svc in services:
         for attempt in range(len(RETRY_WAITS) + 1):
             try:
-                dk.compose(state_dir, "pull", svc)
+                dk.compose(state_dir, "pull", svc, timeout=PULL_TIMEOUT)
                 break
             except DockerError as e:
                 error = e
+                if "timed out" in str(e):  # stalled: another try would stall as long
+                    skipped.append(svc)
+                    break
                 if attempt < len(RETRY_WAITS):
                     wait(RETRY_WAITS[attempt])
         else:

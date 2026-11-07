@@ -546,6 +546,20 @@ def settings_summary(lang: str, form: dict, chg: dict[str, str], old: Settings, 
     return subpage(lang, body)
 
 
+def update_lines(lang: str, last: dict) -> list[tuple[str, str]]:
+    """What an update did, as (text, "ok" | "warn"): for the progress page and the terminal."""
+    names = lambda key: [APP_NAMES.get(a, a) for a in last.get(key) or []]
+    changed = [APP_NAMES.get(a, a) for a in (last.get("detail") or "").split(",") if a]
+    waiting, skipped = names("waiting"), names("skipped")
+    lines = [(t(lang, "update_changed", apps=", ".join(changed)), "ok")] if changed else []
+    if waiting:
+        key = "update_waiting_one" if len(waiting) == 1 else "update_waiting_many"
+        lines.append((t(lang, key, apps=", ".join(waiting)), "warn"))
+    if skipped:
+        lines.append((t(lang, "update_skipped", apps=", ".join(skipped)), "warn"))
+    return lines or [(t(lang, "update_none"), "ok")]
+
+
 def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
     events, state_ = status.get("events", []), status.get("state")
     last = events[-1] if events else {}
@@ -561,12 +575,9 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
         title = t(lang, "update_running" if updating else "settings_running")
         extra, head = "", '<meta http-equiv="refresh" content="2">'
     elif state_ == "done" and updating:
-        changed = [APP_NAMES.get(a, a) for a in (last.get("detail") or "").split(",") if a]
         title, head = t(lang, "update_done"), ""
-        extra = f'<p class="lead">{E(t(lang, "update_changed", apps=", ".join(changed)) if changed else t(lang, "update_none"))}</p>'
-        skipped = [APP_NAMES.get(a, a) for a in last.get("skipped") or []]
-        if skipped:
-            extra += f'<p class="note warn">{E(t(lang, "update_skipped", apps=", ".join(skipped)))}</p>'
+        extra = "".join(f'<p class="{"lead" if kind == "ok" else "note warn"}">{E(text)}</p>'
+                        for text, kind in update_lines(lang, last))
     elif state_ == "done":
         missed = [a for a in (last.get("detail") or "").split(",") if a in PORTS]
         title, head = t(lang, "settings_done"), ""

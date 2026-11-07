@@ -392,3 +392,30 @@ class MaintenanceCliTest(TuiCliTest):
         self.assertIn("Dune.2024.1080p", out.getvalue())
         self.assertEqual(len(flow.cleaned), 1)
         self.assertIn("Torrents supprimés : 1.", out.getvalue())
+
+
+class WorkerGoneCliTest(TuiCliTest):
+    def test_update_waits_for_a_running_change_instead_of_following_it(self):
+        flow = installed_flow()
+        flow.updates = []
+        flow.start_update = lambda: flow.updates.append(True)
+        flow.apply_status = lambda: {"state": "running", "events": [{"step": "step_compose"}]}
+        t, out = self.term("\x1b[B" * 4 + "\r", "\r", "\x1b[A\r")  # update · back · quit
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertEqual(flow.updates, [])
+        self.assertIn("Un autre changement est en cours", out.getvalue())
+
+    def test_update_whose_worker_vanished_ends(self):
+        flow = installed_flow()
+        flow.start_update = lambda: None
+        flow.apply_status = lambda: {"state": "idle", "events": []}  # read and removed elsewhere
+        t, out = self.term("\x1b[B" * 4 + "\r", "\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertIn("La mise à jour n’a pas abouti", out.getvalue())
+
+    def test_settings_change_whose_worker_vanished_ends(self):
+        flow = installed_flow()
+        flow.apply_status = lambda: {"state": "idle", "events": []}
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 1)
+        self.assertIn("Le changement n’est pas passé", out.getvalue())

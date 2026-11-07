@@ -66,6 +66,8 @@ def _cycle(dk, fl, state_dir: str) -> dict | None:
         return None
     s = fl.load_settings(state_dir)
     disk, free, total = dk.marker_room(dk.host_path(s.data_dir, s.platform), s.platform)
+    if disk != "ok":  # an empty mount point: df would give the system disk's room
+        free = total = None
     containers = dk.stack_containers()
     blind = set()
     if disk == "ok":

@@ -136,7 +136,8 @@ class CycleTest(unittest.TestCase):
 
     def test_cycle_saves_status(self):
         dk, fl = FakeDk(disk="missing", containers={"radarr": Q()}), FakeFlow()
-        want = {"disk": "missing", "vpn": "off", "apps": {"radarr": "running"}, "free": 60, "total": 100}
+        # No room shown for an absent disk: df would read the empty mount point, so the system disk.
+        want = {"disk": "missing", "vpn": "off", "apps": {"radarr": "running"}, "free": None, "total": None}
         self.assertEqual(guard.cycle(dk, fl, "/state"), want)
         self.assertEqual(dk.calls, [("stop", *DISK_APPS)])
         self.assertEqual(fl.saved, [want])
@@ -233,3 +234,9 @@ class AppStatesTest(unittest.TestCase):
         got = guard.app_states({"radarr": Q(), "sonarr": Q(running=False), "jellyfin": Q(health="unhealthy"),
                                 "seerr": Q(health="starting"), "gluetun": G()})
         self.assertEqual(got, {"radarr": "running", "sonarr": "stopped", "jellyfin": "failing", "seerr": "starting"})
+
+
+class RoomTest(unittest.TestCase):
+    def test_room_of_a_present_disk(self):
+        status = guard.cycle(FakeDk(disk="ok"), FakeFlow(), "/state")
+        self.assertEqual((status["free"], status["total"]), (60, 100))

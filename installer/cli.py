@@ -404,8 +404,11 @@ def _update_tui(term, flow, lang: str) -> str:
     import time
     from installer.tui import Steps
     term.page(t(lang, "update_running"), t(lang, "update_help"))
-    if flow.apply_status()["state"] != "running":  # one operation at a time: follow the running one
-        flow.start_update()
+    if flow.apply_status()["state"] == "running":  # one operation at a time
+        term.note(t(lang, "update_busy"), "warn")
+        term.pause(t(lang, "cli_back"))
+        return ""
+    flow.start_update()
     steps = Steps(term, [(k, t(lang, k)) for k in ("step_pull", "step_recreate", "step_cleanup_images")])
     while True:
         status = flow.apply_status()
@@ -414,11 +417,9 @@ def _update_tui(term, flow, lang: str) -> str:
             steps.advance(events[-1]["step"])
         if status["state"] == "done":
             steps.finish()
-            changed = [APP_NAMES.get(a, a) for a in (events[-1].get("detail") or "").split(",") if a]
-            skipped = [APP_NAMES.get(a, a) for a in events[-1].get("skipped") or []]
-            text = t(lang, "update_changed", apps=", ".join(changed)) if changed else t(lang, "update_none")
-            return text + (" " + t(lang, "update_skipped", apps=", ".join(skipped)) if skipped else "")
-        if status["state"] == "failed":
+            from installer.web import update_lines
+            return " ".join(text for text, _ in update_lines(lang, events[-1]))
+        if status["state"] in ("failed", "idle"):  # idle: the worker went away, its last word read elsewhere
             steps.failed = True
             steps.render()
             term.note(t(lang, "err_update_failed"), "error")
@@ -591,7 +592,7 @@ def _apply_tui(term, flow, lang: str, s, new, chg, host: str = "localhost") -> t
             if "step_profiles" in todo:
                 notes.append((t(lang, "settings_other_version"), "info"))
             return 0, notes
-        if status["state"] == "failed":
+        if status["state"] in ("failed", "idle"):  # idle: the worker went away, its last word read elsewhere
             steps.failed = True
             steps.render()
             term._settle()

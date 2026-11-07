@@ -27,8 +27,15 @@ class FakeDk:
         recreated = lambda svc: self.pulled and svc in self.new and (svc not in DISK_APPS or self.disk == "ok")
         return {svc: {"image": f"sha256:{svc}-{'new' if recreated(svc) else 'old'}"} for svc in services}
 
+    def image_id(self, ref):  # what the tag points to after the pull
+        svc = ref.split("/")[-1]
+        return f"sha256:{svc}-{'new' if svc in self.new else 'old'}"
+
     def compose(self, state_dir, *args, timeout=None):
         self.calls.append(args)
+        self.timeouts = getattr(self, "timeouts", {}) | {args[0]: timeout}
+        if args[0] == "pull" and args[-1] in getattr(self, "hangs", ()):
+            raise DockerError("docker compose timed out after 600s")
         if self.fail_on and args[0] == self.fail_on:
             raise DockerError("network unreachable")
         if args[0] == "pull" and (args[-1] in self.unreachable or self.flaky.get(args[-1])):
@@ -45,7 +52,7 @@ class UpdateTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
         with open(os.path.join(self.dir, "compose.json"), "w") as f:
-            json.dump({"services": {s: {} for s in ("jellyfin", "seerr", "radarr", "sonarr", "qbittorrent",
+            json.dump({"services": {s: {"image": f"img/{s}"} for s in ("jellyfin", "seerr", "radarr", "sonarr", "qbittorrent",
                                                     "prowlarr", "bazarr", "gluetun")}}, f)
         flow.write_json(os.path.join(self.dir, "settings.json"), json.loads(settings().to_json()))
         self.events = []
@@ -93,6 +100,27 @@ class UpdateTest(unittest.TestCase):
         self.assertEqual(self.run_update(dk), ["seerr", "radarr"])
         self.assertEqual(len([c for c in dk.calls if c == ("pull", "sonarr")]), 3)
         self.assertEqual(self.events[-1]["skipped"], ["sonarr"])
+
+    def test_every_call_has_a_time_limit(self):  # a stalled download must not keep the guard away for hours
+        dk = FakeDk()
+        self.run_update(dk)
+        self.assertTrue(dk.timeouts["pull"] and dk.timeouts["up"])
+
+    def test_a_hanging_download_is_not_tried_again(self):
+        dk = FakeDk(new=("seerr",))
+        dk.hangs = ("sonarr",)
+        self.assertEqual(self.run_update(dk), ["seerr"])
+        self.assertEqual(len([c for c in dk.calls if c == ("pull", "sonarr")]), 1)
+        self.assertEqual(self.events[-1]["skipped"], ["sonarr"])
+
+    def test_disk_apps_updated_later_are_named_and_their_old_images_go_next_time(self):
+        dk = FakeDk(disk="missing", new=("radarr", "seerr"))
+        self.run_update(dk)
+        self.assertEqual(self.events[-1]["waiting"], ["radarr"])
+        self.assertNotIn(("image", "sha256:radarr-old"), dk.removed)  # its container still uses it
+        dk2 = FakeDk(new=())
+        self.run_update(dk2)
+        self.assertIn(("image", "sha256:radarr-old"), dk2.removed)
 
     def test_worker_runs_an_update_request(self):
         from installer import reconfigure

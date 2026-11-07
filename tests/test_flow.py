@@ -395,3 +395,13 @@ class RemovalTakesApplyWorkerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             flow.uninstall_worker(payload, False, dk=dk, work_dir=d)
         self.assertLess(dk.calls.index(("rm", "container", "plaid-apply")), dk.calls.index(("rm", "volume", "plaid-state")))
+
+
+class TorrentAppsWaitTest(unittest.TestCase):
+    def test_the_torrents_page_does_not_wait_minutes_for_a_stopped_app(self):
+        from unittest import mock
+        seen = []
+        with mock.patch("installer.apps.Arr", lambda *a, **kw: seen.append(kw) or object()), \
+                mock.patch("installer.apps.finished_torrents", lambda s, host, arrs: []):
+            flow.finished_torrents(settings(), dk=FakeDocker())
+        self.assertTrue(seen and all(0 < kw.get("seconds", 300) <= 15 for kw in seen))
