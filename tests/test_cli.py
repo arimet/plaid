@@ -375,11 +375,12 @@ class MaintenanceCliTest(TuiCliTest):
         flow.updates = []
         flow.start_update = lambda: flow.updates.append(True)
         flow.apply_status = lambda: {"state": "done" if flow.updates else "idle", "events": [
-            {"step": "step_pull"}, {"step": "step_done", "done": True, "detail": "radarr"}]}
+            {"step": "step_pull"}, {"step": "step_done", "done": True, "detail": "radarr", "skipped": ["sonarr"]}]}
         t, out = self.term("\x1b[B" * 4 + "\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertEqual(flow.updates, [True])
         self.assertIn("Mises à jour : Radarr.", out.getvalue())
+        self.assertIn("Pas pu télécharger : Sonarr.", out.getvalue())
 
     def test_torrents_from_the_menu(self):
         flow = installed_flow()

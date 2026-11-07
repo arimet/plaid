@@ -31,6 +31,7 @@ class Progress:
     error: str | None = None
     detail: str = ""
     kept: list[str] = field(default_factory=list)  # quality profiles left in place: films or series still use them
+    skipped: list[str] = field(default_factory=list)  # apps an update could not download
 
 
 Report = Callable[[Progress], None]

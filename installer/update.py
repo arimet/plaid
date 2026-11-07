@@ -8,9 +8,11 @@ import time
 
 from installer import docker, flow
 from installer.compose import DISK_APPS
+from installer.docker import DockerError
 from installer.flow import Progress, Report
 
 UPDATE_FILE = "update.json"
+RETRY_WAITS = (5, 15)  # seconds before the 2nd and 3rd try: lscr.io refuses bursts ("retry-after")
 
 
 def last(state_dir: str = flow.STATE_DIR) -> dict | None:
@@ -22,7 +24,7 @@ def last(state_dir: str = flow.STATE_DIR) -> dict | None:
         return None
 
 
-def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR) -> list[str] | None:
+def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, wait=time.sleep) -> list[str] | None:
     """The services whose image changed, or None on failure. Nothing is undone: a pulled image only takes room."""
     s = flow.load_settings(state_dir)
     with open(os.path.join(state_dir, "compose.json"), encoding="utf-8") as f:
@@ -32,7 +34,7 @@ def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR) -> list[str]
     try:
         report(Progress(step))
         before = images()
-        dk.compose(state_dir, "pull")
+        skipped = _pull(dk, state_dir, services, wait)
         step = "step_recreate"
         report(Progress(step))
         # The disk apps only on the disk: otherwise the guard starts them on their new image when it comes back.
@@ -48,5 +50,25 @@ def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR) -> list[str]
         report(Progress(step, error="err_update_failed", detail=str(e)))
         return None
     flow.write_json(os.path.join(state_dir, UPDATE_FILE), {"at": time.time(), "updated": changed})
-    report(Progress("step_done", done=True, detail=",".join(changed)))
+    report(Progress("step_done", done=True, detail=",".join(changed), skipped=skipped))
     return changed
+
+
+def _pull(dk, state_dir: str, services: list[str], wait) -> list[str]:
+    """One app at a time, three tries each: a registry refusing one app does not hold back the others. Returns the
+    apps left on their old version; raises when none could be downloaded (no network)."""
+    skipped, error = [], None
+    for svc in services:
+        for attempt in range(len(RETRY_WAITS) + 1):
+            try:
+                dk.compose(state_dir, "pull", svc)
+                break
+            except DockerError as e:
+                error = e
+                if attempt < len(RETRY_WAITS):
+                    wait(RETRY_WAITS[attempt])
+        else:
+            skipped.append(svc)
+    if len(skipped) == len(services):
+        raise error
+    return skipped

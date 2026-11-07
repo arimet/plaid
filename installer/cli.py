@@ -415,7 +415,9 @@ def _update_tui(term, flow, lang: str) -> str:
         if status["state"] == "done":
             steps.finish()
             changed = [APP_NAMES.get(a, a) for a in (events[-1].get("detail") or "").split(",") if a]
-            return t(lang, "update_changed", apps=", ".join(changed)) if changed else t(lang, "update_none")
+            skipped = [APP_NAMES.get(a, a) for a in events[-1].get("skipped") or []]
+            text = t(lang, "update_changed", apps=", ".join(changed)) if changed else t(lang, "update_none")
+            return text + (" " + t(lang, "update_skipped", apps=", ".join(skipped)) if skipped else "")
         if status["state"] == "failed":
             steps.failed = True
             steps.render()

@@ -564,6 +564,9 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
         changed = [APP_NAMES.get(a, a) for a in (last.get("detail") or "").split(",") if a]
         title, head = t(lang, "update_done"), ""
         extra = f'<p class="lead">{E(t(lang, "update_changed", apps=", ".join(changed)) if changed else t(lang, "update_none"))}</p>'
+        skipped = [APP_NAMES.get(a, a) for a in last.get("skipped") or []]
+        if skipped:
+            extra += f'<p class="note warn">{E(t(lang, "update_skipped", apps=", ".join(skipped)))}</p>'
     elif state_ == "done":
         missed = [a for a in (last.get("detail") or "").split(",") if a in PORTS]
         title, head = t(lang, "settings_done"), ""
