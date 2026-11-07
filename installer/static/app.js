@@ -19,11 +19,22 @@
     const field = $("#data_dir"), panel = $(".picker-panel", picker), list = $(".picker-list", picker);
     const where = $(".picker-where", picker), actions = $(".picker-actions", picker);
     const toggle = $("[data-picker-open]", picker), here = $("[data-here]", picker);
-    let current = null;
-    const get = (url) => fetch(url, {credentials: "same-origin"}).then((r) => (r.ok ? r.json() : Promise.reject()));
+    let current = null, ticket = 0;
+    const never = new Promise(() => {});
+    // Only the last click's answer is drawn; a session that expired sends the page back to sign-in.
+    const get = (url) => {
+      const mine = ++ticket;
+      return fetch(url, {credentials: "same-origin"}).then((r) => {
+        if (r.status === 401) {
+          location.reload();
+          return never;
+        }
+        return r.ok ? r.json() : Promise.reject();
+      }).then((d) => (mine === ticket ? d : never), (e) => (mine === ticket ? Promise.reject(e) : never));
+    };
     const space = (d) => (d.total ? fmt(T.picker_free, {free: bytes(d.free), total: bytes(d.total)}) : "");
     const join = (dir, name) => {
-      const sep = dir.includes("\\") ? "\\" : "/";
+      const sep = /^[A-Za-z]:\\/.test(dir) ? "\\" : "/";  // a Linux folder name may hold a backslash
       return dir.endsWith(sep) ? dir + name : dir + sep + name;
     };
     const item = (title, sub, onClick, used) => {
