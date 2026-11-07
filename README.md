@@ -265,7 +265,13 @@ qBittorrent stops downloading: it only reaches the internet through the VPN, so 
 <details>
 <summary><b>Can I change a setting later?</b></summary>
 
-Plaid installs and removes. To change a setting (new VPN key, other folder), remove the stack and install it again: your media folder can stay. Each app's own settings stay editable in the app.
+Yes. In the assistant, open **⋯ › Settings**; in the terminal, run the same command again and pick **Change a setting**. You can change the language, the time zone, the media folder, the username and password, the VPN (new key, other provider, add or remove it) and Tailscale. Plaid shows what will change and how long the apps stop, then applies it all at once. If something fails, your previous settings come back.
+
+- **The password** changes in all seven apps and in the assistant. If you changed it by hand in Jellyfin or qBittorrent, Plaid asks for the one they use now.
+- **The media folder**: Plaid points to the new folder and moves nothing. Copy your library there first; the old folder is left as it is.
+- **The language** is the assistant's and the terminal's. Jellyfin and Bazarr keep the language chosen at install.
+
+Each app's own settings stay editable in the app.
 
 </details>
 
