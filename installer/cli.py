@@ -130,13 +130,39 @@ def _steps_labels(lang: str, with_vpn: bool) -> list[tuple[str, str]]:
     return [(k, t(lang, k)) for k in keys]
 
 
+def _ask_media(term, lang: str, e) -> dict:
+    """Audio language, profiles and their default, subtitles, fiches; `e` holds the current choices."""
+    from installer import media
+    hint = t(lang, "cli_select_hint")
+    langs = [(code, t(lang, "lang_" + code)) for code in media.LANGS]
+    audio = term.select(t(lang, "field_audio_lang"), langs, default=e.audio_lang, hint=hint)
+    names = [(key, media.profile_name(key, lang, audio)) for key in media.KEYS]
+    profiles = term.checklist(t(lang, "field_profiles"), names, default=e.profiles, hint=t(lang, "cli_check_hint"),
+                              validate=lambda v: None if v else t(lang, "err_profiles_none"))
+    default = profiles[0] if len(profiles) == 1 else term.select(
+        t(lang, "field_default_profile"), [n for n in names if n[0] in profiles],
+        default=e.default_profile if e.default_profile in profiles else profiles[0], hint=hint)
+    subtitles = term.checklist(t(lang, "field_subtitles"), langs, default=e.subtitle_langs,
+                               hint=t(lang, "cli_check_hint"),
+                               validate=lambda v: None if v else t(lang, "err_subtitles_none"))
+    metadata = term.select(t(lang, "field_metadata_lang"), langs, default=e.metadata_lang, hint=hint)
+    return {"audio_lang": audio, "profiles": profiles, "default_profile": default, "subtitle_langs": subtitles,
+            "metadata_lang": metadata}
+
+
+def _media_summary(lang: str, e) -> str:
+    from installer import media
+    return ", ".join([media.profile_name(e.default_profile, lang, e.audio_lang)] +
+                     [t(lang, "lang_" + c) for c in e.subtitle_langs])
+
+
 def _ask(term, flow, env: dict, lang: str):
     """The questions, one page each. Returns (settings, notes); settings is None when nothing will be installed."""
     from installer.settings import is_absolute, is_dangerous_path
     from installer.web import PROVIDER_COLORS
 
     remote = env.get("HOST_PLATFORM", "linux") in REMOTE_PLATFORMS
-    total = 4 if remote else 3
+    total = 5 if remote else 4  # the films and series page is the last question
     home = env.get("HOST_HOME", "")
     recap: list[tuple[str, str]] = []
     data = {"lang": lang}
@@ -181,6 +207,16 @@ def _ask(term, flow, env: dict, lang: str):
             t(lang, "field_tailscale_key"), secret=True, hint=t(lang, "cli_skip"),
             validate=lambda v: None if not v or v.strip().startswith("tskey-") else t(lang, "err_tailscale_key"))
         recap.append((t(lang, "field_remote"), "Tailscale" if data["tailscale_key"] else "—"))
+
+    from installer import media
+    term.page(t(lang, "media_title"), t(lang, "media_help"), step=(total, total), recap=recap)
+    e = media.effective(settings_from(data, env))
+    if term.select(t(lang, "media_title"), [("keep", t(lang, "cli_media_keep", summary=_media_summary(lang, e))),
+                                            ("change", t(lang, "cli_media_change"))],
+                   hint=t(lang, "cli_select_hint")) == "change":
+        data.update(_ask_media(term, lang, e))
+        e = media.effective(settings_from(data, env))
+    recap.append((t(lang, "media_title"), _media_summary(lang, e)))
 
     data["timezone"] = env.get("TZ", "UTC")
     s = settings_from(data, env)
@@ -342,6 +378,7 @@ def _settings_tui(term, flow, env: dict, s) -> tuple[int, Notes] | None:
     """Pick settings one by one, then apply them all. None when the user went back without applying."""
     from installer import reconfigure
     from installer.settings import is_absolute, is_dangerous_path
+    from installer import media
     from installer.web import LANG_NAMES
     lang, data = s.lang, {}
     remote = s.platform in REMOTE_PLATFORMS
@@ -358,6 +395,7 @@ def _settings_tui(term, flow, env: dict, s) -> tuple[int, Notes] | None:
                     PROVIDERS[new.vpn_provider].label if new.vpn_provider else t(lang, "vpn_none"))]
         if remote:
             options.append(("tailscale", t(lang, "field_remote"), None, "Tailscale" if new.tailscale_key else "—"))
+        options.append(("media", t(lang, "media_title"), None, _media_summary(lang, media.effective(new))))
         if chg:
             options.append(("apply", t(lang, "settings_apply"), None, ", ".join(_change_names(lang, chg, new))))
         options.append(("back", t(lang, "btn_back")))
@@ -368,6 +406,8 @@ def _settings_tui(term, flow, env: dict, s) -> tuple[int, Notes] | None:
             result = _apply_tui(term, flow, lang, s, new, chg, env.get("HOST_ADDR", "localhost"))
             if result is not None:
                 return result
+        elif pick == "media":
+            data.update(_ask_media(term, lang, media.effective(new)))
         elif pick == "lang":
             data["lang"] = term.select(t(lang, "settings_lang"), list(LANG_NAMES.items()), default=new.lang)
         elif pick == "timezone":
@@ -458,6 +498,13 @@ def _apply_tui(term, flow, lang: str, s, new, chg, host: str = "localhost") -> t
                 colon = " : " if lang == "fr" else ": "
                 notes.append((t(lang, "settings_manual_title") + colon + t(lang, "settings_manual_help"), "warn"))
                 notes += [(f"{APP_NAMES[a]}  http://{host}:{PORTS[a]}", "info") for a in missed]
+            kept = events[-1].get("kept") or []
+            if kept:
+                colon = " : " if lang == "fr" else ": "
+                notes.append((t(lang, "settings_kept_title") + colon + ", ".join(kept), "warn"))
+                notes.append((t(lang, "settings_kept_help"), "info"))
+            if "step_profiles" in todo:
+                notes.append((t(lang, "settings_other_version"), "info"))
             return 0, notes
         if status["state"] == "failed":
             steps.failed = True

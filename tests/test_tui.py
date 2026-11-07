@@ -23,6 +23,23 @@ class KeysTest(unittest.TestCase):
         self.assertEqual(tui.split_keys("\x7f\x1b[D\x1b[C\x1b[B\x03"), ["backspace", "left", "right", "down", "ctrl-c"])
 
 
+class ChecklistTest(unittest.TestCase):
+    OPTIONS = [("a", "A"), ("b", "B"), ("c", "C")]
+
+    def test_checklist_toggle_and_order(self):
+        t, out = term(DOWN, DOWN, " ", UP, UP, " ", UP, " ", ENTER)  # tick c, untick a, tick c... order kept
+        self.assertEqual(t.checklist("Pick", self.OPTIONS, default=["a"]), [])
+        t, out = term(DOWN, DOWN, " ", ENTER)
+        self.assertEqual(t.checklist("Pick", self.OPTIONS, default=["b"]), ["b", "c"])
+        self.assertIn("[x]", out.getvalue())
+
+    def test_checklist_validate_blocks_empty(self):
+        t, out = term(" ", ENTER, " ", ENTER)
+        result = t.checklist("Pick", self.OPTIONS, default=["a"], validate=lambda v: None if v else "Tick one")
+        self.assertEqual(result, ["a"])
+        self.assertIn("Tick one", out.getvalue())
+
+
 class SelectTest(unittest.TestCase):
     def test_arrows_then_enter(self):
         t, _ = term(DOWN, DOWN, UP, ENTER)

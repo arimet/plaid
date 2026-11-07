@@ -89,8 +89,9 @@ class TuiCliTest(unittest.TestCase):
 
     def test_install_with_arrow_keys(self):
         flow = FakeFlow(found=["warn_no_vpn"])
-        # folder: default · user: zoe · passwords · VPN: up wraps to "No VPN" · Tailscale: skip · go: left = yes
-        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\x1b[D\r")
+        # folder: default · user: zoe · passwords · VPN: up wraps to "No VPN" · Tailscale: skip · films: keep ·
+        # go: left = yes
+        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r", "\x1b[D\r")
         self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 0)
         self.assertEqual((flow.got.username, flow.got.vpn_provider, flow.got.data_dir), ("zoe", None, "/home/zoe/Plaid"))
         self.assertIn("http://localhost:8096", out.getvalue())
@@ -98,13 +99,13 @@ class TuiCliTest(unittest.TestCase):
     def test_wrong_confirmation_asks_again(self):
         flow = FakeFlow()
         # no warning: "Install now?" already sits on Yes, so Enter starts it
-        t, out = self.term("\r", "zoe\r", "longenough\r", "oops\r", "longenough\r", "\x1b[A\r", "\r", "\r")
+        t, out = self.term("\r", "zoe\r", "longenough\r", "oops\r", "longenough\r", "\x1b[A\r", "\r", "\r", "\r")
         self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 0)
         self.assertIn("Les mots de passe diffèrent.", out.getvalue())
 
     def test_declining_changes_nothing(self):
         flow = FakeFlow(found=["warn_no_vpn"])
-        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r")
+        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r", "\r")
         self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 1)
         self.assertIsNone(flow.got)
         self.assertIn("Rien n’a été modifié", out.getvalue())
@@ -113,7 +114,7 @@ class TuiCliTest(unittest.TestCase):
 class FolderWarningCliTest(TuiCliTest):
     def test_warning_names_the_folder(self):
         flow = FakeFlow(found=["warn_dir_not_empty"])
-        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r")
+        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r", "\r")
         cli.run_install_tui(t, flow, ENV, "fr")
         self.assertIn("Le dossier /home/zoe/Plaid contient déjà des fichiers", out.getvalue())
 
@@ -161,7 +162,7 @@ class SummaryAlignmentTest(unittest.TestCase):
         from installer import tui
         from tests.test_tui import keys
         out = io.StringIO()
-        t = tui.Term(read_key=keys("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r"),
+        t = tui.Term(read_key=keys("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r", "\r"),
                      out=out, color=True)
         cli.run_install_tui(t, FakeFlow(), ENV, "fr")
         rows = [tui._ANSI.sub("", line) for line in out.getvalue().splitlines() if "http://localhost:" in line
@@ -288,3 +289,46 @@ class ManualPasswordCliTest(TuiCliTest):
         cli.run_panel_tui(t, flow, dict(ENV, HOST_ADDR="192.168.1.20"), flow.settings)
         cli._print_notes(t, [])
         self.assertIn("Jellyfin  http://192.168.1.20:8096", out.getvalue())
+
+
+DOWN, UP, SPACE = "\x1b[B", "\x1b[A", " "
+
+
+class MediaCliTest(TuiCliTest):
+    def test_install_keeps_default_media(self):
+        flow = FakeFlow()
+        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r", "\r")
+        self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 0)
+        self.assertEqual((flow.got.profiles, flow.got.subtitle_langs), (["mine-1080p"], ["fr", "en"]))
+        self.assertIn("Français · 1080p", out.getvalue())
+
+    def test_install_asks_media(self):
+        flow = FakeFlow()
+        # films: change · audio: down = English · profiles: also tick orig-4k (6 rows down) · default: down = orig-4k ·
+        # subtitles: untick en (down, space) · fiches: Enter (French)
+        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r",
+                           DOWN + "\r", DOWN + "\r", DOWN * 5 + SPACE + "\r", DOWN + "\r", DOWN + SPACE + "\r", "\r",
+                           "\r")
+        self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 0)
+        g = flow.got
+        self.assertEqual((g.audio_lang, g.profiles, g.default_profile, g.subtitle_langs, g.metadata_lang),
+                         ("en", ["mine-1080p", "orig-4k"], "orig-4k", ["fr"], "fr"))
+        self.assertIn("Anglais · 1080p", out.getvalue())
+
+    def test_settings_tui_media_change(self):
+        flow = installed_flow()
+        # settings · films (up x3 from lang: back, apply? no change yet: back, then films) · keep audio ·
+        # tick mine-4k · default stays (Enter) · subtitles Enter · fiches Enter · apply (up x2) · confirm
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", UP + UP + "\r", "\r", DOWN * 2 + SPACE + "\r", "\r", "\r", "\r",
+                           UP + UP + "\r", "\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertEqual(flow.started.profiles, ["mine-1080p", "mine-4k"])
+
+    def test_apply_tui_prints_kept(self):
+        flow = installed_flow()
+        flow.apply_status = lambda: {"state": "done", "events": [
+            {"step": "step_profiles"}, {"step": "step_done", "done": True, "detail": "", "kept": ["VO sous-titrée · 4K"]}]}
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
+        cli.run_panel_tui(t, flow, ENV, flow.settings)
+        cli._print_notes(t, [])
+        self.assertIn("VO sous-titrée · 4K", out.getvalue())

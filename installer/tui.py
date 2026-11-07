@@ -271,6 +271,40 @@ class Term:
                 self._settle()
                 return opts[index][0]
 
+    def checklist(self, label: str, options: Iterable, default: Iterable = (), hint: str = "", validate=None) -> list:
+        """options: (value, label). Arrows to move, Space to tick, Enter to confirm. Returns the ticked values, in
+        option order; validate(values) -> message keeps the user on the list."""
+        opts = list(options)
+        ticked, index, error = set(default), 0, ""
+        while True:
+            lines = ["  " + self.style(label, bold=True)]
+            for i, (value, text) in enumerate(opts):
+                box = self.style("[x]", fg="accent", bold=True) if value in ticked else "[ ]"
+                lines.append("  " + (self.style("❯ ", fg="accent", bold=True) if i == index else "  ") + box + " " +
+                             (self.style(text, bold=True) if i == index else text))
+            lines.append("  " + self.style(hint, dim=True) if hint else "")
+            if error:
+                lines.append("    " + self.style(error, fg="red"))
+            self._draw(lines)
+            key = self.read_key()
+            if key in ("ctrl-c", "ctrl-d"):
+                raise KeyboardInterrupt
+            if key in ("up", "k"):
+                index = (index - 1) % len(opts)
+            elif key in ("down", "j", "tab"):
+                index = (index + 1) % len(opts)
+            elif key == " ":
+                ticked ^= {opts[index][0]}
+                error = ""
+            elif key == "enter":
+                values = [v for v, _ in opts if v in ticked]
+                error = validate(values) if validate else None
+                if not error:
+                    self._draw([lines[0], "  " + self.style("✓", fg="accent") + " " +
+                                ", ".join(text for v, text in opts if v in ticked)])
+                    self._settle()
+                    return values
+
     def confirm(self, question: str, yes: str, no: str, default: bool = False) -> bool:
         choice = default
         while True:
