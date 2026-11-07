@@ -156,6 +156,18 @@ def media_fields(lang: str, s: Settings) -> str:
   {_lang_select(lang, "metadata_lang", e.metadata_lang)}<p class="hint">{E(t(lang, "field_metadata_lang_help"))}</p></div>"""
 
 
+def picker_html(lang: str, create: bool) -> str:
+    """The disks and folders panel under a folder field; app.js fills it. `create`: offer a new Plaid folder."""
+    here = (f'<button type="button" class="btn small" data-here>{E(t(lang, "picker_here"))}</button>'
+            if create else "")
+    flag = ' data-create="1"' if create else ""
+    return (f'<div class="picker" data-picker{flag}>'
+            f'<button type="button" class="linkish" data-picker-open aria-expanded="false">{E(t(lang, "picker_open"))}</button>'
+            f'<div class="picker-panel" hidden><p class="picker-where" aria-live="polite"></p><ul class="picker-list"></ul>'
+            f'<div class="picker-actions" hidden><button type="button" class="btn small" data-use>'
+            f'{E(t(lang, "picker_use"))}</button>{here}</div></div></div>')
+
+
 def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True) -> str:
     default_dir = default_data_dir(env)
     remote = env.get("HOST_PLATFORM", "linux") in REMOTE_PLATFORMS
@@ -198,6 +210,7 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
   <p class="lead">{E(t(lang, "subtitle"))}</p>
   <div class="field"><label class="l" for="data_dir">{E(t(lang, "field_folder"))}</label>
   <input class="input" id="data_dir" name="data_dir" value="{E(default_dir)}" autocomplete="off" spellcheck="false">
+  {picker_html(lang, True)}
   <p class="hint">{E(t(lang, "field_folder_help"))}</p><p class="ferr" data-err="data_dir"></p></div>
 </section>
 
@@ -382,7 +395,8 @@ def settings_page(lang: str, s: Settings, note: str = "", shown: Settings | None
   {group(t(lang, "media_title"), t(lang, "media_help"), media_fields(lang, shown))}
   {sep}
   {group(t(lang, "field_folder"), t(lang, "settings_folder_desc"),
-         _field(t(lang, "settings_folder_label"), "data_dir", shown.data_dir, hint=t(lang, "settings_folder_help")))}
+         _field(t(lang, "settings_folder_label"), "data_dir", shown.data_dir, hint=t(lang, "settings_folder_help"))
+         + picker_html(lang, False))}
   {sep}
   {group(t(lang, "settings_group_account"), t(lang, "settings_group_account_desc"),
          _field(t(lang, "field_username"), "username", shown.username)
@@ -656,6 +670,15 @@ def make_handler(state: State):
                     return self.json(200, {"trackers": state.flow.tracker_catalog()})
                 except Exception as e:  # Prowlarr still starting, or stopped
                     return self.json(503, {"error": t(lang, "trackers_error"), "detail": str(e)})
+            if path in ("/api/disks", "/api/browse"):
+                if self.locked():
+                    return self.json(401, {})
+                platform, home = state.env.get("HOST_PLATFORM", "linux"), state.env.get("HOST_HOME", "")
+                if path == "/api/browse":
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                    return self.json(200, state.flow.browse(query.get("path", [""])[0], platform))
+                return self.json(200, {"disks": state.flow.disks(platform, home), "default": default_data_dir(state.env),
+                                       "desktop": platform in ("mac", "windows")})
             if path == "/api/uninstall-status":
                 if self.locked():
                     return self.json(401, {})

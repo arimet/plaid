@@ -9,6 +9,102 @@
                                          body: JSON.stringify(body), credentials: "same-origin"});
   const fmt = (s, params) => s.replace(/\{(\w+)\}/g, (_, k) => params[k] ?? "");
 
+  // ---------------------------------------------------------------- folder picker (wizard and settings)
+  const bytes = (n) => {
+    const nf = new Intl.NumberFormat(document.documentElement.lang, {maximumFractionDigits: 1});
+    return n >= 1e12 ? `${nf.format(n / 1e12)} ${T.unit_tb}` : `${nf.format(Math.round(n / 1e9))} ${T.unit_gb}`;
+  };
+  $$("[data-picker]").forEach((picker) => {
+    const field = $("#data_dir"), panel = $(".picker-panel", picker), list = $(".picker-list", picker);
+    const where = $(".picker-where", picker), actions = $(".picker-actions", picker);
+    const toggle = $("[data-picker-open]", picker), here = $("[data-here]", picker);
+    let current = null;
+    const get = (url) => fetch(url, {credentials: "same-origin"}).then((r) => (r.ok ? r.json() : Promise.reject()));
+    const space = (d) => (d.total ? fmt(T.picker_free, {free: bytes(d.free), total: bytes(d.total)}) : "");
+    const join = (dir, name) => {
+      const sep = dir.includes("\\") ? "\\" : "/";
+      return dir.endsWith(sep) ? dir + name : dir + sep + name;
+    };
+    const item = (title, sub, onClick, used) => {
+      const li = document.createElement("li"), b = document.createElement("button"), strong = document.createElement("b");
+      b.type = "button";
+      strong.textContent = title;
+      b.append(strong);
+      if (used != null) {
+        const meter = document.createElement("span"), fill = document.createElement("i");
+        meter.className = "meter";
+        fill.style.width = used + "%";
+        meter.append(fill);
+        b.append(meter);
+      }
+      if (sub) {
+        const small = document.createElement("small");
+        small.textContent = sub;
+        b.append(small);
+      }
+      b.addEventListener("click", onClick);
+      li.append(b);
+      list.append(li);
+    };
+    const close = () => {
+      panel.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+    };
+    const choose = (path) => {
+      field.value = path;
+      field.dispatchEvent(new Event("input", {bubbles: true}));
+      close();
+      field.focus();
+    };
+    const loading = () => {
+      list.textContent = "";
+      actions.hidden = true;
+      where.textContent = T.picker_loading;
+    };
+    const showDisks = async () => {
+      current = null;
+      loading();
+      const data = await get("/api/disks").catch(() => ({disks: []}));
+      where.textContent = data.disks.length ? T.picker_disks : T.picker_no_disks;
+      data.disks.forEach((d) => {
+        const used = d.total ? Math.round((100 * (d.total - d.free)) / d.total) : null;
+        if (d.system && data.desktop) {  // Docker Desktop cannot list this disk: only the suggested folder
+          item(T.picker_system, [T.picker_system_hint, space(d)].filter(Boolean).join(" · "), () => choose(data.default), used);
+        } else {
+          item(d.system ? T.picker_system : d.name, [d.path, space(d)].filter(Boolean).join(" · "), () => open(d.path), used);
+        }
+      });
+    };
+    const open = async (path) => {
+      loading();
+      const d = await get("/api/browse?path=" + encodeURIComponent(path)).catch(() => ({error: "err_folder_unreadable"}));
+      if (d.error) {
+        where.textContent = T[d.error];
+        item("↑ " + T.picker_disks, "", showDisks);
+        return;
+      }
+      current = d.path;
+      where.textContent = [d.path, space(d)].filter(Boolean).join(" · ");
+      item("↑ " + (d.parent ? T.picker_up : T.picker_disks), d.parent || "", () => (d.parent ? open(d.parent) : showDisks()));
+      d.dirs.forEach((name) => item(name, "", () => open(join(d.path, name))));
+      if (!d.dirs.length) {
+        const li = document.createElement("li");
+        li.className = "hint";
+        li.textContent = T.picker_none;
+        list.append(li);
+      }
+      actions.hidden = false;
+    };
+    toggle.addEventListener("click", () => {
+      const opening = panel.hidden;
+      panel.hidden = !opening;
+      toggle.setAttribute("aria-expanded", String(opening));
+      if (opening) showDisks();
+    });
+    $("[data-use]", picker).addEventListener("click", () => current && choose(current));
+    if (here) here.addEventListener("click", () => current && choose(join(current, "Plaid")));
+  });
+
   // ---------------------------------------------------------------- wizard
   const form = $("#wizard");
   if (form) {

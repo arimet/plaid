@@ -103,6 +103,14 @@ def preflight(s: Settings, dk=docker) -> list[str]:
     return found
 
 
+def disks(platform: str, home: str, dk=docker) -> list[dict]:
+    return dk.disks(platform, home)
+
+
+def browse(path: str, platform: str, dk=docker) -> dict:
+    return dk.browse(path, platform)
+
+
 SMALL_DISK = 100 * 10 ** 9  # a few films: 1080p takes 5-15 GB, 4K 20-60 GB
 
 

@@ -672,3 +672,43 @@ class MediaWebTest(SettingsWebTest):
         _, _, html = self.req("GET", "/?lang=fr")
         self.assertEqual(html.count('name="profile_'), 9)
         self.assertIn('data-last="5"', html)  # folder, account, VPN, Tailscale (Linux), films et séries
+
+
+class PickerTest(unittest.TestCase):
+    start, req = WebTest.start, WebTest.req
+    DISKS = [{"path": "/", "name": "", "free": 5 * 10 ** 10, "total": 2 * 10 ** 11, "system": True},
+             {"path": "/mnt/films", "name": "films", "free": 3 * 10 ** 12, "total": 4 * 10 ** 12, "system": False}]
+
+    def flow(self, installed=None):
+        flow = FakeFlow(installed=installed)
+        flow.disks = lambda platform, home: self.seen.append((platform, home)) or self.DISKS
+        flow.browse = lambda path, platform: self.seen.append((path, platform)) or {"path": path, "dirs": ["Movies"]}
+        self.seen = []
+        return flow
+
+    def test_disks_api(self):
+        self.start(self.flow())
+        status, _, body = self.req("GET", "/api/disks")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"disks": self.DISKS, "default": "/home/zoe/Plaid", "desktop": False})
+        self.assertEqual(self.seen, [("linux", "/home/zoe")])
+
+    def test_browse_api(self):
+        self.start(self.flow())
+        status, _, body = self.req("GET", "/api/browse?path=%2Fmnt%2Fmy%20films")
+        self.assertEqual((status, json.loads(body)["dirs"]), (200, ["Movies"]))
+        self.assertEqual(self.seen, [("/mnt/my films", "linux")])
+
+    def test_picker_is_locked_after_install(self):
+        self.start(self.flow(installed=settings()))
+        self.assertEqual(self.req("GET", "/api/disks")[0], 401)
+        self.assertEqual(self.req("GET", "/api/browse?path=%2F")[0], 401)
+        self.assertEqual(self.seen, [])
+
+    def test_picker_markup(self):
+        wizard = web.form_page("fr", ENV)
+        self.assertIn('data-picker data-create="1"', wizard)
+        self.assertIn("Choisir sur un disque", wizard)
+        page = web.settings_page("fr", settings())
+        self.assertIn("data-picker", page)
+        self.assertNotIn('data-create="1"', page)  # settings take a folder as it is: they never make one
