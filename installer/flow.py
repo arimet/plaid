@@ -8,7 +8,7 @@ import platform
 import re
 import threading
 import time
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from typing import Callable
 
 from installer import apps, docker, media
@@ -30,6 +30,7 @@ class Progress:
     done: bool = False
     error: str | None = None
     detail: str = ""
+    kept: list[str] = field(default_factory=list)  # quality profiles left in place: films or series still use them
 
 
 Report = Callable[[Progress], None]

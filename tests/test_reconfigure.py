@@ -109,6 +109,18 @@ class Ops:
         if getattr(self, "fail_rescan", False):
             raise RuntimeError("Jellyfin 401")
 
+    def profiles(self, login, new):
+        self.calls.append(("profiles", login.password, tuple(new.profiles or ())))
+        return {"radarr": {"profiles": {k: 9 for k in new.profiles or ()}}}, list(getattr(self, "kept", []))
+
+    def subtitles(self, new):
+        self.calls.append(("subtitles", tuple(new.subtitle_langs)))
+
+    def metadata(self, login, new):
+        self.calls.append(("metadata", login.password, new.metadata_lang))
+        if getattr(self, "fail_metadata", False):
+            raise RuntimeError("Jellyfin down")
+
 
 class ApplyTest(unittest.TestCase):
     def setUp(self):
@@ -283,3 +295,80 @@ class StepsReportedOnceTest(ApplyTest):
         self.run_apply(settings(), settings(timezone="Europe/Paris", password="new-pass1"))
         self.assertEqual([e.step for e in self.events],
                          ["step_compose", "step_vpn", "step_account", "step_save", "step_done"])
+
+
+MEDIA = dict(audio_lang="fr", profiles=["mine-1080p"], default_profile="mine-1080p", subtitle_langs=["fr", "en"],
+             metadata_lang="fr")
+
+
+def media_settings(**kw):
+    return settings(**{**MEDIA, **kw})
+
+
+class MediaChangesTest(unittest.TestCase):
+    def test_changes_media_kinds(self):
+        C, old = reconfigure.changes, media_settings()
+        self.assertEqual(C(old, media_settings(profiles=["mine-1080p", "orig-4k"])), {"profiles": "change"})
+        self.assertEqual(C(old, media_settings(default_profile="orig-4k", profiles=["mine-1080p", "orig-4k"])),
+                         {"profiles": "change"})
+        self.assertEqual(C(old, media_settings(audio_lang="de")), {"profiles": "change"})
+        self.assertEqual(C(old, media_settings(subtitle_langs=["fr"])), {"subtitles": "change"})
+        self.assertEqual(C(old, media_settings(metadata_lang="en")), {"metadata": "change"})
+        self.assertEqual(C(settings(), media_settings()),  # never configured: everything is new
+                         {"profiles": "change", "subtitles": "change", "metadata": "change"})
+        self.assertEqual(C(old, media_settings(lang="fr")), {"lang": "change", "profiles": "change"})  # renamed
+        self.assertEqual(C(settings(), settings(lang="fr")), {"lang": "change"})
+
+    def test_media_steps_order_and_outage(self):
+        chg = {"profiles": "change", "subtitles": "change", "metadata": "change", "account": "change"}
+        self.assertEqual(reconfigure.steps(chg, False),
+                         ["step_profiles", "step_subtitles", "step_metadata", "step_account", "step_save"])
+        self.assertEqual(reconfigure.outage(chg), "outage_none")
+
+    def test_merge_media_fields(self):
+        data = {"audio_lang": "de", "profiles": ["orig-4k"], "default_profile": "orig-4k", "subtitle_langs": ["it"],
+                "metadata_lang": "es"}
+        new = reconfigure.merge(settings(), data)
+        self.assertEqual((new.audio_lang, new.profiles, new.default_profile, new.subtitle_langs, new.metadata_lang),
+                         ("de", ["orig-4k"], "orig-4k", ["it"], "es"))
+        self.assertIsNone(reconfigure.merge(settings(), {}).profiles)  # absent: kept as it was
+        self.assertEqual(reconfigure.merge(media_settings(), {}).profiles, ["mine-1080p"])
+
+
+class MediaApplyTest(ApplyTest):
+    def test_apply_saves_arr_ids_and_reports_kept(self):
+        ops = Ops()
+        ops.kept = ["Français · 4K"]
+        self.assertEqual(self.run_apply(media_settings(), media_settings(profiles=["mine-1080p", "orig-4k"]), ops),
+                         [])
+        self.assertEqual(self.saved().arr_ids, {"radarr": {"profiles": {"mine-1080p": 9, "orig-4k": 9}}})
+        self.assertEqual(self.saved().profiles, ["mine-1080p", "orig-4k"])
+        self.assertEqual(self.events[-1].kept, ["Français · 4K"])
+
+    def test_media_steps_sign_in_with_old_account(self):
+        old = media_settings()
+        new = media_settings(password="brandnew1", profiles=["orig-4k"], default_profile="orig-4k",
+                             metadata_lang="en", subtitle_langs=["en"])
+        self.run_apply(old, new)
+        names = [c[0] for c in self.ops.calls]
+        self.assertEqual(names, ["profiles", "subtitles", "metadata", "account"])
+        self.assertEqual(self.ops.calls[0][1], old.password)
+        self.assertEqual(self.ops.calls[2][1], old.password)
+
+    def test_failure_after_profiles_restores_them(self):
+        ops = Ops()
+        ops.fail_metadata = True
+        old = media_settings()
+        self.assertIsNone(self.run_apply(old, media_settings(profiles=["orig-4k"], default_profile="orig-4k",
+                                                             metadata_lang="en"), ops))
+        self.assertEqual(ops.calls[-1], ("profiles", old.password, ("mine-1080p",)))  # back to the old grid
+        self.assertEqual(self.events[-1].error, "err_apply_failed")
+
+    def test_failure_on_unconfigured_install_restores_nothing(self):
+        ops = Ops()
+        ops.fail_metadata = True
+        self.assertIsNone(self.run_apply(settings(), media_settings(), ops))
+        self.assertEqual([c[0] for c in ops.calls], ["profiles", "subtitles", "metadata"])
+        # The profiles made stay in Radarr: their IDs are kept, so the next try updates them, never duplicates.
+        self.assertEqual(self.saved().arr_ids, {"radarr": {"profiles": {"mine-1080p": 9}}})
+        self.assertIsNone(self.saved().profiles)
