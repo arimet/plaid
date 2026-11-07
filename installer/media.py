@@ -28,7 +28,8 @@ SCORES = {
     "orig": {"lang": 0, "multi": 100, "original": 100, "subbed": 10},
     "multi": {"lang": 100, "multi": 200, "original": 0, "subbed": -150},
 }
-DUAL = r"\b(MULTi|DUAL|DL|ML)\b"  # German DL, Spanish/Italian DUAL: only says "two tracks", not which
+# German DL, Spanish/Italian DUAL: only says "two tracks", not which. DL right after WEB is the source (WEB-DL).
+DUAL = r"\b(MULTi|DUAL)\b|(?<!WEB[-.])\bDL\b"
 SUBBED = {"fr": r"\b(VOSTFR|SUBFRENCH)\b"}
 SUBBED_OTHER = r"\b(SUBBED|VOST|SUB)\b"
 
@@ -114,9 +115,12 @@ def profile_body(schema: dict, key: str, name: str, format_ids: dict[str, int], 
         q = item["quality"]
         (wanted if q["resolution"] == QUALITIES[quality] and not EXCLUDED.search(q["name"]) else others).append(item)
     group = {"id": GROUP_ID, "name": quality, "allowed": True, "items": wanted}
+    # Every existing format must be listed (the apps refuse a profile without one): others stay at 0.
+    scores = {format_ids[k]: v for k, v in SCORES[mode].items()}
+    items = [{**f, "score": scores.pop(f["format"], 0)} for f in schema.get("formatItems", [])]
+    items += [{"format": fid, "score": score} for fid, score in scores.items()]
     body.update(name=name, items=others + [group], cutoff=GROUP_ID, upgradeAllowed=False,
-                minFormatScore=MIN_SCORE, cutoffFormatScore=0,
-                formatItems=[{"format": format_ids[k], "score": v} for k, v in SCORES[mode].items()])
+                minFormatScore=MIN_SCORE, cutoffFormatScore=0, formatItems=items)
     if radarr:
         body["language"] = {"id": ANY, "name": "Any"}
     else:

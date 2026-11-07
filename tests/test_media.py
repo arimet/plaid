@@ -124,6 +124,16 @@ class ProfileBodyTest(unittest.TestCase):
         self.assertEqual(len(body["formatItems"]), 4)
         self.assertEqual(RADARR_SCHEMA["language"]["id"], -2)  # the schema itself is left untouched
 
+    def test_profile_body_keeps_other_formats(self):
+        # The apps refuse a profile that leaves out any existing custom format: the user's own stay, at score 0.
+        schema = dict(RADARR_SCHEMA, formatItems=[{"format": 99, "name": "Mine", "score": 0},
+                                                  {"format": 11, "name": "Plaid · fr", "score": 0}])
+        body = media.profile_body(schema, "mine-1080p", "x", IDS, radarr=True)
+        scores = {f["format"]: f["score"] for f in body["formatItems"]}
+        self.assertEqual(scores[99], 0)
+        self.assertEqual(scores[11], media.scores("mine")["lang"])
+        self.assertEqual(len(body["formatItems"]), 5)
+
     def test_profile_body_sonarr_has_no_language(self):
         body = media.profile_body(SONARR_SCHEMA, "orig-4k", "x", IDS, radarr=False)
         self.assertNotIn("language", body)
@@ -141,6 +151,9 @@ class FormatsTest(unittest.TestCase):
         self.assertNotRegex("Film.2023.FRENCH.1080p.WEB.x264", regex_of(fr["multi"]))
         self.assertRegex("Film.2023.German.DL.1080p.WEB.x264", regex_of(de["multi"]))
         self.assertEqual(lang_value(de["multi"]), 4)  # DL alone says nothing of which language
+        for single in ("Film.2023.German.1080p.WEB-DL.x264", "Pelicula.2023.SPANiSH.1080p.WEB.DL.x264"):
+            self.assertNotRegex(single, regex_of(de["multi"]))  # WEB-DL is a source, not dual audio
+        self.assertRegex("Film.2023.German.DL.1080p.WEB-DL.x264", regex_of(de["multi"]))
         self.assertRegex("Pelicula.2023.Spanish.DUAL.1080p", regex_of(es["multi"]))
         self.assertRegex("Film.2023.VOSTFR.1080p.WEB.x264", regex_of(fr["subbed"]))
         self.assertNotRegex("Film.2023.FRENCH.1080p.WEB.x264", regex_of(fr["subbed"]))

@@ -349,6 +349,19 @@ class EnsureMediaTest(unittest.TestCase):
         self.assertEqual(len(posts(app, "customformat")), 3)
         self.assertFalse(posts(app, "qualityprofile"))
 
+    def test_ensure_media_records_ids_as_it_goes(self):
+        # A failure half way must not lose what was made: the caller's dict holds it.
+        class Failing(MediaArr):
+            def __call__(self, method, path, body=None):
+                if method == "POST" and path == "/qualityprofile" and posts(self, "qualityprofile"):
+                    raise apps.HttpError(500, path, "boom")
+                return super().__call__(method, path, body)
+        app, ids = Failing("radarr"), {}
+        with self.assertRaises(apps.HttpError):
+            app.ensure_media(chosen(profiles=["mine-1080p", "orig-4k"]), ids)
+        self.assertEqual(len(ids["formats"]), 4)
+        self.assertEqual(list(ids["profiles"]), ["mine-1080p"])
+
     def test_existing_install_keeps_builtins(self):
         app = MediaArr("radarr", profiles=[{"id": 4, "name": "HD-1080p"}])
         app.ensure_media(chosen(), {})

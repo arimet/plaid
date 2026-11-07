@@ -264,7 +264,9 @@ class Arr:
         """The formats and the ticked profiles, as chosen. Returns (their IDs, names of unticked profiles kept
         because films or series still use them). builtin: also remove every profile Plaid did not make (install)."""
         e = media.effective(s)
-        ids = {"formats": dict(ids.get("formats", {})), "profiles": dict(ids.get("profiles", {}))}
+        # Filled in place as items are made: a failure half way leaves the caller with what exists.
+        ids.setdefault("formats", {})
+        ids.setdefault("profiles", {})
         # Without a stored ID, an item of the same name is taken over: a change that failed half way may have made
         # it, and the apps refuse two of the same name.
         named = lambda path: {item["name"]: item["id"] for item in self("GET", path)}

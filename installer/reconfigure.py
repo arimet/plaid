@@ -1,6 +1,7 @@
 """Changing a setting on an installed stack: what changes, which steps that takes, and applying them."""
 from __future__ import annotations
 
+import copy
 import json
 import os
 from dataclasses import asdict, replace
@@ -57,8 +58,11 @@ def changes(old: Settings, new: Settings) -> dict[str, str]:
         "profiles": "change" if (old.audio_lang, old.profiles, old.default_profile) !=
         (new.audio_lang, new.profiles, new.default_profile) or (old.lang != new.lang and media.configured(new))
         else None,
-        "subtitles": "change" if old.subtitle_langs != new.subtitle_langs else None,
-        "metadata": "change" if old.metadata_lang != new.metadata_lang else None,
+        # Unset means what the install set (Plaid's language): only a different value changes anything.
+        "subtitles": "change" if new.subtitle_langs is not None and
+        media.effective(old).subtitle_langs != new.subtitle_langs else None,
+        "metadata": "change" if new.metadata_lang is not None and
+        media.effective(old).metadata_lang != new.metadata_lang else None,
     }
     return {k: v for k, v in found.items() if v}
 
@@ -140,11 +144,16 @@ def default_ops(new: Settings, dk, state_dir: str) -> SimpleNamespace:
 def _profiles(target: Settings, login: Settings, host_of, compose_out) -> tuple[dict, list[str]]:
     """Radarr and Sonarr as `target` says, then Seerr's default. Seerr signs in through Jellyfin: with `login`, the
     account the apps have until step_account."""
-    ids, kept = dict(target.arr_ids), []
-    for name in ("radarr", "sonarr"):
-        ids[name], left = apps.Arr(name, host_of(name), "v3", compose_out).ensure_media(target, ids.get(name, {}))
-        kept += left
-    apps.seerr_default(target, login, host_of("seerr"), ids)
+    ids, kept = copy.deepcopy(target.arr_ids), []
+    try:
+        for name in ("radarr", "sonarr"):
+            ids.setdefault(name, {})
+            kept += [k for k in apps.Arr(name, host_of(name), "v3", compose_out).ensure_media(target, ids[name])[1]
+                     if k not in kept]
+        apps.seerr_default(target, login, host_of("seerr"), ids)
+    except Exception as e:  # what was made half way: the rollback and the next try must know it
+        e.arr_ids = ids
+        raise
     return ids, kept
 
 
@@ -198,7 +207,11 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
                 # undo the new folder; the apps also scan on their own schedule.
                 _try(lambda: ops.rescan(old))  # the account changes last: the current one opens the apps here
             elif step == "step_profiles":
-                arr_ids, kept = ops.profiles(old, new)
+                try:
+                    arr_ids, kept = ops.profiles(old, new)
+                except Exception as e:
+                    arr_ids = getattr(e, "arr_ids", arr_ids)
+                    raise
             elif step == "step_subtitles":
                 ops.subtitles(new)
             elif step == "step_metadata":

@@ -372,3 +372,55 @@ class MediaApplyTest(ApplyTest):
         # The profiles made stay in Radarr: their IDs are kept, so the next try updates them, never duplicates.
         self.assertEqual(self.saved().arr_ids, {"radarr": {"profiles": {"mine-1080p": 9}}})
         self.assertIsNone(self.saved().profiles)
+
+
+class PartialProfilesTest(ApplyTest):
+    def test_partial_profile_ids_reach_the_rollback(self):
+        ops, seen = Ops(), []
+
+        def profiles(login, target):
+            seen.append(target.arr_ids)
+            if len(seen) == 1:  # Sonarr failed after Radarr made orig-4k
+                e = RuntimeError("Sonarr down")
+                e.arr_ids = {"radarr": {"profiles": {"mine-1080p": 9, "orig-4k": 12}}}
+                raise e
+            return target.arr_ids, []
+        ops.profiles = profiles
+        old = media_settings(arr_ids={"radarr": {"profiles": {"mine-1080p": 9}}})
+        self.assertIsNone(self.run_apply(old, media_settings(profiles=["mine-1080p", "orig-4k"]), ops))
+        self.assertEqual(seen[1], {"radarr": {"profiles": {"mine-1080p": 9, "orig-4k": 12}}})  # so it removes orig-4k
+
+    def test_partial_ids_kept_when_old_choices_never_made(self):
+        ops = Ops()
+
+        def profiles(login, target):
+            e = RuntimeError("Seerr down")
+            e.arr_ids = {"radarr": {"profiles": {"mine-1080p": 9}}}
+            raise e
+        ops.profiles = profiles
+        self.assertIsNone(self.run_apply(settings(), media_settings(), ops))
+        self.assertEqual(self.saved().arr_ids, {"radarr": {"profiles": {"mine-1080p": 9}}})
+
+    def test_profiles_attach_partial_ids(self):
+        from unittest import mock
+
+        class Arr:
+            def __init__(self, name, *a):
+                self.name = name
+
+            def ensure_media(self, s, ids, builtin=False):
+                if self.name == "sonarr":
+                    raise RuntimeError("Sonarr down")
+                ids.setdefault("profiles", {})["mine-1080p"] = 9
+                return ids, []
+        with mock.patch("installer.reconfigure.apps.Arr", Arr):
+            with self.assertRaises(RuntimeError) as ctx:
+                reconfigure._profiles(media_settings(), media_settings(), lambda svc: svc, lambda *a: "")
+        self.assertEqual(ctx.exception.arr_ids, {"radarr": {"profiles": {"mine-1080p": 9}}, "sonarr": {}})
+
+
+class FirstSaveTest(unittest.TestCase):
+    def test_unset_values_equal_to_what_the_apps_have_are_no_change(self):
+        # Installed before these choices: Bazarr has fr + en and Jellyfin fr already. Only the profiles are new.
+        old = settings(lang="fr")
+        self.assertEqual(reconfigure.changes(old, settings(lang="fr", **MEDIA)), {"profiles": "change"})
