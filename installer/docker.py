@@ -132,7 +132,7 @@ def _mac_path(path: str) -> str:
             return norm[len(root):] or "/"
     return norm
 DISK_TYPES = {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "ntfs", "ntfs3", "fuseblk", "exfat", "vfat",
-              "nfs", "nfs4", "cifs", "smb3"}
+              "nfs", "nfs4", "cifs", "smb3", "fuse.mergerfs", "fuse.shfs"}  # mergerfs and Unraid pools
 NOT_DISKS = ("/boot", "/var/lib/docker", "/snap", "/run", "/dev", "/proc", "/sys")
 _DF = re.compile(r"(\d+)\s+(\d+)\s+(\d+)\s+\d+%\s")  # 1024-blocks, used, available, capacity
 _DF_TYPED = re.compile(r"^(.*?)\s+(\S+)\s+(\d+)\s+\d+\s+(\d+)\s+\d+%\s+(.*)$")  # fs, type, blocks, avail, mount
@@ -167,7 +167,8 @@ def parse_df(out: str) -> list[dict]:
         m = _DF_TYPED.match(line.strip())
         if not m or m.group(2) not in DISK_TYPES or not _under(m.group(5), ["/host"]):
             continue
-        path = m.group(5)[len("/host"):] or "/"
+        # df writes a space in a mount point as \040, as /proc/mounts does
+        path = re.sub(r"\\([0-7]{3})", lambda o: chr(int(o.group(1), 8)), m.group(5))[len("/host"):] or "/"
         if path != "/" and _under(path, NOT_DISKS):
             continue
         disk = {"path": path, "name": "" if path == "/" else posixpath.basename(path),
@@ -185,11 +186,11 @@ def disks(platform: str, home: str, run: Run = default_run) -> list[dict]:
         return parse_df(result.stdout) if result.returncode == 0 else []
     if platform == "mac":
         mounts = ["type=bind,src=/Users,dst=/u,readonly", "type=bind,src=/Volumes,dst=/h,readonly"]
-        script = ('printf "\\t"; df -kP /u | tail -1; for d in /h/*; do [ -L "$d" ] || [ ! -d "$d" ] && continue; '
-                  'printf "%s\\t" "${d#/h/}"; df -kP "$d" | tail -1; done')
+        script = ('printf "\\t%s\\n" "$(df -kP /u | tail -1)"; for d in /h/*; do [ -L "$d" ] || [ ! -d "$d" ] && '
+                  'continue; printf "%s\\t%s\\n" "${d#/h/}" "$(df -kP "$d" 2>/dev/null | tail -1)"; done')
     else:
         mounts = ["type=bind,src=/run/desktop/mnt/host,dst=/h,readonly"]
-        script = 'for d in /h/*; do printf "%s\\t" "${d#/h/}"; df -kP "$d" | tail -1; done'
+        script = 'for d in /h/*; do printf "%s\\t%s\\n" "${d#/h/}" "$(df -kP "$d" 2>/dev/null | tail -1)"; done'
     result = _helper(mounts, ["sh", "-c", script], run)
     found = []
     for line in result.stdout.splitlines() if result.returncode == 0 else []:
@@ -225,7 +226,7 @@ def browsable(path: str, platform: str) -> bool:
     return not _under(norm, ["/proc", "/sys", "/dev", "/run", "/var/run"])
 
 
-_LIST = 'df -kP . | tail -1; for d in */; do [ -d "$d" ] && printf "%s\\n" "${d%/}"; done'
+_LIST = 'df -kP . | tail -1; for d in */; do [ -d "$d" ] && printf "%s\\0" "${d%/}"; done'
 
 
 def browse(path: str, platform: str, run: Run = default_run) -> dict:
@@ -249,14 +250,15 @@ def browse(path: str, platform: str, run: Run = default_run) -> dict:
     if result.returncode != 0:
         missing = result.returncode == 2 or "does not exist" in (result.stderr or "")
         return {"error": "err_folder_missing" if missing else "err_folder_unreadable"}
-    lines = result.stdout.splitlines()
-    space = _space(lines[0]) if lines else None
+    df_line, _, names = result.stdout.partition("\n")
+    space = _space(df_line)
     free, total = space if space and _room_known(norm, platform) else (None, None)
-    return {"path": norm, "parent": parent, "dirs": [d for d in lines[1:] if d and "," not in d],
+    return {"path": norm, "parent": parent, "dirs": [d for d in names.split("\0") if d and "," not in d],
             "free": free, "total": total}
 
 
-_LINK = ('df -kP /m | tail -1; f=/m/.plaid-link-$$; if touch "$f" 2>/dev/null; then ln "$f" "$f.2" 2>/dev/null; '
+_LINK = ('df -kP /m | tail -1; rm -f /m/.plaid-link-* 2>/dev/null; f="/m/$1"; '
+         'if touch "$f" 2>/dev/null; then ln "$f" "$f.2" 2>/dev/null; '
          'stat -c %h "$f"; rm -f "$f" "$f.2"; else echo -; fi')
 
 
@@ -273,7 +275,7 @@ def disk_check(path: str, platform: str, home: str, run: Run = default_run) -> d
             result = _helper([f"type=bind,src={share},dst=/m,readonly"], ["sh", "-c", "df -kP /m | tail -1"], run)
             space = _space(result.stdout) if result.returncode == 0 else None
             return {"free": space[0], "hardlinks": None} if space else unknown
-        result = _helper([f"type=bind,src={host_path(target, platform)},dst=/m"], ["sh", "-c", _LINK], run)
+        result = _helper([f"type=bind,src={host_path(target, platform)},dst=/m"], ["sh", "-c", _LINK, "sh", f".plaid-link-{uuid.uuid4().hex[:8]}"], run)
         if result.returncode == 0:
             lines = result.stdout.splitlines() + ["", ""]
             space = _space(lines[0])

@@ -1,5 +1,7 @@
 import json
+import os
 import subprocess
+import tempfile
 import unittest
 
 from installer import docker
@@ -321,14 +323,14 @@ class BrowseTest(unittest.TestCase):
             self.assertFalse(docker.browsable(path, platform), path)
 
     def test_browse_lists_folders_and_space(self):
-        run = ScriptRun((0, "/dev/sdc1 3906000000 906000000 3000000000 23% /m\nMovies\nTV shows\nx,y\n", ""))
+        run = ScriptRun((0, "/dev/sdc1 3906000000 906000000 3000000000 23% /m\nMovies\0TV shows\0x,y\0", ""))
         got = docker.browse("/mnt/films", "linux", run=run)
         self.assertEqual(got, {"path": "/mnt/films", "parent": "/mnt", "dirs": ["Movies", "TV shows"],
                                "free": 3000000000 * 1024, "total": 3906000000 * 1024})
         self.assertIn("type=bind,src=/mnt/films,dst=/m,readonly", run.calls[0])
 
     def test_browse_mac_reads_through_volumes(self):
-        run = ScriptRun((0, "v 100 50 50 50% /v\nSeries\n", ""))
+        run = ScriptRun((0, "v 100 50 50 50% /v\nSeries\0", ""))
         got = docker.browse("/Volumes/Films/Movies", "mac", run=run)
         self.assertEqual((got["parent"], got["dirs"]), ("/Volumes/Films", ["Series"]))
         self.assertIsNone(got["free"])
@@ -392,3 +394,52 @@ class DiskCheckTest(unittest.TestCase):
                          {"free": None, "hardlinks": None})
         gone = ScriptRun((125, "", "does not exist"), (125, "", "does not exist"))
         self.assertEqual(docker.disk_check("/mnt/x/y", "linux", "/home/z", run=gone), {"free": None, "hardlinks": None})
+
+
+
+class LocalSh:
+    """Runs a helper's `sh -c` script on this machine, its /h and /u folders moved under `root`, with a fake df that
+    prints nothing for a folder named Silent (a volume that does not answer)."""
+    def __init__(self, root):
+        self.root, self.calls = root, []
+        bin_dir = os.path.join(root, "bin")
+        os.makedirs(bin_dir)
+        with open(os.path.join(bin_dir, "df"), "w") as f:
+            f.write('#!/bin/sh\ncase "$2" in *Silent*) exit 1;; esac\n'
+                    'echo "Filesystem 1024-blocks Used Available Capacity Mounted"\necho "fs 100 40 60 40% $2"\n')
+        os.chmod(os.path.join(bin_dir, "df"), 0o755)
+
+    def __call__(self, args, timeout=None):
+        self.calls.append(args)
+        script = args[args.index("-c") + 1].replace("/h/", self.root + "/h/").replace("/u ", self.root + "/u ")
+        env = dict(os.environ, PATH=os.path.join(self.root, "bin") + ":" + os.environ["PATH"])
+        return subprocess.run(["sh", "-c", script], capture_output=True, text=True, env=env)
+
+
+class MinorDisksTest(unittest.TestCase):
+    def test_mergerfs_pool_and_escaped_mount_point(self):
+        out = LINUX_DF + ("pool:media       fuse.mergerfs 9000000000 1000000000 8000000000  12% /host/mnt/pool\n"
+                          "/dev/sdd1        ext4       100 50 50  50% /host/media/zoe/My\\040Disk\n")
+        paths = [d["path"] for d in docker.parse_df(out)]
+        self.assertIn("/mnt/pool", paths)
+        self.assertIn("/media/zoe/My Disk", paths)
+
+    def test_a_silent_volume_does_not_shift_the_names(self):
+        with tempfile.TemporaryDirectory() as root:
+            for d in ("u", "h/Alpha", "h/Silent", "h/Zulu"):
+                os.makedirs(os.path.join(root, d))
+            got = docker.disks("mac", "/Users/zoe", run=LocalSh(root))
+        self.assertEqual([(d["name"], d["system"]) for d in got], [("", True), ("Alpha", False), ("Zulu", False)])
+
+    def test_browse_names_with_a_newline(self):
+        run = ScriptRun((0, "d 10 5 5 50% /m\nMovies\0TV\nshows\0", ""))
+        self.assertEqual(docker.browse("/mnt/films", "linux", run=run)["dirs"], ["Movies", "TV\nshows"])
+
+    def test_link_test_file_has_its_own_name_and_old_ones_go(self):
+        run = ScriptRun((0, "d 10 5 5 50% /m\n2\n", ""), (0, "d 10 5 5 50% /m\n2\n", ""))
+        docker.disk_check("/mnt/films", "linux", "/home/z", run=run)
+        docker.disk_check("/mnt/films", "linux", "/home/z", run=run)
+        names = [c[-1] for c in run.calls]
+        self.assertRegex(names[0], r"^\.plaid-link-[0-9a-f]{8}$")
+        self.assertNotEqual(names[0], names[1])
+        self.assertIn("rm -f /m/.plaid-link-*", run.calls[0][run.calls[0].index("-c") + 1])
