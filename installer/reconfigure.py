@@ -144,17 +144,20 @@ def default_ops(new: Settings, dk, state_dir: str) -> SimpleNamespace:
 def _profiles(target: Settings, login: Settings, host_of, compose_out) -> tuple[dict, list[str]]:
     """Radarr and Sonarr as `target` says, then Seerr's default. Seerr signs in through Jellyfin: with `login`, the
     account the apps have until step_account."""
-    ids, kept = copy.deepcopy(target.arr_ids), []
+    ids, held = copy.deepcopy(target.arr_ids), {}
     try:
         for name in ("radarr", "sonarr"):
             ids.setdefault(name, {})
-            kept += [k for k in apps.Arr(name, host_of(name), "v3", compose_out).ensure_media(target, ids[name])[1]
-                     if k not in kept]
+            for profile in apps.Arr(name, host_of(name), "v3", compose_out).ensure_media(target, ids[name])[1]:
+                held.setdefault(profile, []).append(APP_LABELS[name])
         apps.seerr_default(target, login, host_of("seerr"), ids)
     except Exception as e:  # what was made half way: the rollback and the next try must know it
         e.arr_ids = ids
         raise
-    return ids, kept
+    return ids, [f"{profile} ({', '.join(where)})" for profile, where in held.items()]
+
+
+APP_LABELS = {"radarr": "Radarr", "sonarr": "Sonarr"}
 
 
 def _qbit_host(s: Settings) -> str:
@@ -250,6 +253,10 @@ def _rollback(old: Settings, started: list[str], dk, state_dir: str, has_dri: bo
     """Best effort: the error the user sees is the one that stopped the change, not one from here. Returns the
     profile IDs Plaid now has in Radarr/Sonarr: kept even when the old choices were never made, so a new try
     updates those profiles instead of making them twice."""
+    if "step_subtitles" in started:  # unset is what the install set: Plaid's language (+ English)
+        _try(lambda: ops.subtitles(old))
+    if "step_metadata" in started:
+        _try(lambda: ops.metadata(old, old))
     if "step_profiles" in started and media.configured(old):
         try:
             arr_ids = ops.profiles(old, replace(old, arr_ids=arr_ids))[0]

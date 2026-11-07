@@ -114,7 +114,7 @@ class Ops:
         return {"radarr": {"profiles": {k: 9 for k in new.profiles or ()}}}, list(getattr(self, "kept", []))
 
     def subtitles(self, new):
-        self.calls.append(("subtitles", tuple(new.subtitle_langs)))
+        self.calls.append(("subtitles", tuple(new.subtitle_langs or ())))  # unset: the real one takes the defaults
 
     def metadata(self, login, new):
         self.calls.append(("metadata", login.password, new.metadata_lang))
@@ -368,7 +368,8 @@ class MediaApplyTest(ApplyTest):
         ops = Ops()
         ops.fail_metadata = True
         self.assertIsNone(self.run_apply(settings(), media_settings(), ops))
-        self.assertEqual([c[0] for c in ops.calls], ["profiles", "subtitles", "metadata"])
+        # Subtitles and fiches go back to what the install set; the profiles made are not undone.
+        self.assertEqual([c[0] for c in ops.calls], ["profiles", "subtitles", "metadata", "subtitles", "metadata"])
         # The profiles made stay in Radarr: their IDs are kept, so the next try updates them, never duplicates.
         self.assertEqual(self.saved().arr_ids, {"radarr": {"profiles": {"mine-1080p": 9}}})
         self.assertIsNone(self.saved().profiles)
@@ -424,3 +425,29 @@ class FirstSaveTest(unittest.TestCase):
         # Installed before these choices: Bazarr has fr + en and Jellyfin fr already. Only the profiles are new.
         old = settings(lang="fr")
         self.assertEqual(reconfigure.changes(old, settings(lang="fr", **MEDIA)), {"profiles": "change"})
+
+
+class MinorFixesTest(ApplyTest):
+    def test_failure_undoes_subtitles_and_metadata(self):
+        ops = Ops()
+        ops.fail_metadata = True
+        old = media_settings()
+        new = media_settings(subtitle_langs=["de"], metadata_lang="de")
+        self.assertIsNone(self.run_apply(old, new, ops))
+        self.assertIn(("subtitles", ("fr", "en")), ops.calls)  # back to the old languages
+        self.assertEqual([c for c in ops.calls if c[0] == "metadata"][-1], ("metadata", old.password, "fr"))
+
+    def test_kept_names_say_which_app(self):
+        from unittest import mock
+
+        class Arr:
+            def __init__(self, name, *a):
+                self.name = name
+
+            def ensure_media(self, s, ids, builtin=False):
+                kept = {"radarr": ["VO sous-titrée · 4K", "MULTi · 720p"], "sonarr": ["VO sous-titrée · 4K"]}
+                return ids, kept[self.name]
+        with mock.patch("installer.reconfigure.apps.Arr", Arr), \
+                mock.patch("installer.reconfigure.apps.seerr_default", lambda *a: None):
+            _, kept = reconfigure._profiles(media_settings(), media_settings(), lambda svc: svc, lambda *a: "")
+        self.assertEqual(kept, ["VO sous-titrée · 4K (Radarr, Sonarr)", "MULTi · 720p (Radarr)"])

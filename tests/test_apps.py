@@ -434,3 +434,15 @@ class MediaAppsTest(unittest.TestCase):
         refresh = [c[1] for c in self.seen if "/Refresh?" in c[1]]
         self.assertEqual(len(refresh), 2)
         self.assertIn("replaceAllMetadata=true", refresh[0])
+
+
+class DeleteErrorTest(unittest.TestCase):
+    def test_server_error_on_delete_is_not_in_use(self):
+        class Broken(MediaArr):
+            def __call__(self, method, path, body=None):
+                if method == "DELETE":
+                    raise apps.HttpError(500, path, "boom")
+                return super().__call__(method, path, body)
+        app = Broken("radarr", profiles=[{"id": 8, "name": "VO sous-titrée · 4K"}])
+        with self.assertRaises(apps.HttpError):  # a failure, not "still used by films"
+            app.ensure_media(chosen(), {"formats": {}, "profiles": {"orig-4k": 8}})

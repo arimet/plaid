@@ -157,6 +157,8 @@ class FormatsTest(unittest.TestCase):
         self.assertRegex("Pelicula.2023.Spanish.DUAL.1080p", regex_of(es["multi"]))
         self.assertRegex("Film.2023.VOSTFR.1080p.WEB.x264", regex_of(fr["subbed"]))
         self.assertNotRegex("Film.2023.FRENCH.1080p.WEB.x264", regex_of(fr["subbed"]))
+        self.assertRegex("Film.2023.SUBBED.1080p.WEB.x264", regex_of(de["subbed"]))
+        self.assertNotRegex("The.Sub.2023.1080p.WEB.x264", regex_of(de["subbed"]))  # a title word
         self.assertEqual(len({f["name"] for f in fr.values()}), 4)
 
 

@@ -286,6 +286,8 @@ class Arr:
             try:
                 self("DELETE", f"/qualityprofile/{pid}")
             except HttpError as err:
+                if err.status >= 500:  # the app failed: not a refusal
+                    raise
                 if err.status != 404:  # in use: the app refuses, the user moves those items first
                     kept.append(self("GET", f"/qualityprofile/{pid}")["name"])
                     continue

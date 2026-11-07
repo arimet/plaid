@@ -31,7 +31,7 @@ SCORES = {
 # German DL, Spanish/Italian DUAL: only says "two tracks", not which. DL right after WEB is the source (WEB-DL).
 DUAL = r"\b(MULTi|DUAL)\b|(?<!WEB[-.])\bDL\b"
 SUBBED = {"fr": r"\b(VOSTFR|SUBFRENCH)\b"}
-SUBBED_OTHER = r"\b(SUBBED|VOST|SUB)\b"
+SUBBED_OTHER = r"\b(SUBBED|VOST)\b"  # not bare SUB: a title word
 
 
 def configured(s) -> bool:
