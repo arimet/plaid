@@ -455,7 +455,7 @@ def _torrents_tui(term, flow, lang: str, s) -> str:
                         default=False):
         return ""
     try:
-        return t(lang, "torrents_done", n=flow.clean_torrents(s))
+        return t(lang, "torrents_done", n=flow.clean_torrents(s, [x["hash"] for x in found]))
     except Exception:
         return t(lang, "torrents_error")
 

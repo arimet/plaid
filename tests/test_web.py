@@ -743,7 +743,9 @@ class StatusWebTest(unittest.TestCase):
         self.assertIn("presque plein", html)
         self.server.shutdown()
         html = self.open_panel(free=None, total=None)  # a Mac external disk: room unknown, no bar
-        self.assertNotIn('class="meter"', html)
+        self.assertIn('class="meter" hidden', html)
+        self.assertIn('data-full-note hidden', html)
+        self.assertIn(f'data-full="{web.FULL_DISK}"', html)  # the page's refresh uses the same threshold
 
     def test_status_api(self):
         self.open_panel(apps={"radarr": "running"})
@@ -806,7 +808,7 @@ class TorrentsWebTest(unittest.TestCase):
 
     def setUp(self):
         FakeFlow.finished_torrents = lambda flow, s: list(self.FOUND)
-        FakeFlow.clean_torrents = lambda flow, s: self.cleaned.append(s) or 1
+        FakeFlow.clean_torrents = lambda flow, s, hashes: self.cleaned.append(hashes) or 1
         self.cleaned = []
         self.addCleanup(lambda: (delattr(FakeFlow, "finished_torrents"), delattr(FakeFlow, "clean_torrents")))
 
@@ -820,12 +822,13 @@ class TorrentsWebTest(unittest.TestCase):
         self.assertIn("Dune.&lt;b&gt;2024&lt;/b&gt;.1080p", html)
         self.assertIn("9,0 Go", html)
         self.assertIn("Supprimer ces torrents (1)", html)
+        self.assertIn('name="hashes" value="aaa"', html)  # what was shown is what goes
 
     def test_clean(self):
         self.open_panel()
-        status, _, html = self.req("POST", "/torrents", "", {"Cookie": self.cookie,
-                                                            "Content-Type": "application/x-www-form-urlencoded"})
-        self.assertEqual((status, len(self.cleaned)), (200, 1))
+        status, _, html = self.req("POST", "/torrents", "hashes=aaa%7Cbbb", {
+            "Cookie": self.cookie, "Content-Type": "application/x-www-form-urlencoded"})
+        self.assertEqual((status, self.cleaned), (200, [["aaa", "bbb"]]))
         self.assertIn("Torrents supprimés : 1.", html)
 
     def test_needs_login(self):

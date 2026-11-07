@@ -286,16 +286,16 @@ FULL_DISK = 20 * 10 ** 9  # under this, downloads soon stop
 def disk_html(lang: str, s: Settings, status: dict) -> str:
     """The media disk's room, from the guard's last round. None on a Mac external disk: no bar then."""
     free, total = status.get("free"), status.get("total")
-    room = ""
-    if free is not None and total:
-        room = (f'<span class="meter"><i style="width:{round(100 * (total - free) / total)}%"></i></span>'
-                f'<p class="hint">{E(t(lang, "picker_free", free=human_size(free, lang), total=human_size(total, lang)))}'
-                f' · {E(s.data_dir)}</p>')
-    else:
-        room = f'<p class="hint">{E(s.data_dir)}</p>'
-    full = (f'<p class="note warn">{E(t(lang, "panel_disk_full"))}</p>'
-            if free is not None and free < FULL_DISK else "")
-    return f'<div class="disk" data-disk><h2>{E(t(lang, "panel_disk"))}</h2>{room}{full}</div>'
+    known = free is not None and bool(total)
+    hide = lambda shown: "" if shown else " hidden"
+    used = round(100 * (total - free) / total) if known else 0
+    room = (t(lang, "picker_free", free=human_size(free, lang), total=human_size(total, lang)) + " · ") if known else ""
+    # Every part is always there, hidden when unknown: the page's 30 s refresh fills them (app.js).
+    return (f'<div class="disk" data-disk data-full="{FULL_DISK}"><h2>{E(t(lang, "panel_disk"))}</h2>'
+            f'<span class="meter"{hide(known)}><i style="width:{used}%"></i></span>'
+            f'<p class="hint"><span data-room>{E(room)}</span>{E(s.data_dir)}</p>'
+            f'<p class="note warn" data-full-note{hide(known and free < FULL_DISK)}>{E(t(lang, "panel_disk_full"))}</p>'
+            f'</div>')
 
 
 def maintenance_html(lang: str, last: dict | None) -> str:
@@ -619,7 +619,9 @@ def torrents_page(lang: str, found: list[dict] | None, removed: int | None = Non
                    for x in found)
     return subpage(lang, head + f'<p class="lead">{E(t(lang, "torrents_help"))}</p><ul class="manual">{rows}</ul>'
                                 f'<p class="hint">{E(t(lang, "torrents_kept"))}</p>'
-                                f'<form method="post" action="/torrents"><button class="btn danger" type="submit">'
+                                f'<form method="post" action="/torrents">'
+                                f'<input type="hidden" name="hashes" value="{E("|".join(x["hash"] for x in found))}">'
+                                f'<button class="btn danger" type="submit">'
                                 f'{E(t(lang, "torrents_btn", n=len(found)))}</button></form>')
 
 
@@ -844,7 +846,8 @@ def make_handler(state: State):
                 if self.locked() or s is None:
                     return self.json(401, {})
                 try:  # the list is made again here: only what is imported now goes
-                    return self.send(200, torrents_page(lang, [], state.flow.clean_torrents(s)))
+                    hashes = [h for h in str(data.get("hashes", "")).split("|") if h]
+                    return self.send(200, torrents_page(lang, [], state.flow.clean_torrents(s, hashes)))
                 except Exception:
                     return self.send(200, torrents_page(lang, None))
             if path == "/api/update":

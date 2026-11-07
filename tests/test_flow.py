@@ -405,3 +405,15 @@ class TorrentAppsWaitTest(unittest.TestCase):
                 mock.patch("installer.apps.finished_torrents", lambda s, host, arrs: []):
             flow.finished_torrents(settings(), dk=FakeDocker())
         self.assertTrue(seen and all(0 < kw.get("seconds", 300) <= 15 for kw in seen))
+
+
+class CleanShownTest(unittest.TestCase):
+    def test_only_what_was_shown_and_is_still_finished_goes(self):
+        from unittest import mock
+        deleted = []
+        found = [{"hash": "aaa", "name": "a", "size": 1}, {"hash": "new", "name": "imported since", "size": 1}]
+        with mock.patch("installer.apps.Arr", lambda *a, **kw: object()), \
+                mock.patch("installer.apps.finished_torrents", lambda s, host, arrs: found), \
+                mock.patch("installer.apps.delete_torrents", lambda s, host, hashes: deleted.append(hashes)):
+            self.assertEqual(flow.clean_torrents(settings(), ["aaa", "gone"], dk=FakeDocker()), 1)
+        self.assertEqual(deleted, [["aaa"]])

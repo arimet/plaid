@@ -302,10 +302,12 @@ def finished_torrents(s: Settings, dk=docker, state_dir: str = STATE_DIR) -> lis
     return apps.finished_torrents(s, host, arrs)
 
 
-def clean_torrents(s: Settings, dk=docker, state_dir: str = STATE_DIR) -> int:
-    """Deletes the finished torrents already in the library, as listed right now. Returns how many."""
+def clean_torrents(s: Settings, hashes: list[str], dk=docker, state_dir: str = STATE_DIR) -> int:
+    """Deletes the torrents the user was shown (`hashes`) that are still finished and in the library now: one
+    imported since the page opened is not deleted unseen. Returns how many."""
     host, arrs = _torrent_apps(s, dk, state_dir)
-    found = apps.finished_torrents(s, host, arrs)
+    shown = {h.lower() for h in hashes}
+    found = [x for x in apps.finished_torrents(s, host, arrs) if x["hash"].lower() in shown]
     if found:
         apps.delete_torrents(s, host, [x["hash"] for x in found])
     return len(found)

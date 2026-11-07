@@ -127,6 +127,11 @@
           el.dataset.state = state;
           el.lastChild.textContent = T["state_" + state];
         });
+        const disk = $("[data-disk]"), known = st.free != null && st.total > 0;
+        $(".meter", disk).hidden = !known;
+        if (known) $(".meter i", disk).style.width = Math.round((100 * (st.total - st.free)) / st.total) + "%";
+        $("[data-room]", disk).textContent = known ? fmt(T.picker_free, {free: bytes(st.free), total: bytes(st.total)}) + " · " : "";
+        $("[data-full-note]", disk).hidden = !(known && st.free < Number(disk.dataset.full));
       }).catch(() => {});  // the next round tries again
     }, 30000);
   }

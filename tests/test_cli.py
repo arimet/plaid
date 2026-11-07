@@ -386,11 +386,11 @@ class MaintenanceCliTest(TuiCliTest):
         flow = installed_flow()
         flow.cleaned = []
         flow.finished_torrents = lambda s: [{"hash": "a", "name": "Dune.2024.1080p", "size": 9 * 1024 ** 3}]
-        flow.clean_torrents = lambda s: flow.cleaned.append(s) or 1
+        flow.clean_torrents = lambda s, hashes: flow.cleaned.append(hashes) or 1
         t, out = self.term("\x1b[B" * 5 + "\r", "\x1b[D\r", "\x1b[A\r")  # torrents · yes · quit
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIn("Dune.2024.1080p", out.getvalue())
-        self.assertEqual(len(flow.cleaned), 1)
+        self.assertEqual(flow.cleaned, [["a"]])
         self.assertIn("Torrents supprimés : 1.", out.getvalue())
 
 
