@@ -13,7 +13,7 @@
   const bytes = (n) => {
     const nf = new Intl.NumberFormat(document.documentElement.lang, {maximumFractionDigits: 1});
     const tb = 1024 ** 4, gb = 1024 ** 3;  // as the removal page counts (web.human_size)
-    return n >= tb ? `${nf.format(n / tb)} ${T.unit_tb}` : `${nf.format(Math.round(n / gb))} ${T.unit_gb}`;
+    return n >= tb ? `${nf.format(n / tb)}\u00a0${T.unit_tb}` : `${nf.format(Math.round(n / gb))}\u00a0${T.unit_gb}`;
   };
   $$("[data-picker]").forEach((picker) => {
     const field = $("#data_dir"), panel = $(".picker-panel", picker), list = $(".picker-list", picker);
