@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from installer import flow as default_flow
+from installer import media
 from installer.compose import PORTS, SERVICES
 from installer.flow import Progress
 from installer.i18n import APP_NAMES, T, t
@@ -116,10 +117,49 @@ def steps_html(lang: str, key: str) -> str:
     return "<ol>" + "".join(f"<li>{E(step)}</li>" for step in t(lang, key).split("|")) + "</ol>"
 
 
+def _lang_select(lang: str, name: str, value: str) -> str:
+    options = "".join(f'<option value="{code}"{" selected" if code == value else ""}>{E(t(lang, "lang_" + code))}</option>'
+                      for code in media.LANGS)
+    return f'<select class="input" id="{name}" name="{name}">{options}</select>'
+
+
+def media_fields(lang: str, s: Settings) -> str:
+    """Audio language, the 3 x 3 profile grid with its default, subtitles, fiches: the wizard and the settings."""
+    e = media.effective(s)
+    head = "".join(f"<th scope=\"col\">{'4K' if q == '4k' else q}</th>" for q in media.QUALITIES)
+    rows = ""
+    for mode in media.MODES:
+        cells = ""
+        for q in media.QUALITIES:
+            key = f"{mode}-{q}"
+            name = media.profile_name(key, lang, e.audio_lang)
+            cells += (f'<td><label class="tick"><input type="checkbox" name="profile_{key}"'
+                      f'{" checked" if key in e.profiles else ""} aria-label="{E(name)}"></label>'
+                      f'<label class="dflt"><input type="radio" name="default_profile" value="{key}"'
+                      f'{" checked" if key == e.default_profile else ""} '
+                      f'aria-label="{E(t(lang, "field_default_profile"))} : {E(name)}">'
+                      f'<span>{E(t(lang, "media_default"))}</span></label></td>')
+        rows += f'<tr><th scope="row">{E(t(lang, "media_row_" + mode))}</th>{cells}</tr>'
+    subs = "".join(f'<label class="pill"><input type="checkbox" name="sub_{code}"'
+                   f'{" checked" if code in e.subtitle_langs else ""}><span>{E(t(lang, "lang_" + code))}</span></label>'
+                   for code in media.LANGS)
+    return f"""<input type="hidden" name="media" value="1">
+  <div class="field"><label class="l" for="audio_lang">{E(t(lang, "field_audio_lang"))}</label>
+  {_lang_select(lang, "audio_lang", e.audio_lang)}<p class="hint">{E(t(lang, "field_audio_lang_help"))}</p></div>
+  <fieldset class="field"><legend class="l">{E(t(lang, "field_profiles"))}</legend>
+  <div class="grid-wrap"><table class="pgrid"><thead><tr><td></td>{head}</tr></thead><tbody>{rows}</tbody></table></div>
+  <p class="hint">{E(t(lang, "field_profiles_help"))}</p><p class="ferr" data-err="profiles"></p></fieldset>
+  <fieldset class="field"><legend class="l">{E(t(lang, "field_subtitles"))}</legend>
+  <div class="pills">{subs}</div><p class="hint">{E(t(lang, "field_subtitles_help"))}</p>
+  <p class="ferr" data-err="subtitles"></p></fieldset>
+  <div class="field"><label class="l" for="metadata_lang">{E(t(lang, "field_metadata_lang"))}</label>
+  {_lang_select(lang, "metadata_lang", e.metadata_lang)}<p class="hint">{E(t(lang, "field_metadata_lang_help"))}</p></div>"""
+
+
 def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True) -> str:
     default_dir = default_data_dir(env)
     remote = env.get("HOST_PLATFORM", "linux") in REMOTE_PLATFORMS
-    last = 4 if remote else 3
+    last = 5 if remote else 4  # the films and series step is the last question
     remote_section = f"""
 <section data-step="4" hidden>
   <h1>{E(t(lang, "field_remote"))}</h1>
@@ -183,6 +223,11 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
   <p class="ferr" data-err="vpn"></p>
 </section>
 {remote_section}
+<section data-step="{last}" hidden>
+  <h1>{E(t(lang, "media_title"))}</h1>
+  <p class="lead">{E(t(lang, "media_help"))}</p>
+  {media_fields(lang, Settings(data_dir="", username="", password="", vpn_provider=None, lang=lang))}
+</section>
 <section data-step="{last + 1}" hidden>
   <h1>{E(t(lang, "confirm_title"))}</h1>
   <div id="warnings" class="field-group"></div>
@@ -273,7 +318,18 @@ def settings_data(form: dict) -> dict:
                if k in form},
             "vpn_provider": provider,
             "vpn_fields": {k[len(prefix):]: v for k, v in form.items() if provider and k.startswith(prefix)},
-            "remove_tailscale": bool(form.get("remove_tailscale"))}
+            "remove_tailscale": bool(form.get("remove_tailscale")),
+            **_media_data(form)}
+
+
+def _media_data(form: dict) -> dict:
+    """Unticked boxes are not sent: the hidden "media" field says the group was there, so none ticked means none."""
+    if "media" not in form:
+        return {}
+    return {"audio_lang": form.get("audio_lang"), "metadata_lang": form.get("metadata_lang"),
+            "default_profile": form.get("default_profile"),
+            "profiles": [k for k in media.KEYS if form.get(f"profile_{k}")],
+            "subtitle_langs": [c for c in media.LANGS if form.get(f"sub_{c}")]}
 
 
 def _field(label: str, name: str, value: str = "", kind: str = "text", hint: str = "") -> str:
@@ -322,6 +378,8 @@ def settings_page(lang: str, s: Settings, note: str = "", shown: Settings | None
          f'<div class="field"><label class="l" for="lang">{E(t(lang, "settings_lang"))}</label>'
          f'<select class="input" id="lang" name="lang">{langs}</select></div>'
          + _field(t(lang, "field_timezone"), "timezone", shown.timezone, hint=t(lang, "settings_timezone_help")))}
+  {sep}
+  {group(t(lang, "media_title"), t(lang, "media_help"), media_fields(lang, shown))}
   {sep}
   {group(t(lang, "field_folder"), t(lang, "settings_folder_desc"),
          _field(t(lang, "settings_folder_label"), "data_dir", shown.data_dir, hint=t(lang, "settings_folder_help")))}
@@ -376,6 +434,33 @@ def change_rows(lang: str, chg: dict[str, str], old: Settings, new: Settings) ->
     if "tailscale" in chg:
         rows.append(("Tailscale", "", t(lang, "settings_new_key")) if chg["tailscale"] == "change" else
                     ("Tailscale", on_off(old.tailscale_key), on_off(new.tailscale_key)))
+    rows += _media_rows(lang, chg, old, new)
+    return rows
+
+
+def _media_rows(lang: str, chg: dict[str, str], old: Settings, new: Settings) -> list[tuple[str, str, str]]:
+    """Before is "" when the old install never made these choices."""
+    a, b = media.effective(old), media.effective(new)
+    was = media.configured(old)
+    before = lambda value: value if was else ""
+    name = lambda e, key: media.profile_name(key, lang, e.audio_lang)
+    langs = lambda codes: ", ".join(t(lang, "lang_" + c) for c in codes)
+    rows = []
+    if "profiles" in chg:
+        if a.audio_lang != b.audio_lang:
+            rows.append((t(lang, "field_audio_lang"), before(t(lang, "lang_" + a.audio_lang)),
+                         t(lang, "lang_" + b.audio_lang)))
+        names = lambda e: ", ".join(name(e, k) for k in media.KEYS if k in e.profiles)
+        if names(a) != names(b) or not was:
+            rows.append((t(lang, "field_profiles"), before(names(a)), names(b)))
+        if name(a, a.default_profile) != name(b, b.default_profile) or not was:
+            rows.append((t(lang, "field_default_profile"), before(name(a, a.default_profile)),
+                         name(b, b.default_profile)))
+    if "subtitles" in chg:
+        rows.append((t(lang, "field_subtitles"), before(langs(a.subtitle_langs)), langs(b.subtitle_langs)))
+    if "metadata" in chg:
+        rows.append((t(lang, "field_metadata_lang"), before(t(lang, "lang_" + a.metadata_lang)),
+                     t(lang, "lang_" + b.metadata_lang)))
     return rows
 
 
@@ -429,6 +514,12 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
                        f'target="_blank" rel="noopener">{E(t(lang, "done_open"))}</a></li>' for a in missed)
         extra = (f'<div class="note warn"><div><b>{E(t(lang, "settings_manual_title"))}</b><br>'
                  f'{E(t(lang, "settings_manual_help"))}</div></div><ul class="manual">{rows}</ul>' if missed else "")
+        kept = last.get("kept") or []
+        if kept:
+            extra += (f'<div class="note warn"><div><b>{E(t(lang, "settings_kept_title"))}</b><br>'
+                      f'{E(", ".join(kept))}<br>{E(t(lang, "settings_kept_help"))}</div></div>')
+        if any(e.get("step") == "step_profiles" for e in events):
+            extra += f'<p class="hint">{E(t(lang, "settings_other_version"))}</p>'
     else:
         title, head = t(lang, "err_apply_failed"), ""
         extra = f'<pre class="detail">{E(last.get("detail") or "")}</pre>'
@@ -481,7 +572,7 @@ def svc_name(svc: str) -> str:
 
 def settings_from(data: dict, env: dict) -> Settings:
     provider = data.get("vpn_provider") or None
-    return Settings(
+    return media.effective(Settings(  # a new install always has its choices made
         data_dir=str(data.get("data_dir", "")).strip(), username=str(data.get("username", "")).strip(),
         password=str(data.get("password", "")), vpn_provider=provider,
         vpn_fields={str(k): str(v) for k, v in (data.get("vpn_fields") or {}).items()} if provider else {},
@@ -489,7 +580,9 @@ def settings_from(data: dict, env: dict) -> Settings:
         puid=int(env.get("PUID", 1000)), pgid=int(env.get("PGID", 1000)),
         home=env.get("HOST_HOME", ""), platform=env.get("HOST_PLATFORM", "linux"),
         tailscale_key=str(data.get("tailscale_key") or "").strip()
-        if env.get("HOST_PLATFORM", "linux") in REMOTE_PLATFORMS else "")
+        if env.get("HOST_PLATFORM", "linux") in REMOTE_PLATFORMS else "",
+        **{k: data[k] for k in ("audio_lang", "default_profile", "metadata_lang") if data.get(k)},
+        **{k: [str(x) for x in data[k]] for k in ("profiles", "subtitle_langs") if isinstance(data.get(k), list)}))
 
 
 def make_handler(state: State):

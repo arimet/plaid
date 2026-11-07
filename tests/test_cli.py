@@ -1,6 +1,6 @@
 import unittest
 
-from installer import cli
+from installer import cli, media
 from installer.flow import Progress
 from installer.settings import Settings
 
@@ -37,10 +37,10 @@ class CliTest(unittest.TestCase):
         # folder (default), username, password x2, provider 1 = protonvpn, its key, no Tailscale, time zone (default)
         code = cli.run_install(scripted("", "zoe", "longenough", "longenough", "1", "key", "", ""), out.append, flow, ENV, "en")
         self.assertEqual(code, 0)
-        self.assertEqual(flow.got, Settings(data_dir="/home/zoe/Plaid", username="zoe", password="longenough",
+        self.assertEqual(flow.got, media.effective(Settings(data_dir="/home/zoe/Plaid", username="zoe", password="longenough",
                                             vpn_provider="protonvpn", vpn_fields={"WIREGUARD_PRIVATE_KEY": "key"},
                                             timezone="Europe/Paris", lang="en", puid=1000, pgid=1000,
-                                            home="/home/zoe", platform="linux"))
+                                            home="/home/zoe", platform="linux")))  # defaults made explicit
         self.assertTrue(any(":8096" in line for line in out))
 
     def test_cli_warning_declined(self):

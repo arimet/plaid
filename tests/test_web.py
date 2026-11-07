@@ -9,6 +9,10 @@ from installer import web
 from installer.flow import Progress
 from installer.settings import Settings
 
+from tests.test_reconfigure import MEDIA
+from installer import media
+from installer.i18n import t
+
 ENV = {"HOST_HOME": "/home/zoe", "HOST_PLATFORM": "linux", "PUID": "1000", "PGID": "1000"}
 FORM = {"data_dir": "/home/zoe/Plaid", "username": "zoe", "password": "secret-pass 'é\"", "vpn_provider": None,
         "vpn_fields": {}, "timezone": "Europe/Paris", "lang": "fr"}
@@ -591,3 +595,80 @@ class ManualPasswordTest(SettingsWebTest):
         self.assertIn(':8096"', html)  # Jellyfin's address
         self.assertIn(':8080"', html)  # qBittorrent's
         self.assertEqual(html.count('<li class="app-row">'), 2)
+
+
+class MediaWebTest(SettingsWebTest):
+    def test_settings_page_has_media_group(self):
+        self.open()  # installed before these choices existed: the defaults show
+        _, _, html = self.get("/settings")
+        self.assertEqual(html.count('name="profile_'), 9)
+        self.assertIn('name="profile_mine-1080p" checked', html)
+        self.assertIn('name="default_profile" value="mine-1080p" checked', html)
+        self.assertNotIn('name="profile_orig-4k" checked', html)
+        self.assertIn('name="sub_fr" checked', html)
+        self.assertIn('name="sub_en" checked', html)
+        self.assertIn('<option value="fr" selected>Français</option>', html)
+
+    def test_settings_data_collects_lists(self):
+        data = web.settings_data({"media": "1", "profile_orig-4k": "on", "profile_mine-1080p": "on",
+                                  "default_profile": "orig-4k", "sub_fr": "on", "audio_lang": "de",
+                                  "metadata_lang": "es"})
+        self.assertEqual((data["profiles"], data["default_profile"], data["subtitle_langs"], data["audio_lang"],
+                          data["metadata_lang"]), (["mine-1080p", "orig-4k"], "orig-4k", ["fr"], "de", "es"))
+        self.assertNotIn("profiles", web.settings_data({"timezone": "UTC"}))  # no media group: nothing to change
+        self.assertEqual(web.settings_data({"media": "1"})["profiles"], [])  # all unticked: refused later
+
+    def test_summary_refuses_default_not_ticked(self):
+        self.open()
+        self.flow.settings_check = lambda old, new: media.validate(new)
+        _, _, html = self.post("/settings", {"media": "1", "profile_orig-4k": "on", "default_profile": "mine-1080p",
+                                             "sub_fr": "on", "audio_lang": "fr", "metadata_lang": "fr"})
+        self.assertIn(t("fr", "err_default_profile"), html)
+        self.assertNotIn('<button class="btn primary" type="submit">', html)  # no Apply (its text is in the JSON)
+
+    def test_summary_rows_for_profiles(self):
+        self.open(**MEDIA)
+        _, _, html = self.post("/settings", {"media": "1", "profile_mine-1080p": "on", "profile_multi-4k": "on",
+                                             "default_profile": "multi-4k", "sub_fr": "on", "sub_en": "on",
+                                             "audio_lang": "fr", "metadata_lang": "en"})
+        self.assertIn("<del>Français · 1080p</del>", html)
+        self.assertIn("<b>Français · 1080p, MULTi · 4K</b>", html)
+        self.assertIn("<b>MULTi · 4K</b>", html)  # the default
+        self.assertIn("<del>Français</del>", html)  # fiches before → after
+        self.assertIn("<b>Anglais</b>", html)
+        self.assertIn(t("fr", "outage_none"), html)
+
+    def test_done_page_lists_kept_profiles(self):
+        self.open()
+        self.flow.apply_state = {"state": "done", "events": [
+            {"step": "step_profiles"}, {"step": "step_done", "done": True, "detail": "", "kept": ["VO sous-titrée · 4K"]}]}
+        _, _, html = self.get("/settings/progress")
+        self.assertIn("VO sous-titrée · 4K", html)
+        self.assertIn(t("fr", "settings_kept_help"), html)
+        self.assertIn(t("fr", "settings_other_version"), html)
+
+    def test_install_body_media_fields(self):
+        flow = FakeFlow()
+        seen = {}
+        flow.install = lambda s, report, cancel=None: seen.update(s=s) or report(Progress("step_done", done=True))
+        self.start(flow)
+        body = dict(FORM, audio_lang="it", profiles=["orig-720p", "multi-1080p"], default_profile="multi-1080p",
+                    subtitle_langs=["it", "en"], metadata_lang="it")
+        self.assertEqual(self.req("POST", "/api/install", body)[0], 202)
+        for _ in range(50):
+            if "s" in seen:
+                break
+            time.sleep(0.05)
+        s = seen["s"]
+        self.assertEqual((s.audio_lang, s.profiles, s.default_profile, s.subtitle_langs, s.metadata_lang),
+                         ("it", ["orig-720p", "multi-1080p"], "multi-1080p", ["it", "en"], "it"))
+
+    def test_install_without_media_fields_gets_defaults(self):
+        s = web.settings_from(dict(FORM), ENV)
+        self.assertEqual((s.profiles, s.default_profile), (["mine-1080p"], "mine-1080p"))
+
+    def test_wizard_has_media_step(self):
+        self.start(FakeFlow())
+        _, _, html = self.req("GET", "/?lang=fr")
+        self.assertEqual(html.count('name="profile_'), 9)
+        self.assertIn('data-last="5"', html)  # folder, account, VPN, Tailscale (Linux), films et séries

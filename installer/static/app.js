@@ -34,6 +34,12 @@
       const slot = $(`[data-err="${where}"]`);
       if (slot) slot.textContent = text;
     };
+    const media = () => ({
+      audio_lang: $("#audio_lang").value, metadata_lang: $("#metadata_lang").value,
+      profiles: $$('input[name^="profile_"]:checked', form).map((i) => i.name.slice("profile_".length)),
+      default_profile: ($('input[name="default_profile"]:checked', form) || {}).value || null,
+      subtitle_langs: $$('input[name^="sub_"]:checked', form).map((i) => i.name.slice("sub_".length)),
+    });
     const values = () => {
       const fields = {};
       $$(`.vpn-fields[data-for="${CSS.escape(provider)}"] [data-vpn-field]`).forEach((i) => (fields[i.dataset.vpnField] = i.value));
@@ -41,6 +47,7 @@
         data_dir: $("#data_dir").value, username: $("#username").value, password: $("#password").value,
         vpn_provider: provider || null, vpn_fields: provider ? fields : {}, timezone: $("#timezone").value,
         lang: document.documentElement.lang, tailscale_key: $("#tailscale_key") ? $("#tailscale_key").value : "",
+        ...media(),
       };
     };
 
@@ -69,8 +76,10 @@
 
     const where = {err_dangerous_path: "data_dir", err_path_absolute: "data_dir", err_username: "username",
                    err_password_short: "password", err_vpn_fields: "vpn", err_vpn_provider: "vpn",
-                   err_tailscale_key: "tailscale", err_tailscale_exists: "tailscale"};
-    const stepOf = {data_dir: 1, username: 2, password: 2, vpn: 3, tailscale: 4};
+                   err_tailscale_key: "tailscale", err_tailscale_exists: "tailscale",
+                   err_profiles_none: "profiles", err_default_profile: "profiles", err_media_lang: "profiles",
+                   err_subtitles_none: "subtitles"};
+    const stepOf = {data_dir: 1, username: 2, password: 2, vpn: 3, tailscale: 4, profiles: LAST, subtitles: LAST};
 
     const check = async () => {
       const res = await post("/api/preflight", values());
@@ -111,6 +120,12 @@
       }
       if (step === 3 && provider && $$(`.vpn-fields[data-for="${CSS.escape(provider)}"] input`).some((i) => !i.value.trim()))
         return fail("vpn", T.err_vpn_fields);
+      if (step === LAST) {
+        const m = media();
+        if (!m.profiles.length) return fail("profiles", T.err_profiles_none);
+        if (!m.profiles.includes(m.default_profile)) return fail("profiles", T.err_default_profile);
+        if (!m.subtitle_langs.length) return fail("subtitles", T.err_subtitles_none);
+      }
       if (step < LAST) return show(step + 1);
       next.disabled = true;
       try {
