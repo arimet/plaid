@@ -277,6 +277,9 @@ class EmptyFolderTest(unittest.TestCase):
 
 class StepsReportedOnceTest(ApplyTest):
     def test_each_step_reported_once(self):
+        self.run_apply(settings(), settings(timezone="Europe/Paris"))  # no account step: the case seen for real
+        self.assertEqual([e.step for e in self.events], ["step_compose", "step_vpn", "step_save", "step_done"])
+        self.events.clear()
         self.run_apply(settings(), settings(timezone="Europe/Paris", password="new-pass1"))
-        steps = [e.step for e in self.events]
-        self.assertEqual(steps, ["step_compose", "step_vpn", "step_account", "step_save", "step_done"])
+        self.assertEqual([e.step for e in self.events],
+                         ["step_compose", "step_vpn", "step_account", "step_save", "step_done"])
