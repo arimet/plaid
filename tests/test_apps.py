@@ -381,6 +381,7 @@ class MediaAppsTest(unittest.TestCase):
         self.assertEqual((radarr[2]["activeProfileId"], radarr[2]["activeProfileName"]), (21, "VO sous-titrée · 4K"))
         sonarr = next(c for c in self.seen if c[0] == "PUT" and c[1].endswith("/settings/sonarr/0"))
         self.assertEqual((sonarr[2]["activeProfileId"], sonarr[2]["activeAnimeProfileId"]), (31, 31))
+        self.assertNotIn("id", radarr[2])  # Seerr refuses its read-only id in the body (HTTP 400, seen live)
 
     def test_subtitle_languages(self):
         self.run_patched(self.fake_call(), lambda: apps.set_subtitles(chosen(subtitle_langs=["de", "fr"]),

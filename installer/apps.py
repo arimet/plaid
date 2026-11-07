@@ -413,10 +413,11 @@ def seerr_default(s: Settings, login: Settings, host: str, arr_ids: dict) -> Non
     for app in ("radarr", "sonarr"):
         pid, name = _default_profile(s, arr_ids, app)
         for server in call("GET", f"{base}/settings/{app}"):
+            sid = server.pop("id")  # read-only: Seerr refuses a body that carries it
             server.update(activeProfileId=pid, activeProfileName=name)
             if app == "sonarr":
                 server.update(activeAnimeProfileId=pid, activeAnimeProfileName=name)
-            call("PUT", f"{base}/settings/{app}/{server['id']}", server)
+            call("PUT", f"{base}/settings/{app}/{sid}", server)
 
 
 def set_metadata_lang(s: Settings, login: Settings, host: str) -> None:
