@@ -1,3 +1,4 @@
+import json
 import threading
 import time
 import unittest
@@ -231,3 +232,178 @@ class AccountWaitTest(AccountTest):
         self.run_change(acct(password="new-pass1"))
         for app in ("bazarr", "qbittorrent", "jellyfin"):
             self.assertTrue(any(f"//{app}:" in url for url in self.waited), app)
+
+
+# ---------------------------------------------------------------- languages and quality
+
+import copy as _copy
+import re as _re
+
+from tests.test_media import RADARR_SCHEMA, SONARR_SCHEMA
+
+
+class MediaArr(FakeArr):
+    """Radarr/Sonarr's formats and profiles: IDs that answer 404 (deleted by hand) or refuse deletion (in use)."""
+    def __init__(self, name, profiles=(), missing=(), in_use=()):
+        super().__init__(name)
+        self.next_id = 100
+        self.profiles = {p["id"]: dict(p) for p in profiles}
+        self.missing, self.in_use = set(missing), set(in_use)
+
+    def __call__(self, method, path, body=None):
+        self.calls.append((method, path, body))
+        if path == "/qualityprofile/schema":
+            return _copy.deepcopy(RADARR_SCHEMA if self.name == "radarr" else SONARR_SCHEMA)
+        if path == "/qualityprofile" and method == "GET":
+            return list(self.profiles.values())
+        kind, pid = _re.fullmatch(r"/(customformat|qualityprofile)(?:/(\d+))?", path).groups()
+        pid = int(pid) if pid else None
+        if method == "POST":
+            self.next_id += 1
+            if kind == "qualityprofile":
+                self.profiles[self.next_id] = {**body, "id": self.next_id}
+            return {**body, "id": self.next_id}
+        if pid in self.missing:
+            raise apps.HttpError(404, path, "")
+        if method == "PUT":
+            if kind == "qualityprofile":
+                self.profiles[pid] = body
+            return body
+        if method == "DELETE":
+            if pid in self.in_use:
+                raise apps.HttpError(400, path, "in use")
+            self.profiles.pop(pid, None)
+        if method == "GET":
+            return self.profiles.get(pid, {"id": pid, "name": f"profile {pid}"})
+
+
+def chosen(**kw):
+    base = dict(audio_lang="fr", profiles=["mine-1080p"], default_profile="mine-1080p", subtitle_langs=["fr"],
+                metadata_lang="fr", lang="fr")
+    base.update(kw)
+    return acct(**base)
+
+
+def posts(app, kind):
+    return [c for c in app.calls if c[0] == "POST" and c[1] == f"/{kind}"]
+
+
+class EnsureMediaTest(unittest.TestCase):
+    def test_ensure_media_creates_formats_then_profiles(self):
+        app = MediaArr("radarr")
+        ids, kept = app.ensure_media(chosen(profiles=["mine-1080p", "orig-4k"]), {})
+        self.assertEqual(len(posts(app, "customformat")), 4)
+        profiles = posts(app, "qualityprofile")
+        self.assertEqual([p[2]["name"] for p in profiles], ["Français · 1080p", "VO sous-titrée · 4K"])
+        self.assertLess(app.calls.index(posts(app, "customformat")[-1]), app.calls.index(profiles[0]))
+        self.assertEqual({f["format"] for f in profiles[0][2]["formatItems"]}, set(ids["formats"].values()))
+        self.assertEqual(sorted(ids["profiles"]), ["mine-1080p", "orig-4k"])
+        self.assertEqual(kept, [])
+
+    def test_ensure_media_updates_by_stored_id(self):
+        app = MediaArr("sonarr", profiles=[{"id": 7, "name": "Français · 1080p"}])
+        stored = {"formats": {"lang": 1, "original": 2, "multi": 3, "subbed": 4}, "profiles": {"mine-1080p": 7}}
+        ids, _ = app.ensure_media(chosen(audio_lang="de"), stored)
+        self.assertFalse([c for c in app.calls if c[0] == "POST"])
+        self.assertIn(("PUT", "/customformat/1"), [(c[0], c[1]) for c in app.calls])
+        put = next(c for c in app.calls if c[:2] == ("PUT", "/qualityprofile/7"))
+        self.assertEqual((put[2]["name"], put[2]["id"]), ("Allemand · 1080p", 7))
+        self.assertEqual(ids, stored)
+
+    def test_missing_stored_id_is_recreated(self):
+        app = MediaArr("radarr", missing=[7])
+        ids, _ = app.ensure_media(chosen(), {"formats": {}, "profiles": {"mine-1080p": 7}})
+        self.assertNotEqual(ids["profiles"]["mine-1080p"], 7)
+        self.assertEqual(len(posts(app, "qualityprofile")), 1)
+
+    def test_unticked_profile_deleted(self):
+        app = MediaArr("radarr", profiles=[{"id": 8, "name": "VO sous-titrée · 4K"}])
+        ids, kept = app.ensure_media(chosen(), {"formats": {}, "profiles": {"orig-4k": 8}})
+        self.assertIn(("DELETE", "/qualityprofile/8", None), app.calls)
+        self.assertNotIn("orig-4k", ids["profiles"])
+        self.assertEqual(kept, [])
+
+    def test_in_use_profile_is_kept(self):
+        app = MediaArr("radarr", profiles=[{"id": 8, "name": "VO sous-titrée · 4K"}], in_use=[8])
+        ids, kept = app.ensure_media(chosen(), {"formats": {}, "profiles": {"orig-4k": 8}})
+        self.assertEqual(kept, ["VO sous-titrée · 4K"])
+        self.assertEqual(ids["profiles"]["orig-4k"], 8)  # tried again on the next change
+
+    def test_builtin_profiles_removed_on_install(self):
+        app = MediaArr("radarr", profiles=[{"id": 1, "name": "Any"}, {"id": 4, "name": "HD-1080p"}], in_use=[1])
+        ids, _ = app.ensure_media(chosen(), {}, builtin=True)
+        deleted = [c[1] for c in app.calls if c[0] == "DELETE"]
+        self.assertEqual(deleted, ["/qualityprofile/1", "/qualityprofile/4"])  # failure on 1 ignored
+        self.assertNotIn(f"/qualityprofile/{ids['profiles']['mine-1080p']}", deleted)
+
+    def test_existing_install_keeps_builtins(self):
+        app = MediaArr("radarr", profiles=[{"id": 4, "name": "HD-1080p"}])
+        app.ensure_media(chosen(), {})
+        self.assertFalse([c for c in app.calls if c[0] == "DELETE"])
+
+
+class MediaAppsTest(unittest.TestCase):
+    def fake_call(self, servers=None, libraries=()):
+        self.seen = []
+
+        def call(method, url, body=None, headers=None, form=False):
+            self.seen.append((method, url, body))
+            if url.endswith("/Users/AuthenticateByName"):
+                return {"AccessToken": "t", "User": {"Id": "u1"}}
+            if url.endswith("/System/Configuration") and method == "GET":
+                return {"UICulture": "fr-FR", "PreferredMetadataLanguage": "fr"}
+            if url.endswith("/Library/VirtualFolders"):
+                return [dict(lib) for lib in libraries]
+            for app in ("radarr", "sonarr"):
+                if url.endswith(f"/settings/{app}") and method == "GET":
+                    return [dict(x) for x in (servers or {}).get(app, [])]
+        return call
+
+    def patched(self, call):
+        return (mock.patch("installer.apps.call", call), mock.patch("installer.apps.wait_for", lambda *a, **k: None),
+                mock.patch("installer.apps.read_when", lambda *a, **k: "bkey"))
+
+    def run_patched(self, call, action):
+        a, b, c = self.patched(call)
+        with a, b, c:
+            action()
+
+    def test_seerr_default_profile(self):
+        servers = {"radarr": [{"id": 0, "activeProfileId": 4}], "sonarr": [{"id": 0, "activeProfileId": 4}]}
+        ids = {"radarr": {"profiles": {"orig-4k": 21, "mine-1080p": 20}},
+               "sonarr": {"profiles": {"orig-4k": 31, "mine-1080p": 30}}}
+        s = chosen(profiles=["mine-1080p", "orig-4k"], default_profile="orig-4k")
+        self.run_patched(self.fake_call(servers), lambda: apps.seerr_default(s, acct(username="old", password="pw"),
+                                                                               "seerr:5055", ids))
+        login = next(c for c in self.seen if c[1].endswith("/auth/jellyfin"))
+        self.assertEqual(login[2], {"username": "old", "password": "pw"})
+        radarr = next(c for c in self.seen if c[0] == "PUT" and c[1].endswith("/settings/radarr/0"))
+        self.assertEqual((radarr[2]["activeProfileId"], radarr[2]["activeProfileName"]), (21, "VO sous-titrée · 4K"))
+        sonarr = next(c for c in self.seen if c[0] == "PUT" and c[1].endswith("/settings/sonarr/0"))
+        self.assertEqual((sonarr[2]["activeProfileId"], sonarr[2]["activeAnimeProfileId"]), (31, 31))
+
+    def test_subtitle_languages(self):
+        self.run_patched(self.fake_call(), lambda: apps.set_subtitles(chosen(subtitle_langs=["de", "fr"]),
+                                                                      "bazarr:6767", lambda *a: ""))
+        form = next(c for c in self.seen if c[1].endswith("/api/system/settings"))[2]
+        self.assertEqual(form["languages-enabled"], ["de", "fr"])
+        profile = json.loads(form["languages-profiles"])[0]
+        self.assertEqual([i["language"] for i in profile["items"]], ["de", "fr"])
+        self.assertIsNone(profile["cutoff"])
+        self.assertNotIn("settings-auth-password", form)  # only the languages change
+
+    def test_metadata_language(self):
+        libs = [{"Name": "Films", "ItemId": "m1", "CollectionType": "movies", "LibraryOptions": {"Enabled": True}},
+                {"Name": "Séries", "ItemId": "t1", "CollectionType": "tvshows", "LibraryOptions": {}}]
+        self.run_patched(self.fake_call(libraries=libs),
+                         lambda: apps.set_metadata_lang(chosen(metadata_lang="es"), acct(), "jellyfin:8096"))
+        conf = next(c for c in self.seen if c[0] == "POST" and c[1].endswith("/System/Configuration"))
+        self.assertEqual((conf[2]["PreferredMetadataLanguage"], conf[2]["MetadataCountryCode"], conf[2]["UICulture"]),
+                         ("es", "ES", "fr-FR"))
+        options = [c[2] for c in self.seen if c[1].endswith("/Library/VirtualFolders/LibraryOptions")]
+        self.assertEqual([(o["Id"], o["LibraryOptions"]["PreferredMetadataLanguage"]) for o in options],
+                         [("m1", "es"), ("t1", "es")])
+        self.assertTrue(options[0]["LibraryOptions"]["Enabled"])  # the rest of the options is kept
+        refresh = [c[1] for c in self.seen if "/Refresh?" in c[1]]
+        self.assertEqual(len(refresh), 2)
+        self.assertIn("replaceAllMetadata=true", refresh[0])

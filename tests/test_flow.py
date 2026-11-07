@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 
-from installer import flow
+from installer import media, flow
 from installer.docker import DockerError
 from installer.settings import Settings
 
@@ -128,10 +128,16 @@ class FlowTest(unittest.TestCase):
         self.assertEqual(seen, {"qbit": "gluetun:8080", "radarr": "radarr:7878", "dri": True})
         self.assertEqual(links["jellyfin"], 8096)
         self.assertTrue(self.events[-1].done)
-        self.assertEqual(flow.load_settings(self.state), settings())
+        self.assertEqual(flow.load_settings(self.state), media.effective(settings()))  # choices made explicit
         self.assertTrue(flow.is_complete(self.state))
         for name in ("compose.json", "settings.json"):
             self.assertTrue(os.path.exists(os.path.join(self.state, name)), name)
+
+    def test_install_saves_media_choices(self):
+        ids = {"radarr": {"formats": {"lang": 1}, "profiles": {"mine-1080p": 9}}}
+        self.install(settings(), FakeDocker(), configure=lambda *a: {"arr_ids": ids})
+        saved = flow.load_settings(self.state)
+        self.assertEqual((saved.arr_ids, saved.profiles), (ids, ["mine-1080p"]))
 
     def test_install_vpn_timeout(self):
         self.assertIsNone(self.install(settings(), FakeDocker(health="unhealthy")))

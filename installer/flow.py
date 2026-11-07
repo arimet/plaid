@@ -8,10 +8,10 @@ import platform
 import re
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Callable
 
-from installer import apps, docker
+from installer import apps, docker, media
 from installer.compose import PORTS, render_compose
 from installer.docker import DockerError
 from installer.settings import Settings, validate
@@ -189,8 +189,10 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
             name = "gluetun" if svc == "qbittorrent" and s.vpn_provider else svc
             return f"{name}:{PORTS[svc]}"
 
-        configure(s, host_of, lambda app: report(Progress(f"step_app:{app}")),
-                  lambda *args: dk.compose(state_dir, *args).stdout, has_dri)
+        result = configure(s, host_of, lambda app: report(Progress(f"step_app:{app}")),
+                           lambda *args: dk.compose(state_dir, *args).stdout, has_dri) or {}
+        # The choices made explicit, and the IDs of the profiles made: later changes find them by ID.
+        _write_state(replace(media.effective(s), arr_ids=result.get("arr_ids", {})), state_dir, src, has_dri)
         open(os.path.join(state_dir, "complete"), "w").close()
         report(Progress("step_done", done=True))
         return dict(PORTS)

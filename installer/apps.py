@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 from typing import Callable
 
+from installer import media
 from installer.docker import DockerError
 from installer.settings import Settings
 
@@ -24,7 +25,6 @@ JELLYFIN_LOCALE = {"fr": ("fr-FR", "FR", "fr"), "en": ("en-US", "US", "en")}
 LIBRARY_EVENTS = ["onDownload", "onUpgrade", "onRename", "onMovieDelete", "onMovieFileDelete",
                   "onMovieFileDeleteForUpgrade", "onSeriesDelete", "onEpisodeFileDelete",
                   "onEpisodeFileDeleteForUpgrade", "onImportComplete"]
-DEFAULT_PROFILE = "HD-1080p"
 WAIT = 300
 TIMEOUT = 120  # one API call; Prowlarr tests an indexer against the internet before saving it
 
@@ -162,7 +162,9 @@ def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log) -> tuple
             raise TimeoutError("Jellyfin is not ready")
         time.sleep(3)
     client = JELLYFIN_CLIENT
-    culture, country, lang = JELLYFIN_LOCALE[s.lang]
+    culture = JELLYFIN_LOCALE[s.lang][0]
+    lang = media.effective(s).metadata_lang
+    country = media.COUNTRY[lang]
     if not info["StartupWizardCompleted"]:
         call("POST", base + "/Startup/Configuration",
              {"UICulture": culture, "MetadataCountryCode": country, "PreferredMetadataLanguage": lang})
@@ -247,9 +249,48 @@ class Arr:
         if path not in {f["path"].rstrip("/") for f in self("GET", "/rootfolder")}:
             self("POST", "/rootfolder", {"path": path})
 
-    def profile(self):
-        profiles = self("GET", "/qualityprofile")
-        return next((p for p in profiles if p["name"] == DEFAULT_PROFILE), profiles[0])
+    def _save(self, path: str, stored: int | None, body: dict) -> int:
+        """Updates what Plaid made (found by ID), or makes it again when it was deleted by hand."""
+        if stored is not None:
+            try:
+                self("PUT", f"{path}/{stored}", {**body, "id": stored})
+                return stored
+            except HttpError as e:
+                if e.status != 404:
+                    raise
+        return self("POST", path, body)["id"]
+
+    def ensure_media(self, s: Settings, ids: dict, builtin: bool = False) -> tuple[dict, list[str]]:
+        """The formats and the ticked profiles, as chosen. Returns (their IDs, names of unticked profiles kept
+        because films or series still use them). builtin: also remove every profile Plaid did not make (install)."""
+        e = media.effective(s)
+        ids = {"formats": dict(ids.get("formats", {})), "profiles": dict(ids.get("profiles", {}))}
+        for key, body in media.formats(e.audio_lang).items():  # first: the profiles score them by ID
+            ids["formats"][key] = self._save("/customformat", ids["formats"].get(key), body)
+        schema = self("GET", "/qualityprofile/schema")
+        for key in e.profiles:
+            body = media.profile_body(schema, key, media.profile_name(key, s.lang, e.audio_lang), ids["formats"],
+                                      radarr=self.name == "radarr")
+            ids["profiles"][key] = self._save("/qualityprofile", ids["profiles"].get(key), body)
+        kept = []
+        for key in [k for k in ids["profiles"] if k not in e.profiles]:
+            pid = ids["profiles"][key]
+            try:
+                self("DELETE", f"/qualityprofile/{pid}")
+            except HttpError as err:
+                if err.status != 404:  # in use: the app refuses, the user moves those items first
+                    kept.append(self("GET", f"/qualityprofile/{pid}")["name"])
+                    continue
+            del ids["profiles"][key]
+        if builtin:  # after Plaid's exist: the apps refuse to delete their last profile
+            mine = set(ids["profiles"].values())
+            for profile in self("GET", "/qualityprofile"):
+                if profile["id"] not in mine:
+                    try:
+                        self("DELETE", f"/qualityprofile/{profile['id']}")
+                    except HttpError:
+                        pass
+        return ids, kept
 
 
 def configure_arr(app: Arr, s: Settings, root: str, category_field: str, category: str,
@@ -321,19 +362,13 @@ def configure_bazarr(s: Settings, host: str, radarr: Arr, sonarr: Arr, compose_o
     key = read_when(compose_out, "bazarr", "/config/config/config.yaml", r"^\s+apikey: '?([0-9a-f]{8,})")
     base = f"http://{host}/api"
     wait_for(f"{base}/system/status?apikey={key}")
-    langs = [s.lang] + ([] if s.lang == "en" else ["en"])
-    # No cutoff: Bazarr fetches every language instead of stopping at the first one found.
-    profile = {"profileId": 1, "name": " + ".join(langs), "cutoff": None, "mustContain": [], "mustNotContain": [],
-               "originalFormat": False, "tag": None,
-               "items": [{"id": i, "language": code, "audio_exclude": "False", "audio_only_include": "False",
-                          "hi": "False", "forced": "False"} for i, code in enumerate(langs, 1)]}
     settings = {
         "settings-auth-type": "form", "settings-auth-username": s.username, "settings-auth-password": s.password,
         "settings-general-use_sonarr": "true", "settings-sonarr-ip": "sonarr", "settings-sonarr-port": "8989",
         "settings-sonarr-apikey": sonarr.key,
         "settings-general-use_radarr": "true", "settings-radarr-ip": "radarr", "settings-radarr-port": "7878",
         "settings-radarr-apikey": radarr.key,
-        "languages-enabled": langs, "languages-profiles": json.dumps([profile]),
+        **_bazarr_languages(s),
         "settings-general-serie_default_enabled": "true", "settings-general-serie_default_profile": "1",
         "settings-general-movie_default_enabled": "true", "settings-general-movie_default_profile": "1",
         "settings-general-enabled_providers": ["podnapisi", "addic7ed"],
@@ -347,9 +382,64 @@ def configure_bazarr(s: Settings, host: str, radarr: Arr, sonarr: Arr, compose_o
     return key
 
 
+def _bazarr_languages(s: Settings) -> dict:
+    langs = media.effective(s).subtitle_langs
+    # No cutoff: Bazarr fetches every language, even the one spoken, instead of stopping at the first one found.
+    profile = {"profileId": 1, "name": " + ".join(langs), "cutoff": None, "mustContain": [], "mustNotContain": [],
+               "originalFormat": False, "tag": None,
+               "items": [{"id": i, "language": code, "audio_exclude": "False", "audio_only_include": "False",
+                          "hi": "False", "forced": "False"} for i, code in enumerate(langs, 1)]}
+    return {"languages-enabled": langs, "languages-profiles": json.dumps([profile])}
+
+
+def set_subtitles(s: Settings, host: str, compose_out: ComposeOut) -> None:
+    key = read_when(compose_out, "bazarr", "/config/config/config.yaml", r"^\s+apikey: '?([0-9a-f]{8,})")
+    wait_for(f"http://{host}/api/system/status?apikey={key}")
+    call("POST", f"http://{host}/api/system/settings", _bazarr_languages(s), {"X-API-KEY": key}, form=True)
+
+
 # ---------------------------------------------------------------- Seerr
 
-def configure_seerr(s: Settings, host: str, radarr: Arr, sonarr: Arr, log: Log) -> dict[str, int]:
+def _default_profile(s: Settings, arr_ids: dict, app: str) -> tuple[int, str]:
+    e = media.effective(s)
+    return arr_ids[app]["profiles"][e.default_profile], media.profile_name(e.default_profile, s.lang, e.audio_lang)
+
+
+def seerr_default(s: Settings, login: Settings, host: str, arr_ids: dict) -> None:
+    """Seerr pre-selects the default profile on every request."""
+    base = f"http://{host}/api/v1"
+    wait_for(base + "/status")
+    call("POST", base + "/auth/jellyfin", {"username": login.username, "password": login.password})
+    for app in ("radarr", "sonarr"):
+        pid, name = _default_profile(s, arr_ids, app)
+        for server in call("GET", f"{base}/settings/{app}"):
+            server.update(activeProfileId=pid, activeProfileName=name)
+            if app == "sonarr":
+                server.update(activeAnimeProfileId=pid, activeAnimeProfileName=name)
+            call("PUT", f"{base}/settings/{app}/{server['id']}", server)
+
+
+def set_metadata_lang(s: Settings, login: Settings, host: str) -> None:
+    """Jellyfin's fiches in the chosen language: server, each library, then a full refresh in the background."""
+    base = f"http://{host}"
+    wait_for(base + "/System/Info/Public")
+    auth, _ = _jellyfin_auth(host, login.username, login.password)
+    lang = media.effective(s).metadata_lang
+    meta = {"PreferredMetadataLanguage": lang, "MetadataCountryCode": media.COUNTRY[lang]}
+    config = call("GET", base + "/System/Configuration", headers=auth)
+    call("POST", base + "/System/Configuration", {**config, **meta}, auth)
+    refresh = urllib.parse.urlencode({"metadataRefreshMode": "FullRefresh", "imageRefreshMode": "FullRefresh",
+                                      "replaceAllMetadata": "true", "replaceAllImages": "true"})
+    for lib in call("GET", base + "/Library/VirtualFolders", headers=auth):
+        if lib.get("CollectionType") not in ("movies", "tvshows"):
+            continue
+        options = {**(lib.get("LibraryOptions") or {}), **meta}
+        call("POST", base + "/Library/VirtualFolders/LibraryOptions", {"Id": lib["ItemId"], "LibraryOptions": options},
+             auth)
+        call("POST", f"{base}/Items/{lib['ItemId']}/Refresh?{refresh}", headers=auth)
+
+
+def configure_seerr(s: Settings, host: str, radarr: Arr, sonarr: Arr, log: Log, arr_ids: dict) -> dict[str, int]:
     """API calls found in the plan's spike 0b. Returns the number of Radarr/Sonarr servers declared."""
     base = f"http://{host}/api/v1"
     wait_for(base + "/status")
@@ -369,15 +459,15 @@ def configure_seerr(s: Settings, host: str, radarr: Arr, sonarr: Arr, log: Log) 
     for app, port, root in ((radarr, 7878, MOVIES), (sonarr, 8989, TV)):
         servers = call("GET", f"{base}/settings/{app.name}")
         if not servers:
-            profile = app.profile()
+            pid, pname = _default_profile(s, arr_ids, app.name)
             server = {"name": app.name.capitalize(), "hostname": app.name, "port": port, "apiKey": app.key,
-                      "useSsl": False, "baseUrl": "", "activeProfileId": profile["id"],
-                      "activeProfileName": profile["name"], "activeDirectory": root, "is4k": False,
+                      "useSsl": False, "baseUrl": "", "activeProfileId": pid,
+                      "activeProfileName": pname, "activeDirectory": root, "is4k": False,
                       "isDefault": True, "externalUrl": "", "syncEnabled": False, "preventSearch": False, "tags": []}
             if app.name == "radarr":
                 server["minimumAvailability"] = "released"
             else:
-                server.update(activeAnimeProfileId=profile["id"], activeAnimeProfileName=profile["name"],
+                server.update(activeAnimeProfileId=pid, activeAnimeProfileName=pname,
                               activeAnimeDirectory=root, enableSeasonFolders=True, animeTags=[])
             call("POST", f"{base}/settings/{app.name}", server)
             servers = [server]
@@ -400,12 +490,13 @@ def configure_all(s: Settings, host_of: Callable[[str], str], log: Log, compose_
     sonarr = Arr("sonarr", host_of("sonarr"), "v3", compose_out)
     configure_arr(radarr, s, MOVIES, "movieCategory", "movies", qbit_host, qbit_key, jellyfin_key, log)
     configure_arr(sonarr, s, TV, "tvCategory", "tv", qbit_host, qbit_key, jellyfin_key, log)
+    arr_ids = {app.name: app.ensure_media(s, s.arr_ids.get(app.name, {}), builtin=True)[0] for app in (radarr, sonarr)}
     prowlarr = Arr("prowlarr", host_of("prowlarr"), "v1", compose_out)
     configure_prowlarr(prowlarr, s, radarr, sonarr, log)
     bazarr_key = configure_bazarr(s, host_of("bazarr"), radarr, sonarr, compose_out, log)
-    servers = configure_seerr(s, host_of("seerr"), radarr, sonarr, log)
+    servers = configure_seerr(s, host_of("seerr"), radarr, sonarr, log, arr_ids)
     return {"radarr": radarr.key, "sonarr": sonarr.key, "prowlarr": prowlarr.key, "bazarr": bazarr_key,
-            "jellyfin": jellyfin_key, "jellyfin_libraries": libraries, "seerr_servers": servers}
+            "jellyfin": jellyfin_key, "jellyfin_libraries": libraries, "seerr_servers": servers, "arr_ids": arr_ids}
 
 
 # ---------------------------------------------------------------- settings changes
