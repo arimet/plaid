@@ -118,7 +118,19 @@ DESKTOP = ("mac", "windows")  # Docker Desktop: the host's disks come through it
 
 def _room_known(path: str, platform: str) -> bool:
     """Docker Desktop's /Volumes share answers with the Mac's own disk: an external disk's room cannot be read."""
-    return not (platform == "mac" and path.startswith("/Volumes/"))
+    return not (platform == "mac" and _mac_path(path).lower().startswith("/volumes/"))
+
+
+# Other names of the Mac's own disk: through them, the home folder would not look like the home folder.
+_MAC_ROOTS = ("/volumes/macintosh hd", "/system/volumes/data")
+
+
+def _mac_path(path: str) -> str:
+    norm = posixpath.normpath(path)
+    for root in _MAC_ROOTS:
+        if norm.lower() == root or norm.lower().startswith(root + "/"):
+            return norm[len(root):] or "/"
+    return norm
 DISK_TYPES = {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "ntfs", "ntfs3", "fuseblk", "exfat", "vfat",
               "nfs", "nfs4", "cifs", "smb3"}
 NOT_DISKS = ("/boot", "/var/lib/docker", "/snap", "/run", "/dev", "/proc", "/sys")
@@ -206,11 +218,11 @@ def browsable(path: str, platform: str) -> bool:
         return bool(re.match(r"^[A-Za-z]:\\", norm)) and norm[0].lower() != "c"
     if not path.startswith("/"):
         return False
-    norm = posixpath.normpath(path)
+    norm = "/" + posixpath.normpath(path).lstrip("/")  # normpath keeps a leading "//"
     if platform == "mac":
-        parts = norm.split("/")
-        return len(parts) >= 3 and parts[1] == "Volumes" and parts[2] != "Macintosh HD"
-    return not _under(norm, ["/proc", "/sys", "/dev", "/run"])
+        parts = _mac_path(norm).split("/")
+        return len(parts) >= 3 and parts[1].lower() == "volumes"
+    return not _under(norm, ["/proc", "/sys", "/dev", "/run", "/var/run"])
 
 
 _LIST = 'df -kP . | tail -1; for d in */; do [ -d "$d" ] && printf "%s\\n" "${d%/}"; done'
@@ -253,6 +265,8 @@ def disk_check(path: str, platform: str, home: str, run: Run = default_run) -> d
     is tried and removed: False means every finished download gets copied. None when it cannot be told."""
     unknown = {"free": None, "hardlinks": None}
     mod = ntpath if platform == "windows" else posixpath
+    if platform == "mac":
+        path = _mac_path(path)
     for target in (path, mod.dirname(mod.normpath(path))):
         if platform in DESKTOP and mod.normpath(target).lower() == mod.normpath(home).lower():
             share = "/Users" if platform == "mac" else host_path(target[:3], platform)

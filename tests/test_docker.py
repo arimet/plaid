@@ -316,7 +316,8 @@ class BrowseTest(unittest.TestCase):
             self.assertTrue(docker.browsable(path, platform), path)
         for path, platform in (("/Users/zoe", "mac"), ("/Volumes", "mac"), ("/Volumes/../Users", "mac"),
                                ("C:\\Users", "windows"), ("/proc/1", "linux"), ("/sys", "linux"),
-                               ("relative", "linux"), ("/mnt/a,b", "linux")):
+                               ("relative", "linux"), ("/mnt/a,b", "linux"), ("//proc", "linux"),
+                               ("//sys/x", "linux"), ("/var/run/docker", "linux")):
             self.assertFalse(docker.browsable(path, platform), path)
 
     def test_browse_lists_folders_and_space(self):
@@ -374,6 +375,17 @@ class DiskCheckTest(unittest.TestCase):
         run = ScriptRun((0, "v 10 5 5 50% /m\n1\n", ""))
         self.assertEqual(docker.disk_check("/Volumes/Films/Plaid", "mac", "/Users/zoe", run=run),
                          {"free": None, "hardlinks": False})
+
+    def test_mac_home_by_another_name_is_never_opened(self):
+        for path in ("/Volumes/Macintosh HD/Users/zoe/Plaid", "/System/Volumes/Data/Users/zoe/Plaid",
+                     "/volumes/macintosh hd/Users/zoe/Plaid"):
+            run = ScriptRun((125, "", "bind source path does not exist"), (0, "u 10 5 5 50% /m\n", ""))
+            self.assertEqual(docker.disk_check(path, "mac", "/Users/zoe", run=run), {"free": 5 * 1024, "hardlinks": None})
+            self.assertIn("type=bind,src=/Users,dst=/m,readonly", run.calls[1], path)
+
+    def test_mac_volume_room_ignores_case(self):
+        run = ScriptRun((0, "v 10 5 5 50% /m\n2\n", ""))
+        self.assertIsNone(docker.disk_check("/volumes/Films/Plaid", "mac", "/Users/zoe", run=run)["free"])
 
     def test_unknown(self):
         self.assertEqual(docker.disk_check("/mnt/x", "linux", "/home/z", run=ScriptRun((3, "", "boom"))),

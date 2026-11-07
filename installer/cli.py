@@ -163,9 +163,9 @@ def _disk_lines(flow, env: dict, lang: str) -> list[str]:
         disks = flow.disks(env.get("HOST_PLATFORM", "linux"), env.get("HOST_HOME", ""))
     except Exception:
         return []
-    return [f"{t(lang, 'picker_system') if d['system'] else d['name']} · {d['path']} · "
-            f"{t(lang, 'picker_free', free=human_size(d['free'], lang), total=human_size(d['total'], lang))}"
-            for d in disks]
+    room = lambda d: ([t(lang, "picker_free", free=human_size(d["free"], lang), total=human_size(d["total"], lang))]
+                      if d["free"] is not None and d["total"] is not None else [])  # unknown on a Mac external disk
+    return [" · ".join([t(lang, "picker_system") if d["system"] else d["name"], d["path"], *room(d)]) for d in disks]
 
 
 def _ask(term, flow, env: dict, lang: str):

@@ -351,3 +351,9 @@ class DiskLinesTest(unittest.TestCase):
         flow = FakeFlow()
         flow.disks = lambda platform, home: 1 / 0
         self.assertEqual(cli._disk_lines(flow, ENV, "fr"), [])
+
+    def test_disk_lines_room_unknown(self):  # a Mac external disk: Docker Desktop cannot tell its room
+        flow = FakeFlow()
+        flow.disks = lambda platform, home: [{"path": "/Volumes/Films", "name": "Films", "free": None, "total": None,
+                                              "system": False}]
+        self.assertEqual(cli._disk_lines(flow, ENV, "fr"), ["Films · /Volumes/Films"])
