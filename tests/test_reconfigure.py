@@ -273,3 +273,10 @@ class EmptyFolderTest(unittest.TestCase):
     def test_empty_folder_asks_if_the_disk_is_plugged(self):
         found = reconfigure.check(settings(), settings(data_dir="/srv/new"), FakeDocker(folder="empty"))
         self.assertEqual(found, ["warn_folder_empty"])
+
+
+class StepsReportedOnceTest(ApplyTest):
+    def test_each_step_reported_once(self):
+        self.run_apply(settings(), settings(timezone="Europe/Paris", password="new-pass1"))
+        steps = [e.step for e in self.events]
+        self.assertEqual(steps, ["step_compose", "step_vpn", "step_account", "step_save", "step_done"])

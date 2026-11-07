@@ -142,7 +142,7 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
     step = todo[0]
     try:
         for step in todo:
-            if step == "step_account":
+            if step in ("step_account", "step_save"):  # reported below, after the part that is never undone
                 break
             started.append(step)
             report(Progress(step))
