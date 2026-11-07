@@ -889,7 +889,7 @@ class BackupWebTest(unittest.TestCase):
         self.assertIn("Dernière sauvegarde le ", self.open_panel())
         self.server.shutdown()
         FakeFlow.backup = {"at": 1794110400, "failed_at": 1794196800, "error": "err_backup_disk", "name": self.NAME}
-        self.assertIn("La sauvegarde de cette nuit a échoué", self.open_panel())
+        self.assertIn("La dernière sauvegarde a échoué : Le disque des médias est absent", self.open_panel())
 
     def test_backup_now(self):
         self.open_panel()

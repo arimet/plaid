@@ -176,6 +176,7 @@ def installed_flow():
     flow.settings = Settings(data_dir="/home/zoe/Plaid", username="zoe", password="longenough", vpn_provider=None,
                              home="/home/zoe", platform="linux", lang="fr")
     flow.added, flow.removed = [], None
+    flow.load_settings = lambda: flow.settings
     flow.tracker_catalog = lambda: [
         {"id": "alpha", "name": "Alpha", "language": "en-US", "description": "a", "added": False},
         {"id": "beta", "name": "Beta", "language": "fr-FR", "description": "b", "added": True}]
@@ -477,3 +478,12 @@ class BackupCliTest(TuiCliTest):
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertEqual(flow.started, [self.NAME])
         self.assertIn("8 novembre 2026", out.getvalue())
+
+    def test_the_menu_goes_on_with_the_restored_settings(self):
+        from dataclasses import replace
+        flow = self.flow("restored")
+        flow.load_settings = lambda: replace(flow.settings, username="restored")  # that night's account
+        # restore · pick · yes · apps · back · quit
+        t, out = self.term("\x1b[B" * 7 + "\r", "\r", "\x1b[D\r", "\r", "\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertIn("restored", out.getvalue())

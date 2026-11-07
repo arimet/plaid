@@ -473,6 +473,7 @@ class BackupDockerTest(unittest.TestCase):
         for pattern in ("*/logs", "*/MediaCover", "*/metadata", "plaid-state/apply-request.json"):
             self.assertIn(f'--exclude="{pattern}"', script)
         self.assertIn('.tmp" "$d/$1"', script)  # written aside, renamed when whole
+        self.assertTrue(script.startswith("umask 077;"))  # it holds passwords and keys: root only
         self.assertIn("tail -n +8", script)  # seven kept
         self.assertEqual(args[-1], "plaid-backup-2026-11-07-0300.tar.gz")
 
@@ -494,7 +495,9 @@ class BackupDockerTest(unittest.TestCase):
         self.assertIn("plaid_radarr-config:/v/plaid_radarr-config", args)
         self.assertIn("plaid-state:/s", args)
         script = args[args.index("-c") + 1]
-        self.assertIn("-mindepth 1 -delete", script)  # no old -wal next to a restored database
+        self.assertIn("-type f", script)  # files go, so no old -wal stays next to a restored database...
+        for kept in ("*/Backups", "*/metadata", "*/Definitions"):  # ...but what the archive never had stays
+            self.assertIn(f'! -path "{kept}/*"', script)
         self.assertIn("settings.json compose.json update.json", script)  # apply.json, the restore's own progress, stays
         self.assertNotIn("find /s", script)
 

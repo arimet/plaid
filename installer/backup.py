@@ -6,16 +6,18 @@ import json
 import ntpath
 import os
 import posixpath
+from dataclasses import replace
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from installer import docker, flow
-from installer.compose import DISK_APPS
+from installer.compose import DISK_APPS, SERVICES
 from installer.flow import Progress, Report
 from installer.settings import Settings
 
 STATE_FILE = "backup.json"
-HOUR = 3  # the stack's local time: after this, once a day
+HOUR, LAST_HOUR = 3, 6  # the stack's local time: once a night, between these
+CATCH_UP = 2 * 86400  # a machine asleep every night still gets one, by day, after this long
 STOP_TIMEOUT = 300
 
 
@@ -48,8 +50,12 @@ def local_now(s: Settings, utc: datetime | None = None) -> datetime:
 
 
 def due(now: datetime, st: dict) -> bool:
-    """Once a day, after HOUR: a machine off at 3:00 backs up when it comes back."""
-    return now.hour >= HOUR and st.get("tried") != now.date().isoformat()
+    """Once a night between HOUR and LAST_HOUR: by day the apps' stop would cut a film. A machine asleep at night
+    catches up by day once the last backup (or the install) is older than CATCH_UP."""
+    if st.get("tried") == now.date().isoformat():
+        return False
+    last = st.get("at") or st.get("since")
+    return HOUR <= now.hour < LAST_HOUR or bool(last and now.timestamp() - last > CATCH_UP)
 
 
 def target(s: Settings, dk=docker) -> tuple[str, str, bool]:
@@ -65,14 +71,18 @@ def where(s: Settings) -> str:
 
 
 def _stack(state_dir: str, dk) -> tuple[list[str], list[str]]:
+    """(the apps to stop, the volumes to save). gluetun and Tailscale keep running: no database, and stopping them
+    would cut a user who backs up over Tailscale. Tailscale's identity is the machine's, not a setting."""
     with open(os.path.join(state_dir, "compose.json"), encoding="utf-8") as f:
         spec = json.load(f)
-    return list(spec["services"]), [f"{dk.PROJECT}_{v}" for v in spec.get("volumes", {})]
+    return ([svc for svc in spec["services"] if svc in SERVICES],
+            [f"{dk.PROJECT}_{v}" for v in spec.get("volumes", {}) if v != "tailscale-state"])
 
 
 def _start_again(s: Settings, dk, state_dir: str) -> None:
     """The disk apps only with the disk there: otherwise the guard starts them when it comes back."""
-    services, _ = _stack(state_dir, dk)  # after a restore: the restored compose.json
+    with open(os.path.join(state_dir, "compose.json"), encoding="utf-8") as f:
+        services = list(json.load(f)["services"])  # all, gluetun and Tailscale too: up leaves running ones alone
     disk_ok = dk.marker_state(dk.host_path(s.data_dir, s.platform)) == "ok"
     dk.compose(state_dir, "up", "-d", *[svc for svc in services if svc not in DISK_APPS or disk_ok],
                timeout=STOP_TIMEOUT)
@@ -126,12 +136,26 @@ def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, now=None) ->
     return name
 
 
+# Where things are and how the machine reaches out stay as they are today: that night's folder may be gone, its
+# backup folder would hide the other backups, its Tailscale or VPN key may be revoked.
+KEPT_ON_RESTORE = ("data_dir", "backup_dir", "tailscale_key", "vpn_provider", "vpn_fields", "puid", "pgid", "home",
+                   "platform")
+
+
 def restore(name: str, report: Report, dk=docker, state_dir: str = flow.STATE_DIR) -> bool:
-    """Puts back the apps' settings and Plaid's own as backup `name` has them."""
+    """Puts back the apps' settings and Plaid's own as backup `name` has them, but for KEPT_ON_RESTORE."""
     s = flow.load_settings(state_dir)
     dest, sub, _ = target(s, dk)
     _, volumes = _stack(state_dir, dk)
-    if not _operate("restore", lambda: dk.restore_archive(volumes, dest, sub, name), report, dk, state_dir, s):
+    with open(os.path.join(state_dir, "compose.json"), encoding="utf-8") as f:
+        has_dri = "/dev/dri" in f.read()
+
+    def work():
+        dk.restore_archive(volumes, dest, sub, name)
+        restored = flow.load_settings(state_dir) or s
+        now = replace(restored, **{k: getattr(s, k) for k in KEPT_ON_RESTORE})
+        flow._write_state(now, state_dir, dk.host_path(now.data_dir, now.platform), has_dri)  # compose follows
+    if not _operate("restore", work, report, dk, state_dir, s):
         return False
     report(Progress("step_done", done=True, detail=name))
     return True

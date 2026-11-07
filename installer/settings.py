@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import ntpath
 import posixpath
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 
 LANGS = ("en", "fr")
 # Second-level folders that are whole disks or other people's homes (/Volumes/Disk, /mnt/usb, /home/other).
@@ -39,7 +39,8 @@ class Settings:
 
     @classmethod
     def from_json(cls, text: str) -> Settings:
-        return cls(**json.loads(text))
+        known = {f.name for f in fields(cls)}  # a newer Plaid's file (a restored backup) must still load
+        return cls(**{k: v for k, v in json.loads(text).items() if k in known})
 
 
 def _is_windows(path: str) -> bool:

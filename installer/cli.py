@@ -392,6 +392,7 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     flash = _backup_tui(term, flow, lang)
                 elif choice == "restore":
                     flash = _restore_tui(term, flow, lang, s)
+                    s = flow.load_settings() or s  # that night's settings now: the menu goes on with them
                 elif choice == "remove":
                     term.page(t(lang, "uninstall_title"), t(lang, "uninstall_text"))
                     code, notes = _remove_steps(term, flow, lang, s.data_dir, size())

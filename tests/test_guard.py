@@ -255,3 +255,18 @@ class RoomTest(unittest.TestCase):
     def test_room_of_a_present_disk(self):
         status = guard.cycle(FakeDk(disk="ok"), FakeFlow(), "/state")
         self.assertEqual((status["free"], status["total"]), (60, 100))
+
+
+class BackupOutsideTheLockTest(unittest.TestCase):
+    def test_the_nightly_start_runs_after_the_round_lets_go(self):
+        # start_backup takes flow.OPS_LOCK: from inside the round, the guard would wait on itself for good.
+        from installer import flow
+        fl, seen = FakeFlow(), []
+        fl.maybe_backup = lambda state_dir: seen.append(flow.OPS_LOCK.acquire(blocking=False)) or flow.OPS_LOCK.release()
+        guard.cycle(FakeDk(), fl, "/state")
+        self.assertEqual(seen, [True])
+
+    def test_no_check_while_another_operation_owns_the_stack(self):
+        fl = FakeFlow(complete=False)
+        fl.maybe_backup = lambda state_dir: 1 / 0
+        self.assertIsNone(guard.cycle(FakeDk(), fl, "/state"))

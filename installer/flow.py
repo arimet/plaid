@@ -345,11 +345,17 @@ def maybe_backup(state_dir: str = STATE_DIR, now=None, start=None) -> bool:
     if s is None:
         return False
     when = now() if now else backup.local_now(s)
+    st = backup.status(state_dir)
+    if not st.get("at") and not st.get("since"):  # the first look: the catch-up counts from here
+        backup.note(state_dir, since=when.timestamp())
     if not backup.due(when, backup.status(state_dir)):
         return False
     try:
         (start or (lambda: start_backup(state_dir=state_dir)))()
     except WorkerBusy:
+        return False  # next round
+    except Exception as e:  # the worker cannot start: tomorrow, not every 30 s over the last result
+        backup.note(state_dir, tried=when.date().isoformat(), failed_at=when.timestamp(), error=str(e))
         return False
     backup.note(state_dir, tried=when.date().isoformat())
     return True

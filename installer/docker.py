@@ -311,7 +311,7 @@ def backup_archive(volumes: list[str], dest: str, sub: str, name: str, run: Run 
     """Archives the volumes and Plaid's state into dest/sub/name; keeps the newest BACKUP_KEEP. Returns its size."""
     mounts = [f"{v}:/v/{v}:ro" for v in volumes] + ["plaid-state:/v/plaid-state:ro", f"type=bind,src={dest},dst=/b"]
     excludes = " ".join(f'--exclude="{p}"' for p in BACKUP_EXCLUDES)
-    script = (f'set -e; d="/b/{sub}"; mkdir -p "$d"; tar -czf "$d/$1.tmp" -C /v {excludes} .; mv "$d/$1.tmp" "$d/$1"; '
+    script = (f'umask 077; set -e; d="/b/{sub}"; mkdir -p "$d"; tar -czf "$d/$1.tmp" -C /v {excludes} .; mv "$d/$1.tmp" "$d/$1"; '
               f'ls -1t "$d"/{BACKUP_PREFIX}*.tar.gz | tail -n +{BACKUP_KEEP + 1} | xargs -r rm -f; stat -c %s "$d/$1"')
     result = _helper(mounts, ["sh", "-c", script, "sh", name], run, timeout=BACKUP_TIMEOUT)
     if result.returncode != 0:
@@ -338,8 +338,11 @@ def restore_archive(volumes: list[str], dest: str, sub: str, name: str, run: Run
     if not _BACKUP_NAME.match(name):
         raise ValueError(f"not a backup name: {name}")
     mounts = [f"{v}:/v/{v}" for v in volumes] + ["plaid-state:/s", f"type=bind,src={dest},dst=/b,readonly"]
+    # Files only, and none in what the backup left out: the apps' own backups, Jellyfin's images stay.
+    keep = " ".join(f'! -path "{p}" ! -path "{p}/*"' for p in BACKUP_EXCLUDES if not p.startswith("plaid-state"))
     script = (f'set -e; mkdir /r; tar -xzf "/b/{sub}/$1" -C /r; for v in /v/*; do n="${{v#/v/}}"; '
-              '[ -d "/r/$n" ] || continue; find "$v" -mindepth 1 -delete; cp -a "/r/$n/." "$v/"; done; '
+              f'[ -d "/r/$n" ] || continue; find "$v" \\( -type f -o -type l \\) {keep} -delete; '
+              'cp -a "/r/$n/." "$v/"; done; '
               f'for f in {" ".join(RESTORED_STATE)}; do [ -f "/r/plaid-state/$f" ] && cp -a "/r/plaid-state/$f" /s/; done; true')
     result = _helper(mounts, ["sh", "-c", script, "sh", name], run, timeout=BACKUP_TIMEOUT)
     if result.returncode != 0:

@@ -52,8 +52,8 @@ class BackupTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
         with open(os.path.join(self.dir, "compose.json"), "w") as f:
-            json.dump({"services": {s: {} for s in SERVICES},
-                       "volumes": {f"{s}-config": {} for s in SERVICES}}, f)
+            json.dump({"services": {s: {} for s in SERVICES + ["gluetun", "tailscale"]},
+                       "volumes": {**{f"{s}-config": {} for s in SERVICES}, "tailscale-state": {}}}, f)
         flow.write_json(os.path.join(self.dir, "settings.json"), json.loads(settings().to_json()))
         self.events = []
 
@@ -66,9 +66,11 @@ class BackupTest(unittest.TestCase):
                          "plaid-backup-2026-11-08-0300.tar.gz")
         kinds = [c[0] if c[0] != "compose" else c[1] for c in dk.calls]
         self.assertEqual(kinds, ["stop", "archive", "up"])
+        self.assertEqual(set(dk.calls[0][2:]), set(SERVICES))  # not gluetun or Tailscale: no database, no cut
         archive = dk.calls[1]
         self.assertEqual((archive[2], archive[3]), ("/srv/arr", "backups"))  # default: <media folder>/backups
         self.assertIn("plaid_radarr-config", archive[1])
+        self.assertNotIn("plaid_tailscale-state", archive[1])  # the machine's own Tailscale identity stays as it is
         self.assertEqual([e["step"] for e in self.events],
                          ["step_backup_stop", "step_backup_copy", "step_backup_start", "step_done"])
         st = backup.status(self.dir)
@@ -107,17 +109,40 @@ class BackupTest(unittest.TestCase):
         self.assertEqual([e["step"] for e in self.events],
                          ["step_restore_stop", "step_restore_copy", "step_restore_start", "step_done"])
 
+    def test_restore_keeps_where_things_are_now(self):
+        # The archive's settings come from that night: the folder, the backups, the VPN and Tailscale are today's.
+        dk = FakeDk()
+        now = settings(backup_dir="/mnt/backups", tailscale_key="tskey-now")
+        flow.write_json(os.path.join(self.dir, "settings.json"), json.loads(now.to_json()))
+        def restore_archive(volumes, dest, sub, name):
+            restored = json.loads(settings(data_dir="/old/disk", username="before",
+                                           vpn_fields={"WIREGUARD_PRIVATE_KEY": "old"}).to_json())
+            restored["a_field_from_a_newer_plaid"] = 1
+            flow.write_json(os.path.join(self.dir, "settings.json"), restored)
+        dk.restore_archive = restore_archive
+        self.assertTrue(backup.restore("plaid-backup-2026-11-08-0300.tar.gz", self.report, dk=dk, state_dir=self.dir))
+        s = flow.load_settings(self.dir)
+        self.assertEqual((s.data_dir, s.backup_dir, s.tailscale_key, s.vpn_fields, s.username),
+                         ("/srv/arr", "/mnt/backups", "tskey-now", now.vpn_fields, "before"))
+        with open(os.path.join(self.dir, "compose.json")) as f:
+            self.assertIn('"source": "/srv/arr"', f.read())
+
     def test_failed_restore_starts_the_apps_again(self):
         dk = FakeDk(fail_on="restore")
         self.assertFalse(backup.restore("plaid-backup-2026-11-08-0300.tar.gz", self.report, dk=dk, state_dir=self.dir))
         self.assertEqual(dk.calls[-1][:2], ("compose", "up"))
         self.assertEqual(self.events[-1]["error"], "err_restore_failed")
 
-    def test_due_once_a_night_after_three(self):
+    def test_due_once_a_night_between_three_and_six(self):
         self.assertFalse(backup.due(datetime(2026, 11, 8, 2, 59), {}))
         self.assertTrue(backup.due(NIGHT, {}))
-        self.assertTrue(backup.due(datetime(2026, 11, 8, 14, 0), {"tried": "2026-11-07"}))  # machine off at 3:00
         self.assertFalse(backup.due(datetime(2026, 11, 8, 23, 0), {"tried": "2026-11-08"}))
+        # Daytime stops the TV: only to catch up on a machine asleep at night for two days.
+        day = datetime(2026, 11, 8, 14, 0)
+        self.assertFalse(backup.due(day, {"tried": "2026-11-07", "at": day.timestamp() - 86400}))
+        self.assertTrue(backup.due(day, {"tried": "2026-11-07", "at": day.timestamp() - 3 * 86400}))
+        self.assertFalse(backup.due(day, {"since": day.timestamp() - 3600}))  # just installed: tonight
+        self.assertTrue(backup.due(day, {"since": day.timestamp() - 3 * 86400}))
 
     def test_worker_runs_backup_and_restore_requests(self):
         from installer import reconfigure
@@ -139,6 +164,19 @@ class ScheduleTest(unittest.TestCase):
     def test_nothing_installed_nothing_due(self):
         self.assertFalse(flow.maybe_backup(tempfile.mkdtemp(), now=lambda: NIGHT, start=lambda: 1 / 0))
 
+    def test_first_check_notes_the_install(self):
+        d = self.installed()
+        flow.maybe_backup(d, now=lambda: datetime(2026, 11, 8, 14, 0), start=lambda: 1 / 0)
+        self.assertIn("since", backup.status(d))
+
+    def test_a_worker_that_cannot_start_waits_for_tomorrow(self):
+        d = self.installed()
+        from installer.docker import DockerError
+        def broken():
+            raise DockerError("no such image")
+        self.assertFalse(flow.maybe_backup(d, now=lambda: NIGHT, start=broken))
+        self.assertEqual(backup.status(d)["tried"], "2026-11-08")  # not every 30 s, erasing the last result
+
     def test_maybe_backup_starts_once_and_notes_the_night(self):
         d = self.installed()
         started = []
@@ -156,10 +194,6 @@ class ScheduleTest(unittest.TestCase):
         self.assertEqual(started, [1])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class LocalTimeTest(unittest.TestCase):
     def test_the_night_is_the_stack_time_zone_s(self):
         from datetime import timezone
@@ -167,3 +201,7 @@ class LocalTimeTest(unittest.TestCase):
         self.assertEqual((paris.hour, paris.minute), (3, 30))  # 2:30 UTC is past 3:00 in Paris
         bad = backup.local_now(settings(timezone="Mars/Olympus"), utc=datetime(2026, 11, 8, 2, 30, tzinfo=timezone.utc))
         self.assertEqual(bad.hour, 2)  # an unknown zone: UTC rather than no backup at all
+
+
+if __name__ == "__main__":
+    unittest.main()
