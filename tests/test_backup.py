@@ -43,6 +43,9 @@ class FakeDk:
         self.calls.append(("restore", tuple(volumes), dest, sub, name))
         self._maybe_fail("restore")
 
+    def backup_folder_state(self, dest):
+        return "ok"
+
     def list_backups(self, dest, sub):
         self.calls.append(("list", dest, sub))
         return self.backups
@@ -74,7 +77,7 @@ class BackupTest(unittest.TestCase):
         self.assertEqual([e["step"] for e in self.events],
                          ["step_backup_stop", "step_backup_copy", "step_backup_start", "step_done"])
         st = backup.status(self.dir)
-        self.assertEqual((st["name"], st["size"], st["tried"]), ("plaid-backup-2026-11-08-0300.tar.gz", 4242, "2026-11-08"))
+        self.assertEqual((st["name"], st["size"]), ("plaid-backup-2026-11-08-0300.tar.gz", 4242))
 
     def test_apps_start_again_when_the_copy_fails(self):
         dk = FakeDk(fail_on="archive")
@@ -110,7 +113,7 @@ class BackupTest(unittest.TestCase):
                          ["step_restore_stop", "step_restore_copy", "step_restore_start", "step_done"])
 
     def test_restore_keeps_where_things_are_now(self):
-        # The archive's settings come from that night: the folder, the backups, the VPN and Tailscale are today's.
+        # The archive's settings come from that day: the folder, the backups, the VPN and Tailscale are today's.
         dk = FakeDk()
         now = settings(backup_dir="/mnt/backups", tailscale_key="tskey-now")
         flow.write_json(os.path.join(self.dir, "settings.json"), json.loads(now.to_json()))
@@ -133,17 +136,6 @@ class BackupTest(unittest.TestCase):
         self.assertEqual(dk.calls[-1][:2], ("compose", "up"))
         self.assertEqual(self.events[-1]["error"], "err_restore_failed")
 
-    def test_due_once_a_night_between_three_and_six(self):
-        self.assertFalse(backup.due(datetime(2026, 11, 8, 2, 59), {}))
-        self.assertTrue(backup.due(NIGHT, {}))
-        self.assertFalse(backup.due(datetime(2026, 11, 8, 23, 0), {"tried": "2026-11-08"}))
-        # Daytime stops the TV: only to catch up on a machine asleep at night for two days.
-        day = datetime(2026, 11, 8, 14, 0)
-        self.assertFalse(backup.due(day, {"tried": "2026-11-07", "at": day.timestamp() - 86400}))
-        self.assertTrue(backup.due(day, {"tried": "2026-11-07", "at": day.timestamp() - 3 * 86400}))
-        self.assertFalse(backup.due(day, {"since": day.timestamp() - 3600}))  # just installed: tonight
-        self.assertTrue(backup.due(day, {"since": day.timestamp() - 3 * 86400}))
-
     def test_worker_runs_backup_and_restore_requests(self):
         from installer import reconfigure
         for request in ({"kind": "backup"}, {"kind": "restore", "name": "plaid-backup-2026-11-08-0300.tar.gz"}):
@@ -155,53 +147,35 @@ class BackupTest(unittest.TestCase):
             self.assertIn(request["kind"], [c[0].replace("archive", "backup") for c in dk.calls])
 
 
-class ScheduleTest(unittest.TestCase):
-    def installed(self):
-        d = tempfile.mkdtemp()
-        flow.write_json(os.path.join(d, "settings.json"), json.loads(settings().to_json()))
-        return d
-
-    def test_nothing_installed_nothing_due(self):
-        self.assertFalse(flow.maybe_backup(tempfile.mkdtemp(), now=lambda: NIGHT, start=lambda: 1 / 0))
-
-    def test_first_check_notes_the_install(self):
-        d = self.installed()
-        flow.maybe_backup(d, now=lambda: datetime(2026, 11, 8, 14, 0), start=lambda: 1 / 0)
-        self.assertIn("since", backup.status(d))
-
-    def test_a_worker_that_cannot_start_waits_for_tomorrow(self):
-        d = self.installed()
-        from installer.docker import DockerError
-        def broken():
-            raise DockerError("no such image")
-        self.assertFalse(flow.maybe_backup(d, now=lambda: NIGHT, start=broken))
-        self.assertEqual(backup.status(d)["tried"], "2026-11-08")  # not every 30 s, erasing the last result
-
-    def test_maybe_backup_starts_once_and_notes_the_night(self):
-        d = self.installed()
-        started = []
-        flow.maybe_backup(d, now=lambda: NIGHT, start=lambda: started.append(1))
-        flow.maybe_backup(d, now=lambda: NIGHT, start=lambda: started.append(1))
-        self.assertEqual(started, [1])
-
-    def test_busy_worker_tries_next_round(self):
-        d = self.installed()
-        def busy():
-            raise flow.WorkerBusy()
-        flow.maybe_backup(d, now=lambda: NIGHT, start=busy)
-        started = []
-        flow.maybe_backup(d, now=lambda: NIGHT, start=lambda: started.append(1))
-        self.assertEqual(started, [1])
-
-
 class LocalTimeTest(unittest.TestCase):
-    def test_the_night_is_the_stack_time_zone_s(self):
+    def test_a_backup_is_named_in_the_stack_time_zone(self):
         from datetime import timezone
         paris = backup.local_now(settings(timezone="Europe/Paris"), utc=datetime(2026, 11, 8, 2, 30, tzinfo=timezone.utc))
-        self.assertEqual((paris.hour, paris.minute), (3, 30))  # 2:30 UTC is past 3:00 in Paris
+        self.assertEqual((paris.hour, paris.minute), (3, 30))
         bad = backup.local_now(settings(timezone="Mars/Olympus"), utc=datetime(2026, 11, 8, 2, 30, tzinfo=timezone.utc))
-        self.assertEqual(bad.hour, 2)  # an unknown zone: UTC rather than no backup at all
+        self.assertEqual(bad.hour, 2)  # an unknown zone: UTC rather than no name at all
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CustomFolderGoneTest(BackupTest):
+    def test_a_custom_folder_that_lost_its_mark_is_not_written(self):
+        # A Linux mount point whose disk is away is an empty folder: backing up there fills the system disk.
+        flow.write_json(os.path.join(self.dir, "settings.json"),
+                        json.loads(settings(backup_dir="/mnt/usb").to_json()))
+        backup.note(self.dir, at=1.0, dir="/mnt/usb")
+        dk = FakeDk()
+        dk.backup_folder_state = lambda dest: "empty"
+        self.assertIsNone(backup.run(self.report, dk=dk, state_dir=self.dir, now=lambda: NIGHT))
+        self.assertEqual(self.events[-1]["error"], "err_backup_folder")
+        self.assertFalse([c for c in dk.calls if c[0] == "archive"])
+
+    def test_a_new_custom_folder_is_fine(self):
+        flow.write_json(os.path.join(self.dir, "settings.json"),
+                        json.loads(settings(backup_dir="/mnt/usb").to_json()))
+        dk = FakeDk()
+        dk.backup_folder_state = lambda dest: "empty"
+        self.assertTrue(backup.run(self.report, dk=dk, state_dir=self.dir, now=lambda: NIGHT))
+        self.assertEqual(backup.status(self.dir)["dir"], "/mnt/usb")

@@ -1,4 +1,5 @@
-"""Nightly backups of the apps' settings and Plaid's own, and putting one back. Both run in the settings worker
+"""Backups of the apps' settings and Plaid's own, made when the user asks, and putting one back. Both run in the
+settings worker
 (plaid-apply): one operation on the stack at a time, and the guard stands back meanwhile."""
 from __future__ import annotations
 
@@ -16,8 +17,6 @@ from installer.flow import Progress, Report
 from installer.settings import Settings
 
 STATE_FILE = "backup.json"
-HOUR, LAST_HOUR = 3, 6  # the stack's local time: once a night, between these
-CATCH_UP = 2 * 86400  # a machine asleep every night still gets one, by day, after this long
 STOP_TIMEOUT = 300
 
 
@@ -28,7 +27,7 @@ class BackupError(Exception):
 
 
 def status(state_dir: str = flow.STATE_DIR) -> dict:
-    """{"at", "name", "size"} of the last backup, {"failed_at", "error"} of the last failure, "tried" (local date)."""
+    """{"at", "name", "size", "dir"} of the last backup, {"failed_at", "error"} of the last failure."""
     try:
         with open(os.path.join(state_dir, STATE_FILE), encoding="utf-8") as f:
             return json.load(f)
@@ -41,21 +40,12 @@ def note(state_dir: str, **fields) -> None:
 
 
 def local_now(s: Settings, utc: datetime | None = None) -> datetime:
-    """The time in the stack's zone (the one chosen in Plaid), not the container's: the night is the user's."""
+    """The time in the stack's zone (the one chosen in Plaid), not the container's: a backup is named in it."""
     utc = utc or datetime.now(timezone.utc)
     try:
         return utc.astimezone(ZoneInfo(s.timezone))
     except Exception:  # an unknown zone: UTC rather than no backup at all
         return utc
-
-
-def due(now: datetime, st: dict) -> bool:
-    """Once a night between HOUR and LAST_HOUR: by day the apps' stop would cut a film. A machine asleep at night
-    catches up by day once the last backup (or the install) is older than CATCH_UP."""
-    if st.get("tried") == now.date().isoformat():
-        return False
-    last = st.get("at") or st.get("since")
-    return HOUR <= now.hour < LAST_HOUR or bool(last and now.timestamp() - last > CATCH_UP)
 
 
 def target(s: Settings, dk=docker) -> tuple[str, str, bool]:
@@ -119,24 +109,28 @@ def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, now=None) ->
     """One backup. Returns its file name, or None on failure."""
     s = flow.load_settings(state_dir)
     when = now() if now else local_now(s)
-    note(state_dir, tried=when.date().isoformat())
     name = when.strftime(f"{docker.BACKUP_PREFIX}%Y-%m-%d-%H%M.tar.gz")
     dest, sub, on_media = target(s, dk)
-    if on_media and dk.marker_state(dest) != "ok":  # never onto the empty mount point of an absent disk
-        report(Progress("step_backup_stop", error="err_backup_disk"))
-        note(state_dir, failed_at=when.timestamp(), error="err_backup_disk")
+    # Never onto the empty mount point of an absent disk: the media disk has its marker, a backup folder Plaid
+    # already wrote to has its own.
+    away = (dk.marker_state(dest) != "ok" if on_media else
+            status(state_dir).get("dir") == s.backup_dir and dk.backup_folder_state(dest) != "ok")
+    if away:
+        key = "err_backup_disk" if on_media else "err_backup_folder"
+        report(Progress("step_backup_stop", error=key))
+        note(state_dir, failed_at=when.timestamp(), error=key)
         return None
     size = {}
     _, volumes = _stack(state_dir, dk)
     work = lambda: size.setdefault("n", dk.backup_archive(volumes, dest, sub, name))
     if not _operate("backup", work, report, dk, state_dir, s):
         return None
-    note(state_dir, at=when.timestamp(), name=name, size=size["n"], failed_at=None, error=None)
+    note(state_dir, at=when.timestamp(), name=name, size=size["n"], dir=s.backup_dir, failed_at=None, error=None)
     report(Progress("step_done", done=True, detail=name))
     return name
 
 
-# Where things are and how the machine reaches out stay as they are today: that night's folder may be gone, its
+# Where things are and how the machine reaches out stay as they are today: that day's folder may be gone, its
 # backup folder would hide the other backups, its Tailscale or VPN key may be revoked.
 KEPT_ON_RESTORE = ("data_dir", "backup_dir", "tailscale_key", "vpn_provider", "vpn_fields", "puid", "pgid", "home",
                    "platform")

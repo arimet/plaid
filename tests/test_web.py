@@ -883,7 +883,7 @@ class BackupWebTest(unittest.TestCase):
         html = self.open_panel()
         self.assertIn('action="/api/backup"', html)
         self.assertIn('href="/backups"', html)
-        self.assertIn("la première se fera cette nuit", html)
+        self.assertIn("Pas encore de sauvegarde.", html)
         self.server.shutdown()
         FakeFlow.backup = {"at": 1794110400, "name": self.NAME, "size": 5 * 1024 ** 2}
         self.assertIn("Dernière sauvegarde le ", self.open_panel())

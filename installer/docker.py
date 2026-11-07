@@ -311,12 +311,19 @@ def backup_archive(volumes: list[str], dest: str, sub: str, name: str, run: Run 
     """Archives the volumes and Plaid's state into dest/sub/name; keeps the newest BACKUP_KEEP. Returns its size."""
     mounts = [f"{v}:/v/{v}:ro" for v in volumes] + ["plaid-state:/v/plaid-state:ro", f"type=bind,src={dest},dst=/b"]
     excludes = " ".join(f'--exclude="{p}"' for p in BACKUP_EXCLUDES)
-    script = (f'umask 077; set -e; d="/b/{sub}"; mkdir -p "$d"; tar -czf "$d/$1.tmp" -C /v {excludes} .; mv "$d/$1.tmp" "$d/$1"; '
+    script = (f'umask 077; set -e; d="/b/{sub}"; mkdir -p "$d"; touch "$d/.plaid-backups"; tar -czf "$d/$1.tmp" -C /v {excludes} .; mv "$d/$1.tmp" "$d/$1"; '
               f'ls -1t "$d"/{BACKUP_PREFIX}*.tar.gz | tail -n +{BACKUP_KEEP + 1} | xargs -r rm -f; stat -c %s "$d/$1"')
     result = _helper(mounts, ["sh", "-c", script, "sh", name], run, timeout=BACKUP_TIMEOUT)
     if result.returncode != 0:
         raise DockerError((result.stderr or result.stdout or "").strip() or f"exit {result.returncode}")
     return int(result.stdout.split()[-1])
+
+
+def backup_folder_state(dest: str, run: Run = default_run) -> str:
+    """"ok" (Plaid's mark is there), "empty", "other", "missing" or "unknown": a disk that is away leaves an empty
+    mount point, where a backup would land on the system disk."""
+    return _probe(dest, '[ -e /m/.plaid-backups ] && echo ok && exit 0; '
+                        '[ -z "$(ls -A /m)" ] && echo empty || echo other', run)
 
 
 def list_backups(dest: str, sub: str, run: Run = default_run) -> list[dict]:

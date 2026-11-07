@@ -301,7 +301,7 @@ def backup_date(lang: str, name: str) -> str:
 
 
 def backup_html(lang: str, s: Settings, st: dict) -> str:
-    """The panel's backup block: the last one, or why last night's failed."""
+    """The panel's backup block: the last one, or why the last try failed."""
     from installer import backup
     if st.get("failed_at") and (not st.get("at") or st["failed_at"] > st["at"]):
         reason = st.get("error") or ""

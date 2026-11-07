@@ -504,3 +504,15 @@ class BackupDockerTest(unittest.TestCase):
     def test_restore_refuses_odd_names(self):
         with self.assertRaises(ValueError):
             docker.restore_archive(self.VOLS, "/srv/arr", "", "../etc/passwd", run=ScriptRun())
+
+
+class BackupFolderStateTest(unittest.TestCase):
+    def test_backup_folder_state(self):
+        for out, want in (("ok\n", "ok"), ("empty\n", "empty")):
+            self.assertEqual(docker.backup_folder_state("/mnt/usb", run=ScriptRun((0, out, ""))), want)
+        self.assertEqual(docker.backup_folder_state("/mnt/usb", run=ScriptRun((125, "", "does not exist"))), "missing")
+
+    def test_each_backup_marks_its_folder(self):
+        run = ScriptRun((0, "1\n", ""))
+        docker.backup_archive([], "/mnt/usb", "", "plaid-backup-2026-11-08-0300.tar.gz", run=run)
+        self.assertIn('touch "$d/.plaid-backups"', run.calls[0][run.calls[0].index("-c") + 1])

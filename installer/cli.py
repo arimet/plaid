@@ -392,7 +392,7 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     flash = _backup_tui(term, flow, lang)
                 elif choice == "restore":
                     flash = _restore_tui(term, flow, lang, s)
-                    s = flow.load_settings() or s  # that night's settings now: the menu goes on with them
+                    s = flow.load_settings() or s  # that backup's settings now: the menu goes on with them
                 elif choice == "remove":
                     term.page(t(lang, "uninstall_title"), t(lang, "uninstall_text"))
                     code, notes = _remove_steps(term, flow, lang, s.data_dir, size())
@@ -429,7 +429,7 @@ def _follow(term, flow, lang: str, start, step_keys: tuple, failed_key: str, don
             steps.failed = True
             steps.render()
             error = (events[-1].get("error") or "") if events else ""
-            term.note(t(lang, error if error in ("err_backup_disk", "err_backup_failed", "err_restore_failed")
+            term.note(t(lang, error if error in ("err_backup_disk", "err_backup_folder", "err_backup_failed", "err_restore_failed")
                         else failed_key), "error")
             term.note(events[-1].get("detail", "") if events else "")
             term.pause(t(lang, "cli_back"))

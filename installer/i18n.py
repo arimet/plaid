@@ -150,15 +150,15 @@ T: dict[str, dict[str, str]] = {
         "err_unexpected": "Something went wrong. Remove the stack and install again.",
         "warn_dir_not_empty": "The folder {path} already holds files. Installing never touches them, but if you ever remove Plaid and tick “also delete the folder”, they go too.",
         "backup_title": "Backups",
-        "backup_help": "Every night after 3:00, Plaid saves your apps' settings: lists of films and series, requests, "
-                       "accounts, trackers. Not your films.",
+        "backup_help": "Back up now saves your apps' settings: lists of films and series, requests, accounts, "
+                       "trackers. Not your films. The apps stop for a few seconds.",
         "backup_last": "Last backup on {date} ({size}), in {folder}.",
-        "backup_none": "No backup yet: the first one runs tonight.",
+        "backup_none": "No backup yet.",
         "backup_failed": "The last backup failed: {reason}",
         "backup_btn": "Back up now",
         "backup_restore_link": "Restore a backup",
         "backups_title": "Restore a backup",
-        "backups_help": "Your apps' and Plaid's settings go back to the chosen night. What changed since (films added, "
+        "backups_help": "Your apps' and Plaid's settings go back to the chosen backup. What changed since (films added, "
                         "requests, password) is lost; your film and series files do not move.",
         "backups_none": "No backup in {folder}.",
         "backups_pick": "Restore this one",
@@ -172,6 +172,7 @@ T: dict[str, dict[str, str]] = {
         "restore_back": "Your apps and Plaid are back to their settings of {date}.",
         "err_backup_failed": "The backup did not go through. Your apps run again.",
         "err_backup_disk": "The media disk is away: no backup onto a disk that is not plugged in.",
+        "err_backup_folder": "The backup folder is empty or gone: is its disk plugged in?",
         "err_restore_failed": "The restore did not go through. Your apps run again; some may be half restored: "
                               "restore again.",
         "step_backup_stop": "Stopping the apps",
@@ -509,15 +510,15 @@ T: dict[str, dict[str, str]] = {
         "err_unexpected": "Quelque chose a échoué. Supprimez la stack et réinstallez.",
         "warn_dir_not_empty": "Le dossier {path} contient déjà des fichiers. L’installation n’y touche pas, mais si un jour vous supprimez Plaid en cochant « effacer aussi le dossier », ils partiront avec.",
         "backup_title": "Sauvegardes",
-        "backup_help": "Chaque nuit après 3 h, Plaid sauvegarde les réglages de vos applis : listes de films et "
-                       "séries, demandes, comptes, trackers. Pas vos films.",
+        "backup_help": "Sauvegarder maintenant enregistre les réglages de vos applis : listes de films et séries, "
+                       "demandes, comptes, trackers. Pas vos films. Les applis s’arrêtent quelques secondes.",
         "backup_last": "Dernière sauvegarde le {date} ({size}), dans {folder}.",
-        "backup_none": "Pas encore de sauvegarde : la première se fera cette nuit.",
+        "backup_none": "Pas encore de sauvegarde.",
         "backup_failed": "La dernière sauvegarde a échoué : {reason}",
         "backup_btn": "Sauvegarder maintenant",
         "backup_restore_link": "Restaurer une sauvegarde",
         "backups_title": "Restaurer une sauvegarde",
-        "backups_help": "Les réglages de vos applis et de Plaid reviennent à ceux de la nuit choisie. Ce qui a changé "
+        "backups_help": "Les réglages de vos applis et de Plaid reviennent à ceux de la sauvegarde choisie. Ce qui a changé "
                         "depuis (films ajoutés, demandes, mot de passe) est perdu ; vos fichiers de films et séries ne "
                         "bougent pas.",
         "backups_none": "Aucune sauvegarde dans {folder}.",
@@ -532,6 +533,7 @@ T: dict[str, dict[str, str]] = {
         "restore_back": "Vos applis et Plaid sont revenus à leurs réglages du {date}.",
         "err_backup_failed": "La sauvegarde n’a pas abouti. Vos applis tournent à nouveau.",
         "err_backup_disk": "Le disque des médias est absent : pas de sauvegarde sur un disque débranché.",
+        "err_backup_folder": "Le dossier des sauvegardes est vide ou absent : son disque est-il branché ?",
         "err_restore_failed": "La restauration n’a pas abouti. Vos applis tournent à nouveau ; certaines peuvent être "
                               "à moitié restaurées : relancez la restauration.",
         "step_backup_stop": "Arrêt des applis",

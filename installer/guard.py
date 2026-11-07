@@ -55,13 +55,7 @@ def decide(disk: str, vpn_on: bool, containers: dict, blind: set[str]) -> tuple[
 def cycle(dk=docker, fl=flow, state_dir: str = flow.STATE_DIR) -> dict | None:
     """One round. Does nothing while an install is not finished or a removal runs: they own the stack then."""
     with flow.OPS_LOCK:
-        status = _cycle(dk, fl, state_dir)
-    if status is not None:  # outside the lock: starting the worker takes it too
-        try:
-            fl.maybe_backup(state_dir)  # once a night; the backup itself waits for the disk
-        except Exception as e:  # a failing check must not stop the guard
-            print(f"guard: backup check failed: {e}", file=sys.stderr)
-    return status
+        return _cycle(dk, fl, state_dir)
 
 
 def _cycle(dk, fl, state_dir: str) -> dict | None:

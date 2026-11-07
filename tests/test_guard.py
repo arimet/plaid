@@ -122,9 +122,6 @@ class FakeFlow:
     def save_guard_status(self, status, state_dir):
         self.saved.append(status)
 
-    def maybe_backup(self, state_dir):
-        self.backup_checked = True
-
 
 class CycleTest(unittest.TestCase):
     def test_cycle_skips_while_busy(self):
@@ -239,34 +236,7 @@ class AppStatesTest(unittest.TestCase):
         self.assertEqual(got, {"radarr": "running", "sonarr": "stopped", "jellyfin": "failing", "seerr": "starting"})
 
 
-class NightlyBackupTest(unittest.TestCase):
-    def test_each_round_asks_whether_the_night_backup_is_due(self):
-        fl = FakeFlow()
-        guard.cycle(FakeDk(), fl, "/state")
-        self.assertTrue(getattr(fl, "backup_checked", False))
-
-    def test_a_failing_check_does_not_stop_the_round(self):
-        fl = FakeFlow()
-        fl.maybe_backup = lambda state_dir: 1 / 0
-        self.assertEqual(guard.cycle(FakeDk(), fl, "/state")["disk"], "ok")
-
-
 class RoomTest(unittest.TestCase):
     def test_room_of_a_present_disk(self):
         status = guard.cycle(FakeDk(disk="ok"), FakeFlow(), "/state")
         self.assertEqual((status["free"], status["total"]), (60, 100))
-
-
-class BackupOutsideTheLockTest(unittest.TestCase):
-    def test_the_nightly_start_runs_after_the_round_lets_go(self):
-        # start_backup takes flow.OPS_LOCK: from inside the round, the guard would wait on itself for good.
-        from installer import flow
-        fl, seen = FakeFlow(), []
-        fl.maybe_backup = lambda state_dir: seen.append(flow.OPS_LOCK.acquire(blocking=False)) or flow.OPS_LOCK.release()
-        guard.cycle(FakeDk(), fl, "/state")
-        self.assertEqual(seen, [True])
-
-    def test_no_check_while_another_operation_owns_the_stack(self):
-        fl = FakeFlow(complete=False)
-        fl.maybe_backup = lambda state_dir: 1 / 0
-        self.assertIsNone(guard.cycle(FakeDk(), fl, "/state"))
