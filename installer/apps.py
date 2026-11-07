@@ -265,13 +265,19 @@ class Arr:
         because films or series still use them). builtin: also remove every profile Plaid did not make (install)."""
         e = media.effective(s)
         ids = {"formats": dict(ids.get("formats", {})), "profiles": dict(ids.get("profiles", {}))}
+        # Without a stored ID, an item of the same name is taken over: a change that failed half way may have made
+        # it, and the apps refuse two of the same name.
+        named = lambda path: {item["name"]: item["id"] for item in self("GET", path)}
+        formats, profiles = named("/customformat"), named("/qualityprofile")
         for key, body in media.formats(e.audio_lang).items():  # first: the profiles score them by ID
-            ids["formats"][key] = self._save("/customformat", ids["formats"].get(key), body)
+            ids["formats"][key] = self._save("/customformat", ids["formats"].get(key) or formats.get(body["name"]),
+                                             body)
         schema = self("GET", "/qualityprofile/schema")
         for key in e.profiles:
             body = media.profile_body(schema, key, media.profile_name(key, s.lang, e.audio_lang), ids["formats"],
                                       radarr=self.name == "radarr")
-            ids["profiles"][key] = self._save("/qualityprofile", ids["profiles"].get(key), body)
+            ids["profiles"][key] = self._save("/qualityprofile", ids["profiles"].get(key) or profiles.get(body["name"]),
+                                              body)
         kept = []
         for key in [k for k in ids["profiles"] if k not in e.profiles]:
             pid = ids["profiles"][key]

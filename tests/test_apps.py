@@ -256,6 +256,8 @@ class MediaArr(FakeArr):
             return _copy.deepcopy(RADARR_SCHEMA if self.name == "radarr" else SONARR_SCHEMA)
         if path == "/qualityprofile" and method == "GET":
             return list(self.profiles.values())
+        if path == "/customformat" and method == "GET":
+            return list(getattr(self, "formats", []))
         kind, pid = _re.fullmatch(r"/(customformat|qualityprofile)(?:/(\d+))?", path).groups()
         pid = int(pid) if pid else None
         if method == "POST":
@@ -335,6 +337,17 @@ class EnsureMediaTest(unittest.TestCase):
         deleted = [c[1] for c in app.calls if c[0] == "DELETE"]
         self.assertEqual(deleted, ["/qualityprofile/1", "/qualityprofile/4"])  # failure on 1 ignored
         self.assertNotIn(f"/qualityprofile/{ids['profiles']['mine-1080p']}", deleted)
+
+    def test_lost_ids_adopt_items_by_name(self):
+        # A change that failed half way made these, then lost their IDs: take them over, Radarr refuses duplicates.
+        app = MediaArr("radarr", profiles=[{"id": 7, "name": "Français · 1080p"}])
+        app.formats = [{"id": 55, "name": "Plaid · fr"}]
+        ids, _ = app.ensure_media(chosen(), {})
+        self.assertIn(("PUT", "/customformat/55"), [(c[0], c[1]) for c in app.calls])
+        self.assertIn(("PUT", "/qualityprofile/7"), [(c[0], c[1]) for c in app.calls])
+        self.assertEqual((ids["formats"]["lang"], ids["profiles"]["mine-1080p"]), (55, 7))
+        self.assertEqual(len(posts(app, "customformat")), 3)
+        self.assertFalse(posts(app, "qualityprofile"))
 
     def test_existing_install_keeps_builtins(self):
         app = MediaArr("radarr", profiles=[{"id": 4, "name": "HD-1080p"}])
