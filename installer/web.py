@@ -90,14 +90,14 @@ def header_menu(lang: str) -> str:
 
 
 def page(lang: str, body: str, *, cloth: str = "", p: int = 100, foot: str = "", script: bool = True,
-         menu: str = "", head: str = "") -> str:
+         menu: str = "", head: str = "", wide: bool = False) -> str:
     current = ' aria-current="true"'
     links = "".join(f'<a href="?lang={code}"{current if code == lang else ""}>{code.upper()}</a>' for code in T)
     texts = json.dumps({k: v for k, v in T[lang].items()}, ensure_ascii=False).replace("</", "<\\/")
     return f"""<!doctype html>
 <html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plaid</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/fonts.css">
-<link rel="stylesheet" href="/static/style.css">{head}</head><body>
+<link rel="stylesheet" href="/static/style.css">{head}</head><body{' class="wide"' if wide else ""}>
 <header class="topbar"><a class="brand" href="/"><span class="mark"><img src="/static/favicon.svg" alt="" width="26" height="26"></span><b>Plaid</b></a>
 <div class="top">{menu}<nav class="lang" aria-label="Language">{links}</nav></div></header>
 {f'<div class="track topline" aria-hidden="true"{"" if p >= 40 else " hidden"}><div class="fill" id="weave" style="--w:{p}%"></div></div>' if cloth == "part" else ""}
@@ -176,13 +176,16 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
     last = 5 if remote else 4  # the films and series step is the last question
     remote_section = f"""
 <section data-step="4" hidden>
+  <div class="step-head">
   <h1>{E(t(lang, "field_remote"))}</h1>
   <p class="lead">{E(t(lang, "remote_help"))}</p>
   <div class="tip">{steps_html(lang, "remote_steps")}
-  <p><a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener">login.tailscale.com</a></p></div>
+  <p><a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener">login.tailscale.com</a></p></div></div>
+  <div class="step-body">
   <div class="field"><label class="l" for="tailscale_key">{E(t(lang, "field_tailscale_key"))}</label>
   <input class="input" id="tailscale_key" type="password" autocomplete="off" spellcheck="false" placeholder="tskey-auth-…">
   <p class="ferr" data-err="tailscale"></p></div>
+  </div>
 </section>""" if remote else ""
     chips = "".join(
         f'<button type="button" class="chip" role="radio" aria-checked="{str(pid == "protonvpn").lower()}" '
@@ -208,59 +211,74 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
 <span id="stepof"></span></div>
 
 <section data-step="1" class="field-group">
+  <div class="step-head">
   <h1>{E(t(lang, "field_folder"))}</h1>
-  <p class="lead">{E(t(lang, "subtitle"))}</p>
+  <p class="lead">{E(t(lang, "subtitle"))}</p></div>
+  <div class="step-body">
   <div class="field"><label class="l" for="data_dir">{E(t(lang, "field_folder"))}</label>
   <input class="input" id="data_dir" name="data_dir" value="{E(default_dir)}" autocomplete="off" spellcheck="false">
   {picker_html(lang, True)}
   <p class="hint">{E(t(lang, "field_folder_help"))}</p><p class="ferr" data-err="data_dir"></p></div>
+  </div>
 </section>
 
 <section data-step="2" hidden>
+  <div class="step-head">
   <h1>{E(t(lang, "field_username"))} · {E(t(lang, "field_password"))}</h1>
-  <p class="lead">{E(t(lang, "field_account_help"))}</p>
+  <p class="lead">{E(t(lang, "field_account_help"))}</p></div>
+  <div class="step-body">
   <div class="field"><label class="l" for="username">{E(t(lang, "field_username"))}</label>
   <input class="input" id="username" name="username" autocomplete="username" value="admin"><p class="ferr" data-err="username"></p></div>
   <div class="field"><label class="l" for="password">{E(t(lang, "field_password"))}</label>
   <input class="input" id="password" name="password" type="password" autocomplete="new-password"></div>
   <div class="field"><label class="l" for="password2">{E(t(lang, "field_password2"))}</label>
   <input class="input" id="password2" type="password" autocomplete="new-password"><p class="ferr" data-err="password"></p></div>
+  </div>
 </section>
 
 <section data-step="3" hidden>
+  <div class="step-head">
   <h1>{E(t(lang, "field_vpn"))}</h1>
-  <p class="lead">{E(t(lang, "field_vpn_help"))}</p>
+  <p class="lead">{E(t(lang, "field_vpn_help"))}</p></div>
+  <div class="step-body">
   <div class="prov" role="radiogroup" aria-label="{E(t(lang, "field_vpn"))}">{chips}</div>
   {fields}
   <p class="hint" id="vpn-where">{E(t(lang, "vpn_where"))}</p>
   <div class="note" id="pf-yes">{pf_icon}<span>{E(t(lang, "vpn_pf_yes"))}</span></div>
   <div class="note warn" id="pf-no" hidden>{warn_icon}<span>{E(t(lang, "vpn_pf_no"))}</span></div>
   <p class="ferr" data-err="vpn"></p>
+  </div>
 </section>
 {remote_section}
 <section data-step="{last}" hidden>
+  <div class="step-head">
   <h1>{E(t(lang, "media_title"))}</h1>
-  <p class="lead">{E(t(lang, "media_help"))}</p>
+  <p class="lead">{E(t(lang, "media_help"))}</p></div>
+  <div class="step-body">
   {media_fields(lang, Settings(data_dir="", username="", password="", vpn_provider=None, lang=lang))}
+  </div>
 </section>
 <section data-step="{last + 1}" hidden>
-  <h1>{E(t(lang, "confirm_title"))}</h1>
+  <div class="step-head">
+  <h1>{E(t(lang, "confirm_title"))}</h1></div>
+  <div class="step-body">
   <div id="warnings" class="field-group"></div>
+  </div>
 </section>
 <input type="hidden" name="timezone" id="timezone" value="UTC"><input type="hidden" name="lang" value="{lang}">
 </form>
 
 <section id="progress" hidden data-running="{int(running)}" data-vpn="{int(with_vpn)}">
-  <h1 id="progress-title">{E(t(lang, "progress_title"))}</h1>
-  <p class="lead" id="progress-lead">{E(t(lang, "progress_help"))}</p>
-  <ul class="steps" id="steps"></ul>
+  <div class="step-head"><h1 id="progress-title">{E(t(lang, "progress_title"))}</h1>
+  <p class="lead" id="progress-lead">{E(t(lang, "progress_help"))}</p></div>
+  <div class="step-body"><ul class="steps" id="steps"></ul>
   <pre class="detail" id="detail" hidden></pre>
-  <a class="btn" href="/" id="to-panel" hidden>{E(t(lang, "uninstall_title"))}</a>
+  <a class="btn" href="/" id="to-panel" hidden>{E(t(lang, "uninstall_title"))}</a></div>
 </section>"""
-    foot = f"""<div class="foot" id="foot">
+    foot = f"""<div class="foot" id="foot"><div class="foot-btns">
 <button class="btn" type="button" id="back" hidden>{E(t(lang, "btn_back"))}</button>
-<button class="btn primary" type="button" id="next">{E(t(lang, "btn_next"))}</button></div>"""
-    return page(lang, body, cloth="part", p=40 if running else 8, foot=foot)
+<button class="btn primary" type="button" id="next">{E(t(lang, "btn_next"))}</button></div></div>"""
+    return page(lang, body, cloth="part", p=40 if running else 8, foot=foot, wide=True)
 
 
 def guard_notes(lang: str, s: Settings, status: dict) -> list[tuple[str, str, bool]]:
@@ -313,10 +331,11 @@ def backup_html(lang: str, s: Settings, st: dict) -> str:
         kind = "hint"
     else:
         line, kind = t(lang, "backup_none"), "hint"
-    return (f'<h2>{E(t(lang, "backup_title"))}</h2><div class="maint"><p class="hint">{E(t(lang, "backup_help"))}</p>'
+    return (f'<section class="pcard"><h2>{E(t(lang, "backup_title"))}</h2><div class="maint">'
+            f'<p class="hint">{E(t(lang, "backup_help"))}</p>'
             f'<p class="{kind}">{E(line)}</p><form method="post" action="/api/backup"><button class="btn" '
             f'type="submit">{E(t(lang, "backup_btn"))}</button></form>'
-            f'<a href="/backups">{E(t(lang, "backup_restore_link"))}</a></div>')
+            f'<a href="/backups">{E(t(lang, "backup_restore_link"))}</a></div></section>')
 
 
 def backups_page(lang: str, s: Settings, found: list[dict]) -> str:
@@ -345,11 +364,11 @@ def disk_html(lang: str, s: Settings, status: dict) -> str:
     used = round(100 * (total - free) / total) if known else 0
     room = (t(lang, "picker_free", free=human_size(free, lang), total=human_size(total, lang)) + " · ") if known else ""
     # Every part is always there, hidden when unknown: the page's 30 s refresh fills them (app.js).
-    return (f'<div class="disk" data-disk data-full="{FULL_DISK}"><h2>{E(t(lang, "panel_disk"))}</h2>'
+    return (f'<section class="pcard disk" data-disk data-full="{FULL_DISK}"><h2>{E(t(lang, "panel_disk"))}</h2>'
             f'<span class="meter"{hide(known)}><i style="width:{used}%"></i></span>'
             f'<p class="hint"><span data-room>{E(room)}</span>{E(s.data_dir)}</p>'
             f'<p class="note warn" data-full-note{hide(known and free < FULL_DISK)}>{E(t(lang, "panel_disk_full"))}</p>'
-            f'</div>')
+            f'</section>')
 
 
 def maintenance_html(lang: str, last: dict | None) -> str:
@@ -357,10 +376,10 @@ def maintenance_html(lang: str, last: dict | None) -> str:
     when = (t(lang, "update_last", date=time.strftime("%d/%m/%Y" if lang == "fr" else "%Y-%m-%d",
                                                       time.localtime(last["at"])))
             if last else t(lang, "update_never"))
-    return (f'<h2>{E(t(lang, "maint_title"))}</h2><div class="maint">'
+    return (f'<section class="pcard"><h2>{E(t(lang, "maint_title"))}</h2><div class="maint">'
             f'<p class="hint">{E(t(lang, "update_help"))} {E(when)}</p>'
             f'<form method="post" action="/api/update"><button class="btn" type="submit">{E(t(lang, "update_btn"))}'
-            f'</button></form><a href="/torrents">{E(t(lang, "torrents_link"))}</a></div>')
+            f'</button></form><a href="/torrents">{E(t(lang, "torrents_link"))}</a></div></section>')
 
 
 def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status: dict | None = None,
@@ -380,10 +399,10 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
     # Beginners open two apps; the other five work on their own and are listed for when something needs a look.
     daily = [svc for svc in SERVICES if svc in DAILY_APPS]
     behind = [svc for svc in SERVICES if svc not in DAILY_APPS]
-    apps = (f'<h2>{E(t(lang, "apps_daily"))}</h2><div class="apps">{"".join(app_link(x, True) for x in daily)}</div>'
+    apps = (f'<h2>{E(t(lang, "apps_daily"))}</h2><div class="apps daily-apps">{"".join(app_link(x, True) for x in daily)}</div>'
             f'<p class="lead">{E(t(lang, "apps_flow"))}</p>'
             f'<h2>{E(t(lang, "apps_behind"))}</h2><p class="hint">{E(t(lang, "apps_behind_help"))}</p>'
-            f'<div class="apps">{"".join(app_link(x, False) for x in behind)}</div>')
+            f'<div class="apps behind-apps">{"".join(app_link(x, False) for x in behind)}</div>')
     if not complete:  # a failed install: removal is the only thing to do
         body = f"""<h1>{E(t(lang, "progress_failed"))}</h1><p class="lead">{E(t(lang, "err_unexpected"))}</p>
   <a class="btn danger" href="/remove">{E(t(lang, "uninstall_title"))}</a>"""
@@ -397,17 +416,17 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
   {guard_html(lang, s, status or {})}
   <p class="lead">{lead}{t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
   {apps}
-  {disk_html(lang, s, status or {})}
+  <div class="pgrid-foot">{disk_html(lang, s, status or {})}
   {maintenance_html(lang, last_update)}
-  {backup_html(lang, s, backup_status or {})}
+  {backup_html(lang, s, backup_status or {})}</div>
   {autostart}"""
-    return subpage(lang, body, back=False)
+    return subpage(lang, body, back=False, wide=True)
 
 
-def subpage(lang: str, body: str, back: bool = True, menu: bool = True, head: str = "") -> str:
+def subpage(lang: str, body: str, back: bool = True, menu: bool = True, head: str = "", wide: bool = False) -> str:
     link = f'<a class="back" href="/">‹ {E(t(lang, "nav_back"))}</a>' if back else ""
     return page(lang, f'<section id="done">{link}{body}</section>', foot='<div style="height:32px"></div>',
-                menu=header_menu(lang) if menu else "", head=head)
+                menu=header_menu(lang) if menu else "", head=head, wide=wide)
 
 
 # ---------------------------------------------------------------- settings
@@ -466,7 +485,7 @@ def settings_page(lang: str, s: Settings, note: str = "", shown: Settings | None
                     for pid in PROVIDERS)
     def group(title: str, desc: str, fields: str) -> str:
         return (f'<section class="sgroup"><header><h2>{E(title)}</h2><p class="hint">{E(desc)}</p></header>'
-                f'{fields}</section>')
+                f'<div class="sfields">{fields}</div></section>')
     remote = ""
     if s.platform in REMOTE_PLATFORMS:
         drop = (f'<label class="check"><input type="checkbox" name="remove_tailscale"><div>'
@@ -509,7 +528,7 @@ def settings_page(lang: str, s: Settings, note: str = "", shown: Settings | None
   {sep + remote if remote else ""}
   <button class="btn primary" type="submit">{E(t(lang, "settings_review"))}</button>
   </form>"""
-    return subpage(lang, body, head=f"<style>.vpnf{{display:none}}{visible}</style>")
+    return subpage(lang, body, head=f"<style>.vpnf{{display:none}}{visible}</style>", wide=True)
 
 
 def change_lines(lang: str, chg: dict[str, str], new: Settings) -> list[str]:
