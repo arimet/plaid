@@ -380,7 +380,7 @@ class MaintenanceCliTest(TuiCliTest):
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertEqual(flow.updates, [True])
         self.assertIn("Mises à jour : Radarr.", out.getvalue())
-        self.assertIn("Pas pu télécharger : Sonarr.", out.getvalue())
+        self.assertIn("Pas pu télécharger la nouvelle version de : Sonarr.", out.getvalue())
 
     def test_torrents_from_the_menu(self):
         flow = installed_flow()

@@ -786,7 +786,7 @@ class UpdateWebTest(unittest.TestCase):
         self.assertIn("Tout était déjà à jour.", web.settings_progress("fr", none))
         refused = {"state": "done", "events": [{"step": "step_pull"},
                                                {"step": "step_done", "done": True, "detail": "", "skipped": ["sonarr"]}]}
-        self.assertIn("Pas pu télécharger : Sonarr.", web.settings_progress("fr", refused))
+        self.assertIn("Pas pu télécharger la nouvelle version de : Sonarr.", web.settings_progress("fr", refused))
         failed = {"state": "failed", "events": [{"step": "step_pull", "error": "err_update_failed", "detail": "boom"}]}
         self.assertIn("La mise à jour n’a pas abouti", web.settings_progress("fr", failed))
 

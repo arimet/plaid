@@ -167,7 +167,7 @@ T: dict[str, dict[str, str]] = {
         "update_done": "Apps up to date",
         "update_changed": "Updated: {apps}.",
         "update_none": "Everything was already up to date.",
-        "update_skipped": "Could not download: {apps}. They keep their current version: try again later.",
+        "update_skipped": "Could not download the new version of: {apps}. Try again later.",
         "err_update_failed": "The update did not go through. The apps not restarted yet run their previous version.",
         "step_pull": "Downloading the new versions",
         "step_recreate": "Restarting the apps",
@@ -486,7 +486,7 @@ T: dict[str, dict[str, str]] = {
         "update_done": "Applis à jour",
         "update_changed": "Mises à jour : {apps}.",
         "update_none": "Tout était déjà à jour.",
-        "update_skipped": "Pas pu télécharger : {apps}. Elles gardent leur version actuelle : réessayez plus tard.",
+        "update_skipped": "Pas pu télécharger la nouvelle version de : {apps}. Réessayez plus tard.",
         "err_update_failed": "La mise à jour n’a pas abouti. Les applis pas encore redémarrées tournent sur leur "
                              "version précédente.",
         "step_pull": "Téléchargement des nouvelles versions",
