@@ -712,3 +712,29 @@ class PickerTest(unittest.TestCase):
         page = web.settings_page("fr", settings())
         self.assertIn("data-picker", page)
         self.assertNotIn('data-create="1"', page)  # settings take a folder as it is: they never make one
+
+
+class StatusWebTest(unittest.TestCase):
+    start, req = WebTest.start, WebTest.req
+    open_panel = GuardWebTest.open_panel
+
+    def test_panel_shows_each_app_state(self):
+        html = self.open_panel(apps={"radarr": "running", "sonarr": "failing"})
+        self.assertIn('data-app="radarr" data-state="running"', html)
+        self.assertIn('data-app="sonarr" data-state="failing"', html)
+        self.assertIn('data-app="bazarr" data-state="unknown"', html)  # the guard has not seen it yet
+        self.assertIn("En panne", html)
+
+    def test_panel_disk_room(self):
+        html = self.open_panel(free=5 * 1024 ** 3, total=500 * 1024 ** 3)
+        self.assertIn("5,0 Go libres sur 500 Go", html)
+        self.assertIn("presque plein", html)
+        self.server.shutdown()
+        html = self.open_panel(free=None, total=None)  # a Mac external disk: room unknown, no bar
+        self.assertNotIn('class="meter"', html)
+
+    def test_status_api(self):
+        self.open_panel(apps={"radarr": "running"})
+        status, _, body = self.req("GET", "/api/status", headers={"Cookie": self.cookie})
+        self.assertEqual((status, json.loads(body)["apps"]), (200, {"radarr": "running"}))
+        self.assertEqual(self.req("GET", "/api/status")[0], 401)

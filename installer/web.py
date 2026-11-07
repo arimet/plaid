@@ -279,12 +279,35 @@ def guard_html(lang: str, s: Settings, status: dict) -> str:
                    for title, text, confirm in guard_notes(lang, s, status))
 
 
+FULL_DISK = 20 * 10 ** 9  # under this, downloads soon stop
+
+
+def disk_html(lang: str, s: Settings, status: dict) -> str:
+    """The media disk's room, from the guard's last round. None on a Mac external disk: no bar then."""
+    free, total = status.get("free"), status.get("total")
+    room = ""
+    if free is not None and total:
+        room = (f'<span class="meter"><i style="width:{round(100 * (total - free) / total)}%"></i></span>'
+                f'<p class="hint">{E(t(lang, "picker_free", free=human_size(free, lang), total=human_size(total, lang)))}'
+                f' · {E(s.data_dir)}</p>')
+    else:
+        room = f'<p class="hint">{E(s.data_dir)}</p>'
+    full = (f'<p class="note warn">{E(t(lang, "panel_disk_full"))}</p>'
+            if free is not None and free < FULL_DISK else "")
+    return f'<div class="disk" data-disk><h2>{E(t(lang, "panel_disk"))}</h2>{room}{full}</div>'
+
+
 def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status: dict | None = None) -> str:
+    states = (status or {}).get("apps") or {}
+
     def app_link(svc: str, daily: bool) -> str:
+        state = states.get(svc, "unknown")
         return (f'<a class="app{" daily" if daily else ""}" href="http://{E(host)}:{PORTS[svc]}" target="_blank" '
                 f'rel="noopener"><span class="ic" style="--c:{APP_COLORS[svc]}"><img src="/static/icons/{svc}.svg" '
                 f'alt="" width="28" height="28"></span><span><b>{E(svc_name(svc))}</b> '
-                f'<span class="role">{E(t(lang, "app_" + svc))}</span><small>{E(t(lang, "appd_" + svc))}</small></span>'
+                f'<span class="role">{E(t(lang, "app_" + svc))}</span><small>{E(t(lang, "appd_" + svc))}</small>'
+                f'<span class="state" data-app="{svc}" data-state="{state}"><i></i>'
+                f'{E(t(lang, "state_" + state))}</span></span>'
                 f'<span class="open">{E(t(lang, "done_open"))}</span></a>')
 
     # Beginners open two apps; the other five work on their own and are listed for when something needs a look.
@@ -307,6 +330,7 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
   {guard_html(lang, s, status or {})}
   <p class="lead">{lead}{t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
   {apps}
+  {disk_html(lang, s, status or {})}
   {autostart}"""
     return subpage(lang, body, back=False)
 
@@ -679,6 +703,10 @@ def make_handler(state: State):
                     return self.json(200, state.flow.browse(query.get("path", [""])[0], platform))
                 return self.json(200, {"disks": state.flow.disks(platform, home), "default": default_data_dir(state.env),
                                        "desktop": platform in ("mac", "windows")})
+            if path == "/api/status":
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                return self.json(200, state.flow.guard_status())
             if path == "/api/uninstall-status":
                 if self.locked():
                     return self.json(401, {})

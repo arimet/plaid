@@ -8,7 +8,7 @@ import time
 import traceback
 
 from installer import docker, flow
-from installer.compose import DISK_APPS
+from installer.compose import DISK_APPS, SERVICES
 from installer.docker import DockerError
 
 INTERVAL = 30
@@ -18,6 +18,17 @@ def _instant(started: str) -> str:
     """Docker's StartedAt with its fraction padded: it trims trailing zeros, so ".2Z" must sort after ".12Z"."""
     head, _, frac = started.rstrip("Z").partition(".")
     return f"{head[:19]}.{frac.ljust(9, '0')}"
+
+
+def app_states(containers: dict) -> dict[str, str]:
+    """What the panel shows for each app: running, starting, failing (health check fails) or stopped."""
+    states = {}
+    for svc in SERVICES:
+        c = containers.get(svc)
+        if c is not None:
+            states[svc] = ("stopped" if not c["running"] else "failing" if c["health"] == "unhealthy"
+                           else "starting" if c["health"] == "starting" else "running")
+    return states
 
 
 def decide(disk: str, vpn_on: bool, containers: dict, blind: set[str]) -> tuple[list[tuple], str]:
@@ -54,7 +65,7 @@ def _cycle(dk, fl, state_dir: str) -> dict | None:
     if not fl.is_complete(state_dir) or removing():
         return None
     s = fl.load_settings(state_dir)
-    disk = dk.marker_state(dk.host_path(s.data_dir, s.platform))
+    disk, free, total = dk.marker_room(dk.host_path(s.data_dir, s.platform), s.platform)
     containers = dk.stack_containers()
     blind = set()
     if disk == "ok":
@@ -71,7 +82,7 @@ def _cycle(dk, fl, state_dir: str) -> dict | None:
             dk.compose(state_dir, *(commands.get(action[0]) or action), timeout=docker.HELPER_TIMEOUT)
         except DockerError as e:  # the next action, and the next round, may still fix things
             print(f"guard: {action[0]} failed: {e}", file=sys.stderr)
-    status = {"disk": disk, "vpn": vpn}
+    status = {"disk": disk, "vpn": vpn, "apps": app_states(containers), "free": free, "total": total}
     fl.save_guard_status(status, state_dir)
     return status
 

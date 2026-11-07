@@ -274,3 +274,12 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 .meter i{display:block;height:100%;border-radius:var(--pill);background:linear-gradient(90deg,var(--accent),var(--accent-2))}
 .picker-actions{display:flex;gap:10px;flex-wrap:wrap}
 .btn.small{font-size:15px;padding:12px 18px}
+
+/* ----------------------------------------------------------------- panel: app states and disk */
+.state{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px;font-weight:600;color:var(--text-2)}
+.state i{width:8px;height:8px;border-radius:50%;flex:none;background:var(--muted)}
+.state[data-state="running"] i{background:var(--accent)}
+.state[data-state="starting"] i{background:var(--warn)}
+.state[data-state="failing"] i,.state[data-state="stopped"] i{background:var(--danger)}
+.state[data-state="failing"],.state[data-state="stopped"]{color:var(--danger-text)}
+.disk{display:flex;flex-direction:column;gap:10px;margin-top:8px}

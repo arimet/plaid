@@ -232,7 +232,7 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
 
 
 GUARD_FILE = "guard.json"
-GUARD_DEFAULT = {"disk": "unknown", "vpn": "off"}  # no alert until the guard has looked
+GUARD_DEFAULT = {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None}  # no alert until it looked
 GUARD_STALE = 150  # seconds: rounds come every 30 s, so an older status means the guard is stuck or gone
 
 

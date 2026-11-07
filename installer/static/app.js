@@ -13,7 +13,8 @@
   const bytes = (n) => {
     const nf = new Intl.NumberFormat(document.documentElement.lang, {maximumFractionDigits: 1});
     const tb = 1024 ** 4, gb = 1024 ** 3;  // as the removal page counts (web.human_size)
-    return n >= tb ? `${nf.format(n / tb)}\u00a0${T.unit_tb}` : `${nf.format(Math.round(n / gb))}\u00a0${T.unit_gb}`;
+    const [value, unit] = n >= tb ? [n / tb, T.unit_tb] : [n / gb, T.unit_gb];
+    return `${nf.format(value < 10 ? value : Math.round(value))}\u00a0${unit}`;
   };
   $$("[data-picker]").forEach((picker) => {
     const field = $("#data_dir"), panel = $(".picker-panel", picker), list = $(".picker-list", picker);
@@ -116,6 +117,19 @@
     $("[data-use]", picker).addEventListener("click", () => current && choose(current));
     if (here) here.addEventListener("click", () => current && choose(join(current, "Plaid")));
   });
+
+  // ---------------------------------------------------------------- panel: app states and disk room, every 30 s
+  if ($("[data-disk]")) {
+    setInterval(() => {
+      fetch("/api/status", {credentials: "same-origin"}).then((r) => (r.ok ? r.json() : Promise.reject())).then((st) => {
+        $$(".state[data-app]").forEach((el) => {
+          const state = (st.apps || {})[el.dataset.app] || "unknown";
+          el.dataset.state = state;
+          el.lastChild.textContent = T["state_" + state];
+        });
+      }).catch(() => {});  // the next round tries again
+    }, 30000);
+  }
 
   // ---------------------------------------------------------------- wizard
   const form = $("#wizard");

@@ -80,6 +80,9 @@ class FakeDk:
     def marker_state(self, src):
         return self.disk
 
+    def marker_room(self, src, platform):
+        return self.disk, 60, 100
+
     def stack_containers(self):
         return self.containers
 
@@ -133,9 +136,10 @@ class CycleTest(unittest.TestCase):
 
     def test_cycle_saves_status(self):
         dk, fl = FakeDk(disk="missing", containers={"radarr": Q()}), FakeFlow()
-        self.assertEqual(guard.cycle(dk, fl, "/state"), {"disk": "missing", "vpn": "off"})
+        want = {"disk": "missing", "vpn": "off", "apps": {"radarr": "running"}, "free": 60, "total": 100}
+        self.assertEqual(guard.cycle(dk, fl, "/state"), want)
         self.assertEqual(dk.calls, [("stop", *DISK_APPS)])
-        self.assertEqual(fl.saved, [{"disk": "missing", "vpn": "off"}])
+        self.assertEqual(fl.saved, [want])
 
     def test_cycle_restarts_blind_apps(self):
         dk = FakeDk(containers={"radarr": Q(), "sonarr": Q(running=False)}, blind={"radarr", "sonarr"})
@@ -146,7 +150,8 @@ class CycleTest(unittest.TestCase):
     def test_one_failing_action_does_not_stop_the_others(self):
         dk = FakeDk(containers={"gluetun": G(id="g2"), "qbittorrent": Q()}, fail_on="--force-recreate")
         fl = FakeFlow(vpn="protonvpn")
-        self.assertEqual(guard.cycle(dk, fl, "/state"), {"disk": "ok", "vpn": "ok"})
+        self.assertEqual({k: v for k, v in guard.cycle(dk, fl, "/state").items() if k in ("disk", "vpn")},
+                         {"disk": "ok", "vpn": "ok"})
         self.assertEqual(dk.calls, [("up", "-d", "--force-recreate", "--no-deps", "qbittorrent"),
                                     ("up", "-d", *DISK_APPS)])
         self.assertEqual(len(fl.saved), 1)
@@ -187,7 +192,7 @@ class RemovalRaceTest(unittest.TestCase):
         from installer import flow
         seen = []
         dk = FakeDk()
-        dk.marker_state = lambda src: seen.append(flow.OPS_LOCK.locked()) or "ok"
+        dk.marker_room = lambda src, platform: seen.append(flow.OPS_LOCK.locked()) or ("ok", None, None)
         guard.cycle(dk, FakeFlow(), "/state")
         self.assertEqual(seen, [True])
 
@@ -220,4 +225,11 @@ class StoppedWorkerTest(unittest.TestCase):
         # Applied, then nobody opened the progress page: the container stays, stopped.
         dk = FakeDk(disk="missing", containers={"radarr": Q()})
         dk.apply_stopped = True
-        self.assertEqual(guard.cycle(dk, FakeFlow(), "/state"), {"disk": "missing", "vpn": "off"})
+        self.assertEqual(guard.cycle(dk, FakeFlow(), "/state")["disk"], "missing")
+
+
+class AppStatesTest(unittest.TestCase):
+    def test_app_states(self):
+        got = guard.app_states({"radarr": Q(), "sonarr": Q(running=False), "jellyfin": Q(health="unhealthy"),
+                                "seerr": Q(health="starting"), "gluetun": G()})
+        self.assertEqual(got, {"radarr": "running", "sonarr": "stopped", "jellyfin": "failing", "seerr": "starting"})

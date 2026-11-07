@@ -335,15 +335,15 @@ class CancelTest(unittest.TestCase):
 class GuardStatusTest(unittest.TestCase):
     def test_guard_status_defaults(self):
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off"})
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None})
             with open(os.path.join(d, "guard.json"), "w") as f:
                 f.write("{broken")
-            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off"})
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None})
 
     def test_guard_status_round_trip(self):
         with tempfile.TemporaryDirectory() as d:
             flow.save_guard_status({"disk": "missing", "vpn": "down"}, d)
-            self.assertEqual(flow.guard_status(d), {"disk": "missing", "vpn": "down"})
+            self.assertEqual(flow.guard_status(d), {"disk": "missing", "vpn": "down", "apps": {}, "free": None, "total": None})
 
     def test_confirm_disk_writes_marker_and_status(self):
         dk = FakeDocker()
@@ -351,7 +351,7 @@ class GuardStatusTest(unittest.TestCase):
             flow.save_guard_status({"disk": "unconfirmed", "vpn": "ok"}, d)
             self.assertTrue(flow.confirm_disk(settings(), dk=dk, state_dir=d))
             self.assertIn(("marker", "/srv/arr"), dk.calls)
-            self.assertEqual(flow.guard_status(d), {"disk": "ok", "vpn": "ok"})
+            self.assertEqual(flow.guard_status(d), {"disk": "ok", "vpn": "ok", "apps": {}, "free": None, "total": None})
 
 
 class ConfirmDiskSafetyTest(unittest.TestCase):
@@ -382,10 +382,10 @@ class StaleGuardStatusTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             with open(os.path.join(d, "guard.json"), "w") as f:
                 json.dump({"disk": "missing", "vpn": "down", "at": time.time() - 600}, f)
-            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off"})
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None})
             with open(os.path.join(d, "guard.json"), "w") as f:
                 json.dump({"disk": "missing", "vpn": "down"}, f)  # no time: unknown age
-            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off"})
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None})
 
 
 class RemovalTakesApplyWorkerTest(unittest.TestCase):

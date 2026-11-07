@@ -443,3 +443,16 @@ class MinorDisksTest(unittest.TestCase):
         self.assertRegex(names[0], r"^\.plaid-link-[0-9a-f]{8}$")
         self.assertNotEqual(names[0], names[1])
         self.assertIn("rm -f /m/.plaid-link-*", run.calls[0][run.calls[0].index("-c") + 1])
+
+
+class MarkerRoomTest(unittest.TestCase):
+    def test_marker_and_room_in_one_probe(self):
+        run = FakeRun(0, "ok\nfs 100 40 60 40% /m\n", "")
+        self.assertEqual(docker.marker_room("/srv/arr", "linux", run=run), ("ok", 60 * 1024, 100 * 1024))
+        self.assertEqual(docker.marker_state("/srv/arr", run=FakeRun(0, "ok\nfs 100 40 60 40% /m\n", "")), "ok")
+
+    def test_room_unknown(self):
+        self.assertEqual(docker.marker_room("/Volumes/Films/Plaid", "mac", run=FakeRun(0, "ok\nfs 1 1 0 9% /m\n", "")),
+                         ("ok", None, None))
+        self.assertEqual(docker.marker_room("/srv/arr", "linux", run=FakeRun(125, "", "does not exist")),
+                         ("missing", None, None))

@@ -96,7 +96,14 @@ def _probe(src: str, script: str, run: Run) -> str:
 
 def marker_state(src: str, run: Run = default_run) -> str:
     """"ok", "missing" (folder gone or empty), "unconfirmed" (files but no marker) or "unknown" (probe failed)."""
-    return _probe(src, _MARKER_SCRIPT, run)
+    return marker_room(src, "linux", run)[0]
+
+
+def marker_room(src: str, platform: str, run: Run = default_run) -> tuple[str, int | None, int | None]:
+    """(marker state, free, total) in one probe: the guard reads both every round."""
+    state, _, df_line = _probe(src, _MARKER_SCRIPT + "; df -kP /m | tail -1", run).partition("\n")
+    space = _space(df_line) if _room_known(src, platform) else None
+    return (state.strip(), *(space or (None, None)))
 
 
 def folder_state(src: str, run: Run = default_run) -> str:
