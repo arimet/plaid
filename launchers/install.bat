@@ -24,6 +24,14 @@ if not defined ADDR set "ADDR=localhost"
 rem Start Docker Desktop at sign-in, or the apps stop when the PC restarts (best effort).
 powershell -NoProfile -Command "$f = Join-Path $env:APPDATA 'Docker\settings-store.json'; try { $j = Get-Content $f -Raw | ConvertFrom-Json; $j | Add-Member -Force AutoStart $true; $j | ConvertTo-Json -Depth 20 | Set-Content $f -Encoding UTF8 } catch {}"
 
+rem A newer Plaid when there is one (offline, the one here). An older Plaid container is replaced: its settings
+rem live in the plaid-state volume, not in the container.
+docker pull -q "%PLAID_IMAGE%" >nul 2>nul
+set "RUNNING="
+set "LATEST="
+for /f "usebackq delims=" %%i in (`docker container inspect -f "{{.Image}}" plaid 2^>nul`) do set "RUNNING=%%i"
+for /f "usebackq delims=" %%i in (`docker image inspect -f "{{.Id}}" "%PLAID_IMAGE%" 2^>nul`) do set "LATEST=%%i"
+if defined RUNNING if not "%RUNNING%"=="%LATEST%" docker rm -f plaid >nul 2>nul
 docker container inspect plaid >nul 2>nul && (
   docker start plaid >nul
 ) || (

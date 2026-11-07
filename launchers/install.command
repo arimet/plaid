@@ -22,6 +22,13 @@ plutil -replace AutoStart -bool YES "$STORE" >/dev/null 2>&1 || true
 TZ_NAME=$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')
 # The Mac's address on the local network: the links must open from the TV or the phone too.
 ADDR=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo localhost)
+# A newer Plaid when there is one (offline, the one here). An older Plaid container is replaced: its settings
+# live in the plaid-state volume, not in the container.
+docker pull -q "$IMAGE" >/dev/null 2>&1 || true
+if docker container inspect "$NAME" >/dev/null 2>&1 &&
+   [ "$(docker container inspect -f '{{.Image}}' "$NAME")" != "$(docker image inspect -f '{{.Id}}' "$IMAGE" 2>/dev/null)" ]; then
+  docker rm -f "$NAME" >/dev/null
+fi
 if docker container inspect "$NAME" >/dev/null 2>&1; then
   docker start "$NAME" >/dev/null
 else

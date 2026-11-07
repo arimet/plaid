@@ -48,6 +48,11 @@ run() {
 }
 
 start_panel() {
+  # An older Plaid container is replaced by the image just pulled: its settings live in the plaid-state volume.
+  if $DOCKER container inspect "$NAME" >/dev/null 2>&1 &&
+     [ "$($DOCKER container inspect -f '{{.Image}}' "$NAME")" != "$($DOCKER image inspect -f '{{.Id}}' "$IMAGE" 2>/dev/null)" ]; then
+    $DOCKER rm -f "$NAME" >/dev/null
+  fi
   if $DOCKER container inspect "$NAME" >/dev/null 2>&1; then
     $DOCKER start "$NAME" >/dev/null
   else
