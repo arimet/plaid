@@ -56,6 +56,10 @@ class FakeDocker:
     def folder_state(self, src):
         return getattr(self, "folder", "library")
 
+    def disk_check(self, path, platform, home):
+        self.calls.append(("disk_check", path))
+        return getattr(self, "check", {"free": 10 ** 13, "hardlinks": True})
+
     def write_marker(self, src):
         self.calls.append(("marker", src))
 
@@ -115,6 +119,18 @@ class FlowTest(unittest.TestCase):
         dk = FakeDocker(dir=(False, 10), busy={8096})
         found = flow.preflight(settings(vpn_provider=None, vpn_fields={}), dk=dk)
         self.assertEqual(found, ["err_port_busy:8096", "warn_dir_not_empty", "warn_no_vpn"])
+
+    def test_preflight_disk_warnings(self):
+        small = FakeDocker(check={"free": 99 * 10 ** 9, "hardlinks": False})
+        found = flow.preflight(settings(), dk=small)
+        self.assertEqual(found, ["warn_disk_small", "warn_no_hardlinks"])
+        self.assertIn(("disk_check", "/srv/arr"), small.calls)
+        unknown = FakeDocker(check={"free": None, "hardlinks": None})
+        self.assertEqual(flow.preflight(settings(), dk=unknown), [])
+        self.assertEqual(flow.preflight(settings(data_dir="/media/zoe/Films/Plaid"), dk=FakeDocker()),
+                         ["warn_disk_automount"])
+        self.assertEqual(flow.preflight(settings(data_dir="/media/zoe/Films/Plaid", platform="synology"),
+                                        dk=FakeDocker()), [])
 
     def test_preflight_no_tun(self):
         dk = FakeDocker(devices=set())

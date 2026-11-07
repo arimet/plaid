@@ -97,8 +97,26 @@ def preflight(s: Settings, dk=docker) -> list[str]:
         empty = True  # unknown: the install step creates the folders and reports a real failure
     if not empty:
         found.append("warn_dir_not_empty")
+    found += disk_warnings(s, dk)
     if not s.vpn_provider:
         found.append("warn_no_vpn")
+    return found
+
+
+SMALL_DISK = 100 * 10 ** 9  # a few films: 1080p takes 5-15 GB, 4K 20-60 GB
+
+
+def disk_warnings(s: Settings, dk=docker) -> list[str]:
+    """What the disk under the media folder will cost: little room, copies instead of hard links, a disk the
+    desktop mounts only when someone signs in."""
+    check = dk.disk_check(s.data_dir, s.platform, s.home)
+    found = []
+    if check["free"] is not None and check["free"] < SMALL_DISK:
+        found.append("warn_disk_small")
+    if check["hardlinks"] is False:
+        found.append("warn_no_hardlinks")
+    if s.platform == "linux" and s.data_dir.startswith("/media/"):
+        found.append("warn_disk_automount")
     return found
 
 

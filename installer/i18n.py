@@ -149,6 +149,11 @@ T: dict[str, dict[str, str]] = {
         "err_vpn_failed": "The VPN did not connect. Check its details, remove the stack and install again.",
         "err_unexpected": "Something went wrong. Remove the stack and install again.",
         "warn_dir_not_empty": "The folder {path} already holds files. Installing never touches them, but if you ever remove Plaid and tick “also delete the folder”, they go too.",
+        "warn_disk_small": "Less than 100 GB left on this disk. A film takes 5 to 15 GB in 1080p, 20 to 60 GB in 4K.",
+        "warn_no_hardlinks": "This disk cannot make hard links. Each finished download is copied into your library: "
+                             "a film takes twice its size until its torrent is removed.",
+        "warn_disk_automount": "This disk is mounted when someone signs in to the computer. Plaid waits for it: on a "
+                               "machine nobody signs in to, the apps may never start.",
         "warn_no_vpn": "Without a VPN, your internet provider and the other peers see what you download.",
         "err_folder_missing": "Folder not found: is the disk plugged in?",
         "err_folder_unreadable": "Docker cannot open this folder. On Mac and Windows, check it is shared in "
@@ -418,6 +423,11 @@ T: dict[str, dict[str, str]] = {
                           "réinstallez.",
         "err_unexpected": "Quelque chose a échoué. Supprimez la stack et réinstallez.",
         "warn_dir_not_empty": "Le dossier {path} contient déjà des fichiers. L’installation n’y touche pas, mais si un jour vous supprimez Plaid en cochant « effacer aussi le dossier », ils partiront avec.",
+        "warn_disk_small": "Il reste moins de 100 Go sur ce disque. Un film prend 5 à 15 Go en 1080p, 20 à 60 Go en 4K.",
+        "warn_no_hardlinks": "Ce disque ne sait pas faire de liens physiques. Chaque téléchargement terminé est copié "
+                             "dans votre bibliothèque : un film prend deux fois sa taille tant que son torrent reste.",
+        "warn_disk_automount": "Ce disque se monte quand quelqu’un ouvre une session sur l’ordinateur. Plaid l’attend : "
+                               "sur une machine où personne ne se connecte, les applis risquent de ne jamais démarrer.",
         "warn_no_vpn": "Sans VPN, votre fournisseur d’accès et les autres pairs voient ce que vous téléchargez.",
         "err_folder_missing": "Dossier introuvable : le disque est-il branché ?",
         "err_folder_unreadable": "Docker n’arrive pas à ouvrir ce dossier. Sur Mac et Windows, vérifiez qu’il "

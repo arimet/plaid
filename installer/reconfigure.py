@@ -119,6 +119,8 @@ def check(old: Settings, new: Settings, dk=docker) -> list[str]:
         state = dk.folder_state(dk.host_path(new.data_dir, new.platform))
         if state in FOLDER_CHECK:
             found.append(FOLDER_CHECK[state])
+        if state not in ("missing", "unknown"):
+            found += flow.disk_warnings(new, dk)
     return found
 
 

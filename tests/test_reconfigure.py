@@ -283,6 +283,12 @@ class ReviewFixesApplyTest(ApplyTest):
 
 class EmptyFolderTest(unittest.TestCase):
     def test_empty_folder_asks_if_the_disk_is_plugged(self):
+        dk = FakeDocker(check={"free": 10 ** 9, "hardlinks": False})
+        self.assertEqual(reconfigure.check(settings(), settings(data_dir="/srv/new"), dk),
+                         ["warn_disk_small", "warn_no_hardlinks"])
+        gone = FakeDocker(folder="missing", check={"free": 10 ** 9, "hardlinks": False})
+        self.assertEqual(reconfigure.check(settings(), settings(data_dir="/srv/new"), gone), ["err_folder_missing"])
+        self.assertEqual(reconfigure.check(settings(), settings(lang="fr"), dk), [])  # the folder did not change
         found = reconfigure.check(settings(), settings(data_dir="/srv/new"), FakeDocker(folder="empty"))
         self.assertEqual(found, ["warn_folder_empty"])
 
