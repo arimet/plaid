@@ -318,6 +318,41 @@ def last_update(state_dir: str = STATE_DIR) -> dict | None:
     return update.last(state_dir)
 
 
+def start_backup(dk=docker, state_dir: str = STATE_DIR) -> None:
+    _start_worker({"kind": "backup"}, dk, state_dir)
+
+
+def start_restore(name: str, dk=docker, state_dir: str = STATE_DIR) -> None:
+    _start_worker({"kind": "restore", "name": name}, dk, state_dir)
+
+
+def backup_status(state_dir: str = STATE_DIR) -> dict:
+    from installer import backup
+    return backup.status(state_dir)
+
+
+def list_backups(s: Settings, dk=docker) -> list[dict]:
+    from installer import backup
+    dest, sub, _ = backup.target(s, dk)
+    return dk.list_backups(dest, sub)
+
+
+def maybe_backup(state_dir: str = STATE_DIR, now=None, start=None) -> bool:
+    """The guard's nightly check: starts a backup once a day after 3:00. The night is noted only once it started,
+    so a busy worker means "next round", and a crash does not mean "every 30 s"."""
+    from datetime import datetime
+    from installer import backup
+    when = (now or datetime.now)()
+    if not backup.due(when, backup.status(state_dir)):
+        return False
+    try:
+        (start or (lambda: start_backup(state_dir=state_dir)))()
+    except WorkerBusy:
+        return False
+    backup.note(state_dir, tried=when.date().isoformat())
+    return True
+
+
 def start_update(dk=docker, state_dir: str = STATE_DIR) -> None:
     """The apps' update runs in the same worker: one operation on the stack at a time."""
     _start_worker({"kind": "update"}, dk, state_dir)

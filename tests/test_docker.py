@@ -456,3 +456,48 @@ class MarkerRoomTest(unittest.TestCase):
                          ("ok", None, None))
         self.assertEqual(docker.marker_room("/srv/arr", "linux", run=FakeRun(125, "", "does not exist")),
                          ("missing", None, None))
+
+
+class BackupDockerTest(unittest.TestCase):
+    VOLS = ["plaid_radarr-config", "plaid_jellyfin-config"]
+
+    def test_archive_reads_volumes_and_writes_whole_files_only(self):
+        run = ScriptRun((0, "12345\n", ""))
+        size = docker.backup_archive(self.VOLS, "/srv/arr", "backups", "plaid-backup-2026-11-07-0300.tar.gz", run=run)
+        args = run.calls[0]
+        self.assertEqual(size, 12345)
+        self.assertIn("plaid_radarr-config:/v/plaid_radarr-config:ro", args)
+        self.assertIn("plaid-state:/v/plaid-state:ro", args)
+        self.assertIn("type=bind,src=/srv/arr,dst=/b", args)  # --mount: a missing folder is an error
+        script = args[args.index("-c") + 1]
+        for pattern in ("*/logs", "*/MediaCover", "*/metadata", "plaid-state/apply-request.json"):
+            self.assertIn(f'--exclude="{pattern}"', script)
+        self.assertIn('.tmp" "$d/$1"', script)  # written aside, renamed when whole
+        self.assertIn("tail -n +8", script)  # seven kept
+        self.assertEqual(args[-1], "plaid-backup-2026-11-07-0300.tar.gz")
+
+    def test_archive_failure_raises(self):
+        with self.assertRaises(docker.DockerError):
+            docker.backup_archive(self.VOLS, "/srv/arr", "", "x.tar.gz", run=ScriptRun((1, "", "No space left")))
+
+    def test_list_backups_newest_first(self):
+        out = "1000 plaid-backup-2026-11-05-0300.tar.gz\n2000 plaid-backup-2026-11-07-0300.tar.gz\n"
+        got = docker.list_backups("/srv/arr", "backups", run=ScriptRun((0, out, "")))
+        self.assertEqual(got, [{"name": "plaid-backup-2026-11-07-0300.tar.gz", "size": 2000},
+                               {"name": "plaid-backup-2026-11-05-0300.tar.gz", "size": 1000}])
+        self.assertEqual(docker.list_backups("/srv/arr", "", run=ScriptRun((125, "", "does not exist"))), [])
+
+    def test_restore_empties_each_volume_and_keeps_the_running_progress(self):
+        run = ScriptRun((0, "", ""))
+        docker.restore_archive(self.VOLS, "/srv/arr", "backups", "plaid-backup-2026-11-07-0300.tar.gz", run=run)
+        args = run.calls[0]
+        self.assertIn("plaid_radarr-config:/v/plaid_radarr-config", args)
+        self.assertIn("plaid-state:/s", args)
+        script = args[args.index("-c") + 1]
+        self.assertIn("-mindepth 1 -delete", script)  # no old -wal next to a restored database
+        self.assertIn("settings.json compose.json update.json", script)  # apply.json, the restore's own progress, stays
+        self.assertNotIn("find /s", script)
+
+    def test_restore_refuses_odd_names(self):
+        with self.assertRaises(ValueError):
+            docker.restore_archive(self.VOLS, "/srv/arr", "", "../etc/passwd", run=ScriptRun())

@@ -155,13 +155,14 @@ def _under(path: str, roots) -> bool:
     return any(path == r or path.startswith(r + "/") for r in roots)
 
 
-def _helper(mounts: list[str], cmd: list[str], run: Run) -> subprocess.CompletedProcess:
-    """A short throwaway container; one that hangs is cut at PROBE_TIMEOUT and removed."""
+def _helper(mounts: list[str], cmd: list[str], run: Run, timeout: float = PROBE_TIMEOUT) -> subprocess.CompletedProcess:
+    """A throwaway container; one that hangs is cut at `timeout` and removed. "type=..." mounts go through --mount
+    (a missing host folder is an error), the others (volumes) through -v."""
     name = f"plaid-probe-{uuid.uuid4().hex[:8]}"
     args = ["docker", "run", "--rm", "--name", name]
     for m in mounts:
-        args += ["-v", m] if m.endswith(":ro") else ["--mount", m]
-    result = run([*args, HELPER, *cmd], timeout=PROBE_TIMEOUT)
+        args += ["--mount", m] if m.startswith("type=") else ["-v", m]
+    result = run([*args, HELPER, *cmd], timeout=timeout)
     if result.returncode == 124:
         run(["docker", "rm", "-f", name])
     return result
@@ -292,6 +293,57 @@ def disk_check(path: str, platform: str, home: str, run: Run = default_run) -> d
         if "does not exist" not in (result.stderr or ""):
             return unknown
     return unknown
+
+
+# -- backups
+
+BACKUP_PREFIX, BACKUP_KEEP = "plaid-backup-", 7
+BACKUP_TIMEOUT = 1800  # a large Jellyfin library: still bounded, the guard stands back meanwhile
+_BACKUP_NAME = re.compile(r"^plaid-backup-\d{4}-\d{2}-\d{2}-\d{4}\.tar\.gz$")
+# What the apps make again on their own, and Plaid's own passing files.
+BACKUP_EXCLUDES = ("*/logs", "*/log", "*/logs.db*", "*/cache", "*/transcodes", "*/MediaCover", "*/metadata",
+                   "*/Backups", "*/Definitions", "*/GeoDB", "*/Sentry", "plaid-state/guard.json",
+                   "plaid-state/apply.json", "plaid-state/apply-request.json", "plaid-state/backup.json")
+RESTORED_STATE = ("settings.json", "compose.json", "update.json")
+
+
+def backup_archive(volumes: list[str], dest: str, sub: str, name: str, run: Run = default_run) -> int:
+    """Archives the volumes and Plaid's state into dest/sub/name; keeps the newest BACKUP_KEEP. Returns its size."""
+    mounts = [f"{v}:/v/{v}:ro" for v in volumes] + ["plaid-state:/v/plaid-state:ro", f"type=bind,src={dest},dst=/b"]
+    excludes = " ".join(f'--exclude="{p}"' for p in BACKUP_EXCLUDES)
+    script = (f'set -e; d="/b/{sub}"; mkdir -p "$d"; tar -czf "$d/$1.tmp" -C /v {excludes} .; mv "$d/$1.tmp" "$d/$1"; '
+              f'ls -1t "$d"/{BACKUP_PREFIX}*.tar.gz | tail -n +{BACKUP_KEEP + 1} | xargs -r rm -f; stat -c %s "$d/$1"')
+    result = _helper(mounts, ["sh", "-c", script, "sh", name], run, timeout=BACKUP_TIMEOUT)
+    if result.returncode != 0:
+        raise DockerError((result.stderr or result.stdout or "").strip() or f"exit {result.returncode}")
+    return int(result.stdout.split()[-1])
+
+
+def list_backups(dest: str, sub: str, run: Run = default_run) -> list[dict]:
+    """{name, size} of the backups in dest/sub, newest first; none when the folder is not there."""
+    script = (f'cd "/b/{sub}" 2>/dev/null || exit 0; for f in {BACKUP_PREFIX}*.tar.gz; do '
+              '[ -f "$f" ] && stat -c "%s %n" "$f"; done; true')
+    result = _helper([f"type=bind,src={dest},dst=/b,readonly"], ["sh", "-c", script], run)
+    found = []
+    for line in result.stdout.splitlines() if result.returncode == 0 else []:
+        size, _, name = line.partition(" ")
+        if _BACKUP_NAME.match(name) and size.isdigit():
+            found.append({"name": name, "size": int(size)})
+    return sorted(found, key=lambda b: b["name"], reverse=True)  # names sort by date
+
+
+def restore_archive(volumes: list[str], dest: str, sub: str, name: str, run: Run = default_run) -> None:
+    """Puts each volume back as the archive has it (emptied first: no old -wal next to a restored database), and
+    Plaid's settings files. The restore's own progress file in plaid-state is left alone."""
+    if not _BACKUP_NAME.match(name):
+        raise ValueError(f"not a backup name: {name}")
+    mounts = [f"{v}:/v/{v}" for v in volumes] + ["plaid-state:/s", f"type=bind,src={dest},dst=/b,readonly"]
+    script = (f'set -e; mkdir /r; tar -xzf "/b/{sub}/$1" -C /r; for v in /v/*; do n="${{v#/v/}}"; '
+              '[ -d "/r/$n" ] || continue; find "$v" -mindepth 1 -delete; cp -a "/r/$n/." "$v/"; done; '
+              f'for f in {" ".join(RESTORED_STATE)}; do [ -f "/r/plaid-state/$f" ] && cp -a "/r/plaid-state/$f" /s/; done; true')
+    result = _helper(mounts, ["sh", "-c", script, "sh", name], run, timeout=BACKUP_TIMEOUT)
+    if result.returncode != 0:
+        raise DockerError((result.stderr or result.stdout or "").strip() or f"exit {result.returncode}")
 
 
 def stack_containers(run: Run = default_run) -> dict[str, dict]:

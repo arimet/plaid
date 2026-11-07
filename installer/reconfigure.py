@@ -297,5 +297,10 @@ def run_worker(dk=docker, state_dir: str = flow.STATE_DIR) -> int:
     if request.get("kind") == "update":
         from installer import update
         return 0 if update.run(report, dk=dk, state_dir=state_dir) is not None else 1
+    if request.get("kind") in ("backup", "restore"):
+        from installer import backup
+        if request["kind"] == "backup":
+            return 0 if backup.run(report, dk=dk, state_dir=state_dir) else 1
+        return 0 if backup.restore(request["name"], report, dk=dk, state_dir=state_dir) else 1
     old, new = flow.load_settings(state_dir), Settings(**request["settings"])
     return 0 if apply(old, new, request.get("current") or {}, report, dk=dk, state_dir=state_dir) is not None else 1

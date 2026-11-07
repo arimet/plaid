@@ -122,6 +122,9 @@ class FakeFlow:
     def save_guard_status(self, status, state_dir):
         self.saved.append(status)
 
+    def maybe_backup(self, state_dir):
+        self.backup_checked = True
+
 
 class CycleTest(unittest.TestCase):
     def test_cycle_skips_while_busy(self):
@@ -234,6 +237,18 @@ class AppStatesTest(unittest.TestCase):
         got = guard.app_states({"radarr": Q(), "sonarr": Q(running=False), "jellyfin": Q(health="unhealthy"),
                                 "seerr": Q(health="starting"), "gluetun": G()})
         self.assertEqual(got, {"radarr": "running", "sonarr": "stopped", "jellyfin": "failing", "seerr": "starting"})
+
+
+class NightlyBackupTest(unittest.TestCase):
+    def test_each_round_asks_whether_the_night_backup_is_due(self):
+        fl = FakeFlow()
+        guard.cycle(FakeDk(), fl, "/state")
+        self.assertTrue(getattr(fl, "backup_checked", False))
+
+    def test_a_failing_check_does_not_stop_the_round(self):
+        fl = FakeFlow()
+        fl.maybe_backup = lambda state_dir: 1 / 0
+        self.assertEqual(guard.cycle(FakeDk(), fl, "/state")["disk"], "ok")
 
 
 class RoomTest(unittest.TestCase):
