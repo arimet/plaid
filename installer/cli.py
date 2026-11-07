@@ -249,52 +249,60 @@ def _ask(term, flow, env: dict, lang: str):
     return s, []
 
 
-def run_install_tui(term, flow, env: dict, lang: str) -> int:
-    """Same questions as the web assistant, with arrow-key menus, masked secrets and live progress."""
+def _install_steps(term, flow, lang: str, s) -> tuple[bool, Notes, bool]:
+    """Runs the install with live steps. (done, notes, worth a retry): a failure can be tried again, a Ctrl-C
+    has already put the machine back as it was."""
     import queue
     import threading
 
     from installer.tui import Steps
+    term.page(t(lang, "progress_title"), t(lang, "progress_help"))
+    steps = Steps(term, _steps_labels(lang, bool(s.vpn_provider)))
+    events: queue.Queue = queue.Queue()
+    cancel = threading.Event()
+    worker = threading.Thread(target=flow.install, args=(s, events.put), kwargs={"cancel": cancel}, daemon=True)
+    worker.start()
+    while True:
+        try:
+            p = events.get(timeout=0.12)
+        except queue.Empty:
+            steps.render()
+            continue
+        except KeyboardInterrupt:  # Ctrl-C mid-install: leave the machine as it was
+            steps.failed = True  # the interrupted step shows ✗, not a frozen spinner
+            steps.render()
+            term._settle()
+            return False, _undo_steps(term, flow, lang, cancel, worker), False
+        if p.step.startswith("step_app:"):
+            steps.subs.append(t(lang, p.step))
+        else:
+            steps.advance(p.step)
+        if p.error:
+            steps.failed = True
+            steps.render()
+            term._settle()
+            term.note(t(lang, p.error), "error")
+            return False, [(t(lang, "progress_failed"), "error"), (t(lang, p.error), "info")] + \
+                ([(p.detail, "detail")] if p.detail else []) + [(t(lang, "cli_manage"), "info")], True
+        if p.done:
+            steps.finish()
+            return True, [], False
+        steps.render()
 
+
+def run_install_tui(term, flow, env: dict, lang: str) -> int:
+    """Same questions as the web assistant, with arrow-key menus, masked secrets and live progress."""
     done, notes = False, [(t(lang, "cli_cancelled"), "info")]
     with term.fullscreen():
         try:
             s, notes = _ask(term, flow, env, lang)
         except KeyboardInterrupt:
             s = None
-        if s is not None:
-            term.page(t(lang, "progress_title"), t(lang, "progress_help"))
-            steps = Steps(term, _steps_labels(lang, bool(s.vpn_provider)))
-            events: queue.Queue = queue.Queue()
-            cancel = threading.Event()
-            worker = threading.Thread(target=flow.install, args=(s, events.put), kwargs={"cancel": cancel},
-                                      daemon=True)
-            worker.start()
-            while True:
-                try:
-                    p = events.get(timeout=0.12)
-                except queue.Empty:
-                    steps.render()
-                    continue
-                except KeyboardInterrupt:  # Ctrl-C mid-install: leave the machine as it was
-                    steps.failed = True  # the interrupted step shows ✗, not a frozen spinner
-                    steps.render()
-                    term._settle()
-                    notes = _undo_steps(term, flow, lang, cancel, worker)
-                    break
-                if p.step.startswith("step_app:"):
-                    steps.subs.append(t(lang, p.step))
-                else:
-                    steps.advance(p.step)
-                if p.error:
-                    notes = [(t(lang, "progress_failed"), "error"), (t(lang, p.error), "info")] + \
-                        ([(p.detail, "detail")] if p.detail else []) + [(t(lang, "cli_manage"), "info")]
-                    break
-                if p.done:
-                    steps.finish()
-                    done = True
-                    break
-                steps.render()
+        while s is not None:
+            done, notes, retry = _install_steps(term, flow, lang, s)
+            if done or not retry or not term.confirm(t(lang, "cli_retry"), t(lang, "cli_yes_word"),
+                                                     t(lang, "cli_no_word"), default=True):
+                break
     if not done:
         _print_notes(term, notes)
         return 1
@@ -342,9 +350,19 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                ("remove", t(lang, "menu_remove")), ("quit", t(lang, "menu_quit"))]
     with term.fullscreen():
         try:
-            if not complete:  # a failed install: removal is the only thing to do
-                term.page(t(lang, "progress_failed"), t(lang, "err_unexpected"))
-                code, notes = _remove_steps(term, flow, lang, s.data_dir, size())
+            if not complete:  # a failed install: try again with the saved answers, or remove it
+                term.page(t(lang, "progress_failed"), t(lang, "install_retry_help"))
+                pick = term.select(t(lang, "cli_failed_pick"), [("retry", t(lang, "btn_retry")),
+                                                                ("remove", t(lang, "uninstall_title"))],
+                                   hint=t(lang, "cli_select_hint"))
+                if pick == "retry":
+                    done, notes, _ = _install_steps(term, flow, lang, s)
+                    if done:
+                        term.heading(t(lang, "done_title"))
+                        notes = [(t(lang, "done_login", username=s.username), "ok"), (t(lang, "cli_manage"), "ok")]
+                    code = 0 if done else 1
+                else:
+                    code, notes = _remove_steps(term, flow, lang, s.data_dir, size())
             flash = ""
             while complete:
                 term.page(t(lang, "panel_title"), intro=t(lang, "subtitle"))

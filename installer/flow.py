@@ -198,8 +198,12 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
             services = list(json.load(f)["services"])
         errors: dict[str, str] = {}
         missing = update._pull(dk, state_dir, services, wait, errors)
-        if missing:  # every app is needed to install
-            raise DockerError("\n".join(f"{svc}: {errors[svc]}" for svc in missing))
+        if missing:  # every app is needed to install; what came is kept for the next try
+            from installer.i18n import APP_NAMES
+            names = ", ".join(APP_NAMES.get(svc, svc.capitalize()) for svc in missing)
+            report(Progress(step, error=f"err_download:{names}",
+                            detail="\n".join(f"{svc}: {errors[svc]}" for svc in missing)))
+            return None
 
         step = checkpoint("step_start")
         try:

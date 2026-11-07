@@ -228,7 +228,7 @@ class PanelCliTest(TuiCliTest):
     def test_failed_install_offers_removal_only(self):
         flow = installed_flow()
         flow.complete = False
-        t, out = self.term("\x1b[D\r", "\r")
+        t, out = self.term("\x1b[B\r", "\x1b[D\r", "\r")  # remove (under retry) · yes · keep the folder
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings, complete=False), 0)
         self.assertIs(flow.removed, False)
         self.assertIn("L’installation s’est arrêtée", out.getvalue())
@@ -512,3 +512,28 @@ class VpnLineCliTest(TuiCliTest):
         t, out = self.term("\x1b[A\r")
         cli.run_panel_tui(t, flow, ENV, flow.settings)
         self.assertIn("Pas de VPN", out.getvalue())
+
+
+class RetryCliTest(TuiCliTest):
+    def test_failed_install_can_be_tried_again_from_the_menu(self):
+        flow = installed_flow()
+        flow.complete = False
+        t, out = self.term("\r")  # retry is the first choice
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings, complete=False), 0)
+        self.assertEqual(flow.got, flow.settings)  # the saved answers, nothing asked again
+        self.assertIn("Tout est prêt", out.getvalue())
+
+    def test_install_offers_to_try_again(self):
+        flow = FakeFlow()
+        tries = []
+
+        def install(s, report, cancel=None):
+            tries.append(s)
+            report(Progress("step_download", error="err_download:Radarr") if len(tries) == 1
+                   else Progress("step_done", done=True))
+        flow.install = install
+        # folder · user · passwords · VPN: none · films: keep · install · then "try again?" (Enter: yes)
+        t, out = self.term("\r", "zoe\r", "longenough\r", "longenough\r", "\x1b[A\r", "\r", "\r", "\r", "\r")
+        self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 0)
+        self.assertEqual(len(tries), 2)
+        self.assertIn("Impossible de télécharger Radarr", out.getvalue())

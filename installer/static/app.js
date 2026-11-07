@@ -321,7 +321,7 @@
         $("#progress-title").textContent = T.progress_failed;
         $("#progress-lead").textContent = data.errorText;
         if (data.detail) { $("#detail").hidden = false; $("#detail").textContent = data.detail; }
-        $("#to-panel").hidden = false;
+        $("#failed-actions").hidden = false;
         return;
       }
       if (data.done) return setTimeout(() => location.reload(), 900);

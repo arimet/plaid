@@ -58,8 +58,13 @@ class FakeFlow:
     def preflight(self, s):
         return ["warn_no_vpn"]
 
+    retried_with = None
+    complete_after_retry = False
+
     def install(self, s, report, cancel=None):
         report(Progress("step_prepare"))
+        if self.installed is not None:  # a retry, over a failed install
+            self.retried_with, self.complete_after_retry = s, True
         self.installed = s
         report(Progress("step_done", done=True))
         return {"jellyfin": 8096, "seerr": 5055}
@@ -192,6 +197,7 @@ class WebTest(unittest.TestCase):
         self.assertIn("L’installation s’est arrêtée", html)
         self.assertNotIn('class="app', html.split('<script id="texts"')[0])  # no app links
         self.assertIn('href="/remove"', html)
+        self.assertIn('action="/api/retry"', html)  # first try again: a network hiccup needs no removal
 
     def test_reload_during_install_shows_progress(self):
         flow = FakeFlow()
@@ -956,3 +962,35 @@ class VpnBadgeTest(unittest.TestCase):
 
     def test_not_looked_yet(self):
         self.assertIn('data-vpn="checking"', self.panel("protonvpn", "off"))  # the guard's default before its first round
+
+
+class RetryWebTest(unittest.TestCase):
+    start, req = WebTest.start, WebTest.req
+
+    def failed(self, complete=False):
+        self.flow = FakeFlow(installed=settings(), complete=complete)
+        self.start(self.flow)
+        form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
+        _, headers, _ = self.req("POST", "/login", form, {"Content-Type": "application/x-www-form-urlencoded"})
+        self.cookie = headers["Set-Cookie"].split(";")[0]
+
+    def test_retry_runs_the_install_again_with_the_saved_answers(self):
+        self.failed()
+        status, headers, _ = self.req("POST", "/api/retry", "", {"Cookie": self.cookie,
+                                                                 "Content-Type": "application/x-www-form-urlencoded"})
+        self.assertEqual((status, headers["Location"]), (303, "/"))
+        for _ in range(50):  # the install runs in a thread
+            if self.flow.complete_after_retry:
+                break
+            time.sleep(0.05)
+        self.assertEqual(self.flow.retried_with.username, "zoe")
+
+    def test_retry_needs_login_and_a_failed_install(self):
+        self.failed()
+        self.assertEqual(self.req("POST", "/api/retry", "")[0], 401)
+        self.server.shutdown()
+        self.failed(complete=True)
+        self.assertEqual(self.req("POST", "/api/retry", "", {"Cookie": self.cookie})[0], 409)
+
+    def test_wizard_has_the_button(self):
+        self.assertIn('id="retry"', web.form_page("fr", ENV))

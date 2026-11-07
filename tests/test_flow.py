@@ -165,9 +165,18 @@ class FlowTest(unittest.TestCase):
         dk = FakeDocker(pull_fail={"radarr": 9})
         self.assertIsNone(self.install(settings(), dk, configure=lambda *a, **k: {}))
         self.assertEqual(self.events[-1].step, "step_download")
+        self.assertEqual(self.events[-1].error, "err_download:Radarr")  # names the app, says what to do
         self.assertIn("radarr", self.events[-1].detail)
         self.assertIn("TLS handshake timeout", self.events[-1].detail)
         self.assertFalse([c for c in dk.calls if c[:2] == ("compose", "up")])
+
+    def test_a_retry_picks_up_where_it_stopped(self):
+        # A second run over the first one's state: the same steps, what is there already is kept.
+        dk = FakeDocker(pull_fail={"radarr": 9})
+        self.install(settings(), dk)
+        dk.pull_fail = {}
+        self.assertIsNotNone(self.install(settings(), dk))
+        self.assertTrue(flow.is_complete(self.state))
 
     def test_install_saves_media_choices(self):
         ids = {"radarr": {"formats": {"lang": 1}, "profiles": {"mine-1080p": 9}}}

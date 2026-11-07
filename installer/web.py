@@ -273,7 +273,9 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
   <p class="lead" id="progress-lead">{E(t(lang, "progress_help"))}</p></div>
   <div class="step-body"><ul class="steps" id="steps"></ul>
   <pre class="detail" id="detail" hidden></pre>
-  <a class="btn" href="/" id="to-panel" hidden>{E(t(lang, "uninstall_title"))}</a></div>
+  <div class="actions" id="failed-actions" hidden><form method="post" action="/api/retry">
+  <button class="btn primary" type="submit" id="retry">{E(t(lang, "btn_retry"))}</button></form>
+  <a class="btn" href="/" id="to-panel">{E(t(lang, "uninstall_title"))}</a></div></div>
 </section>"""
     foot = f"""<div class="foot" id="foot"><div class="foot-btns">
 <button class="btn" type="button" id="back" hidden>{E(t(lang, "btn_back"))}</button>
@@ -434,8 +436,10 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
             f'<h2>{E(t(lang, "apps_behind"))}</h2><p class="hint">{E(t(lang, "apps_behind_help"))}</p>'
             f'<div class="apps behind-apps">{"".join(app_link(x, False) for x in behind)}</div>')
     if not complete:  # a failed install: removal is the only thing to do
-        body = f"""<h1>{E(t(lang, "progress_failed"))}</h1><p class="lead">{E(t(lang, "err_unexpected"))}</p>
-  <a class="btn danger" href="/remove">{E(t(lang, "uninstall_title"))}</a>"""
+        body = f"""<h1>{E(t(lang, "progress_failed"))}</h1><p class="lead">{E(t(lang, "install_retry_help"))}</p>
+  <div class="actions"><form method="post" action="/api/retry"><button class="btn primary" type="submit">
+  {E(t(lang, "btn_retry"))}</button></form>
+  <a class="btn danger" href="/remove">{E(t(lang, "uninstall_title"))}</a></div>"""
         return subpage(lang, body, back=False, menu=False)
     autostart = (f'<p class="note warn">{E(t(lang, "autostart_hint"))}</p>'
                  if s.platform in ("mac", "windows") else "")
@@ -968,6 +972,13 @@ def make_handler(state: State):
                     return self.json(409, {"errors": blocking})
                 state.start_install(settings)
                 return self.json(202, {}, self.session_cookie())
+            if path == "/api/retry":
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                if state.running or state.flow.is_complete():
+                    return self.json(409, {})
+                state.start_install(s)  # the saved answers: the steps run again over what is there
+                return self.send(303, "", headers={"Location": "/"})
             if path == "/api/trackers":
                 if self.locked() or s is None:
                     return self.json(401, {})

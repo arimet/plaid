@@ -157,7 +157,14 @@ T: dict[str, dict[str, str]] = {
         "err_no_tun": "This machine has no /dev/net/tun, which the VPN needs.",
         "err_port_busy": "Port {param} is already used by another program.",
         "err_vpn_failed": "The VPN did not connect. Check its details, remove the stack and install again.",
-        "err_unexpected": "Something went wrong. Remove the stack and install again.",
+        "err_unexpected": "Something went wrong. Try again; if it fails again, remove the stack and install again.",
+        "err_download": "Could not download {param}. Check this machine's internet connection, then try again: what "
+                        "is already downloaded is kept.",
+        "btn_retry": "Try again",
+        "install_retry_help": "Try again: Plaid picks up where it stopped, with the same answers. If it fails again, "
+                              "remove the stack and install again.",
+        "cli_retry": "Try the installation again?",
+        "cli_failed_pick": "What do you want to do?",
         "warn_dir_not_empty": "The folder {path} already holds files. Installing never touches them, but if you ever remove Plaid and tick “also delete the folder”, they go too.",
         "backup_title": "Backups",
         "backup_help": "Back up now saves your apps' settings: lists of films and series, requests, accounts, "
@@ -528,7 +535,14 @@ T: dict[str, dict[str, str]] = {
         "err_port_busy": "Le port {param} est déjà utilisé par un autre programme.",
         "err_vpn_failed": "Le VPN ne s’est pas connecté. Vérifiez ses informations, supprimez la stack et "
                           "réinstallez.",
-        "err_unexpected": "Quelque chose a échoué. Supprimez la stack et réinstallez.",
+        "err_unexpected": "Quelque chose a échoué. Réessayez ; si ça échoue encore, supprimez la stack et réinstallez.",
+        "err_download": "Impossible de télécharger {param}. Vérifiez la connexion internet de cette machine, puis "
+                        "réessayez : ce qui est déjà téléchargé est gardé.",
+        "btn_retry": "Réessayer",
+        "install_retry_help": "Réessayez : Plaid reprend là où il s’est arrêté, avec les mêmes réponses. Si ça échoue "
+                              "encore, supprimez la stack et réinstallez.",
+        "cli_retry": "Réessayer l’installation ?",
+        "cli_failed_pick": "Que voulez-vous faire ?",
         "warn_dir_not_empty": "Le dossier {path} contient déjà des fichiers. L’installation n’y touche pas, mais si un jour vous supprimez Plaid en cochant « effacer aussi le dossier », ils partiront avec.",
         "backup_title": "Sauvegardes",
         "backup_help": "Sauvegarder maintenant enregistre les réglages de vos applis : listes de films et séries, "
