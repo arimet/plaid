@@ -188,6 +188,15 @@ def installed_flow():
         flow.confirmed, flow.status = True, dict(flow.status, disk="ok")
         return True
     flow.confirm_disk = confirm_disk
+    flow.started = None
+    flow.settings_check = lambda old, new: []
+    flow.check_logins = lambda s: []
+
+    def start_apply(new, current):
+        flow.started, flow.current = new, current
+    flow.start_apply = start_apply
+    flow.apply_status = lambda: {"state": "done", "events": [{"step": "step_compose"}, {"step": "step_save"},
+                                                              {"step": "step_done", "done": True, "detail": ""}]}
     return flow
 
 
@@ -210,7 +219,7 @@ class PanelCliTest(TuiCliTest):
     def test_remove_from_the_menu(self):
         flow = installed_flow()
         # remove · confirm (left = yes) · keep the media folder (Enter = no)
-        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[D\r", "\r")
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\x1b[B\r", "\x1b[D\r", "\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIs(flow.removed, False)
 
@@ -240,3 +249,31 @@ class GuardCliTest(TuiCliTest):
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertTrue(flow.confirmed)
         self.assertIn("C’est noté.", out.getvalue())
+
+
+class SettingsCliTest(TuiCliTest):
+    # Panel menu: apps, trackers, remote, settings, remove, quit.
+    # Settings menu: language, time zone, folder, account, VPN, Tailscale (Linux), [apply], back.
+    def test_change_timezone_from_the_menu(self):
+        flow = installed_flow()
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertEqual(flow.started.timezone, "America/Montreal")
+        self.assertIn("Vos changements sont appliqués", out.getvalue())
+
+    def test_blank_password_keeps_it(self):
+        flow = installed_flow()
+        # settings · account · username unchanged · empty password · back · quit
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\x1b[B\x1b[B\r", "\r", "\r", "\x1b[A\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertIsNone(flow.started)
+
+    def test_blocking_error_stops_apply(self):
+        flow = installed_flow()
+        flow.settings_check = lambda old, new: ["err_folder_missing"]
+        # settings · folder · new path · apply · (error shown, Enter to go back) · back · quit
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\x1b[B\r", "/media/usb/plaid\r", "\x1b[A\x1b[A\r", "\r",
+                           "\x1b[A\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertIsNone(flow.started)
+        self.assertIn("Dossier introuvable", out.getvalue())

@@ -284,7 +284,8 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     size = lambda: human_size(flow.media_size(s), lang)
     code, notes = 0, []
     actions = [("apps", t(lang, "menu_apps")), ("trackers", t(lang, "menu_trackers")),
-               ("remote", t(lang, "menu_remote")), ("remove", t(lang, "menu_remove")), ("quit", t(lang, "menu_quit"))]
+               ("remote", t(lang, "menu_remote")), ("settings", t(lang, "menu_settings")),
+               ("remove", t(lang, "menu_remove")), ("quit", t(lang, "menu_quit"))]
     with term.fullscreen():
         try:
             if not complete:  # a failed install: removal is the only thing to do
@@ -320,6 +321,11 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     for n, line in enumerate(t(lang, key).split("|"), 1):
                         term.note(f"{n}. {line}")
                     term.pause(t(lang, "cli_back"))
+                elif choice == "settings":
+                    result = _settings_tui(term, flow, env, s)
+                    if result is not None:  # applied (or failed): the panel closes on its outcome
+                        code, notes = result
+                        break
                 elif choice == "remove":
                     term.page(t(lang, "uninstall_title"), t(lang, "uninstall_text"))
                     code, notes = _remove_steps(term, flow, lang, s.data_dir, size())
@@ -330,6 +336,134 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     if notes:
         _print_notes(term, notes)
     return code
+
+
+def _settings_tui(term, flow, env: dict, s) -> tuple[int, Notes] | None:
+    """Pick settings one by one, then apply them all. None when the user went back without applying."""
+    from installer import reconfigure
+    from installer.settings import is_absolute, is_dangerous_path
+    from installer.web import LANG_NAMES
+    lang, data = s.lang, {}
+    remote = s.platform in REMOTE_PLATFORMS
+    keep = t(lang, "settings_keep_secret")
+    while True:
+        new = reconfigure.merge(s, data)
+        chg = reconfigure.changes(s, new)
+        term.page(t(lang, "nav_settings"), t(lang, "nav_settings_desc"))
+        options = [("lang", t(lang, "settings_lang"), None, LANG_NAMES[new.lang]),
+                   ("timezone", t(lang, "field_timezone"), None, new.timezone),
+                   ("folder", t(lang, "field_folder"), None, new.data_dir),
+                   ("account", f"{t(lang, 'field_username')} · {t(lang, 'field_password')}", None, new.username),
+                   ("vpn", t(lang, "field_vpn"), None,
+                    PROVIDERS[new.vpn_provider].label if new.vpn_provider else t(lang, "vpn_none"))]
+        if remote:
+            options.append(("tailscale", t(lang, "field_remote"), None, "Tailscale" if new.tailscale_key else "—"))
+        if chg:
+            options.append(("apply", t(lang, "settings_apply"), None, ", ".join(_change_names(lang, chg, new))))
+        options.append(("back", t(lang, "btn_back")))
+        pick = term.select(t(lang, "cli_settings_pick"), options, hint=t(lang, "cli_select_hint"))
+        if pick == "back":
+            return None
+        if pick == "apply":
+            result = _apply_tui(term, flow, lang, s, new, chg)
+            if result is not None:
+                return result
+        elif pick == "lang":
+            data["lang"] = term.select(t(lang, "settings_lang"), list(LANG_NAMES.items()), default=new.lang)
+        elif pick == "timezone":
+            data["timezone"] = term.text(t(lang, "field_timezone"), default=new.timezone,
+                                         hint=t(lang, "settings_timezone_help"))
+        elif pick == "folder":
+            term.note(t(lang, "settings_folder_help"))
+            data["data_dir"] = term.text(
+                t(lang, "field_folder"), default=new.data_dir,
+                validate=lambda v: t(lang, "err_path_absolute") if not is_absolute(v)
+                else t(lang, "err_dangerous_path") if is_dangerous_path(v, s.home) else None)
+        elif pick == "account":
+            data["username"] = term.text(t(lang, "field_username"), default=new.username,
+                                         validate=lambda v: None if v.strip() else t(lang, "err_username"))
+            password = term.text(t(lang, "field_password"), secret=True, hint=keep,
+                                 validate=lambda v: None if not v or len(v) >= 8 else t(lang, "err_password_short"))
+            if password:
+                term.text(t(lang, "field_password2"), secret=True,
+                          validate=lambda v: None if v == password else t(lang, "err_passwords_differ"))
+            data["password"] = password
+        elif pick == "vpn":
+            options = [(pid, p.label) for pid, p in PROVIDERS.items()] + [("", t(lang, "vpn_none"))]
+            provider = term.select(t(lang, "field_vpn"), options, default=new.vpn_provider or "")
+            fields = {}
+            if provider:
+                same = provider == s.vpn_provider
+                for f in PROVIDERS[provider].fields:
+                    fields[f] = term.text(t(lang, "vpnf_" + f.lower()), secret="KEY" in f or "PASSWORD" in f,
+                                          hint=keep if same else "",
+                                          validate=lambda v: None if same or v.strip() else t(lang, "err_vpn_fields"))
+            data.update(vpn_provider=provider, vpn_fields=fields)
+        elif pick == "tailscale":
+            choice = "new"
+            if s.tailscale_key:
+                choice = term.select(t(lang, "field_remote"), [("new", t(lang, "field_tailscale_key")),
+                                                               ("remove", t(lang, "settings_remove_tailscale"))])
+            if choice == "remove":
+                data.update(remove_tailscale=True, tailscale_key="")
+            else:
+                data["remove_tailscale"] = False
+                data["tailscale_key"] = term.text(
+                    t(lang, "field_tailscale_key"), secret=True, hint=keep if s.tailscale_key else t(lang, "cli_skip"),
+                    validate=lambda v: None if not v or v.strip().startswith("tskey-") else t(lang, "err_tailscale_key"))
+
+
+def _change_names(lang: str, chg: dict, new) -> list[str]:
+    from installer.web import change_lines
+    return change_lines(lang, chg, new)
+
+
+def _apply_tui(term, flow, lang: str, s, new, chg) -> tuple[int, Notes] | None:
+    """Summary, checks, current passwords if needed, then the worker's progress. None: back to the settings."""
+    import time
+    from installer import reconfigure
+    from installer.tui import Steps
+    term.page(t(lang, "settings_summary"))
+    for line in _change_names(lang, chg, new):
+        term.note(line)
+    term.note(t(lang, reconfigure.outage(chg)))
+    found = flow.settings_check(s, new)
+    for key in found:
+        term.note(t(lang, key, path=new.data_dir), "error" if key.startswith("err_") else "warn")
+    term.line()
+    if any(k.startswith("err_") for k in found):
+        term.pause(t(lang, "cli_back"))
+        return None
+    current = {}
+    if "account" in chg:
+        for app in flow.check_logins(s):
+            term.note(t(lang, "settings_current_password_help", app=APP_NAMES[app]), "warn")
+            current[app] = term.text(t(lang, "settings_current_password", app=APP_NAMES[app]), secret=True)
+    if not term.confirm(t(lang, "settings_apply") + " ?", t(lang, "cli_yes_word"), t(lang, "cli_no_word"),
+                        default=not found):
+        return None
+    flow.start_apply(new, current)
+    todo = reconfigure.steps(chg, bool(new.vpn_provider))
+    steps = Steps(term, [(key, t(lang, key)) for key in todo])
+    while True:
+        status = flow.apply_status()
+        events = status["events"]
+        if events:
+            steps.advance(events[-1]["step"])
+        if status["state"] == "done":
+            steps.finish()
+            missed = [APP_NAMES.get(a, a) for a in (events[-1].get("detail") or "").split(",") if a]
+            notes = [(t(lang, "settings_done"), "ok")]
+            if missed:
+                notes.append((t(lang, "settings_not_changed", apps=", ".join(missed)), "warn"))
+            return 0, notes
+        if status["state"] == "failed":
+            steps.failed = True
+            steps.render()
+            term._settle()
+            return 1, [(t(lang, "err_apply_failed"), "error"), (events[-1].get("detail", "") if events else "", "detail")]
+        steps.render()
+        time.sleep(0.3)
 
 
 def _pick_trackers(term, flow, lang: str) -> None:
