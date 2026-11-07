@@ -354,6 +354,7 @@ def uninstall_worker(payload: str, remove_media: bool, dk=docker, work_dir: str 
     s = Settings.from_json(files["settings.json"]) if "settings.json" in files else None
     if remove_media and s:
         dk.wipe_dir(s.data_dir, s.home, s.platform)
+    dk.remove("container", docker.APPLY_WORKER)  # a finished settings change nobody read: it holds the volume
     dk.remove("container", INSTALLER_NAME)
     dk.remove("network", f"{docker.PROJECT}_default")  # compose could not: the installer was attached to it
     dk.remove("volume", STATE_VOLUME)

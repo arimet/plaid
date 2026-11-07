@@ -92,7 +92,8 @@ class FakeDk:
             self.worker_after -= 1
             self.worker = self.worker_after < 0
         if name == self.APPLY_WORKER:
-            return (self.applying, self.applying, 0)
+            stopped = getattr(self, "apply_stopped", False)
+            return (self.applying or stopped, self.applying, 0)
         return (self.worker and name == self.WORKER, self.worker, 0)
 
     def compose(self, state_dir, *args, timeout=None):
@@ -212,3 +213,11 @@ class ApplyPauseTest(unittest.TestCase):
         dk.applying = True
         self.assertIsNone(guard.cycle(dk, FakeFlow(), "/state"))
         self.assertEqual(dk.calls, [])
+
+
+class StoppedWorkerTest(unittest.TestCase):
+    def test_a_stopped_apply_worker_does_not_pause_the_guard(self):
+        # Applied, then nobody opened the progress page: the container stays, stopped.
+        dk = FakeDk(disk="missing", containers={"radarr": Q()})
+        dk.apply_stopped = True
+        self.assertEqual(guard.cycle(dk, FakeFlow(), "/state"), {"disk": "missing", "vpn": "off"})

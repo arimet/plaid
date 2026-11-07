@@ -65,7 +65,7 @@ def dir_state(src: str, run: Run = default_run) -> tuple[bool, int]:
 
 def ensure_data_dirs(src: str, puid: int, pgid: int, run: Run = default_run, create: bool = True) -> None:
     """The stack's folders and the guard's marker. `create=False` fails on a missing folder instead of making
-    one: a settings change must not mark the empty mount point of a disk that is not plugged in."""
+    one (Docker Desktop, automounted disks); an empty fstab mount point exists, so the settings check warns."""
     dirs = " ".join(f"/m/{d}" for d in ("torrents/movies", "torrents/tv", "media/movies", "media/tv"))
     owned = "/m /m/torrents /m/media " + dirs
     mount = ["-v", f"{src}:/m"] if create else ["--mount", f"type=bind,src={src},dst=/m"]

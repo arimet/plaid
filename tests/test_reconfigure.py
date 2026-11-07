@@ -100,10 +100,14 @@ class Ops:
 
     def change_account(self, old, new, current):
         self.calls.append(("account", new.password, tuple(sorted(current.items()))))
+        if getattr(self, "peek", None):
+            self.peek()
         return list(self.not_changed)
 
     def rescan(self, s):
         self.calls.append(("rescan",))
+        if getattr(self, "fail_rescan", False):
+            raise RuntimeError("Jellyfin 401")
 
 
 class ApplyTest(unittest.TestCase):
@@ -203,9 +207,8 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(reconfigure.check(settings(), settings(data_dir="/srv/new"), dk), ["err_folder_missing"])
 
     def test_folder_without_library_warns(self):
-        for state in ("empty", "other"):
-            found = reconfigure.check(settings(), settings(data_dir="/srv/new"), FakeDocker(folder=state))
-            self.assertEqual(found, ["warn_folder_no_library"])
+        found = reconfigure.check(settings(), settings(data_dir="/srv/new"), FakeDocker(folder="other"))
+        self.assertEqual(found, ["warn_folder_no_library"])
         self.assertEqual(reconfigure.check(settings(), settings(data_dir="/srv/new"), FakeDocker(folder="unknown")),
                          ["err_folder_unreadable"])
 
@@ -248,3 +251,25 @@ class WorkerTest(unittest.TestCase):
             self.assertEqual(flow.apply_status(dk=FakeDocker(states={"plaid-apply": (True, True, 0)}),
                                                state_dir=d)["state"], "running")
             self.assertEqual(flow.apply_status(dk=FakeDocker(), state_dir=d)["state"], "idle")
+
+
+class ReviewFixesApplyTest(ApplyTest):
+    def test_failed_rescan_keeps_the_new_folder(self):
+        ops = Ops()
+        ops.fail_rescan = True
+        self.assertEqual(self.run_apply(settings(), settings(data_dir="/srv/new"), ops=ops), [])
+        self.assertEqual(self.saved().data_dir, "/srv/new")
+
+    def test_new_password_saved_only_once_an_app_has_it(self):
+        ops = Ops()
+        seen = []
+        ops.peek = lambda: seen.append(self.saved().password)
+        self.run_apply(settings(), settings(timezone="Europe/Paris", password="new-pass1"), ops=ops)
+        self.assertEqual(seen, ["longenough"])  # while the apps change, Plaid still signs in with the old one
+        self.assertEqual(self.saved().password, "new-pass1")
+
+
+class EmptyFolderTest(unittest.TestCase):
+    def test_empty_folder_asks_if_the_disk_is_plugged(self):
+        found = reconfigure.check(settings(), settings(data_dir="/srv/new"), FakeDocker(folder="empty"))
+        self.assertEqual(found, ["warn_folder_empty"])

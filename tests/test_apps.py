@@ -133,7 +133,8 @@ class ArrSettingsTest(unittest.TestCase):
         app = FakeArr("radarr", [qbit_client("gluetun")])
         app.set_download_client_host("qbittorrent")
         put = [c for c in app.calls if c[0] == "PUT"]
-        self.assertEqual(put[0][1], "/downloadclient/3")
+        # forceSave: qBittorrent may still be starting; Radarr would refuse a client it cannot reach yet.
+        self.assertEqual(put[0][1], "/downloadclient/3?forceSave=true")
         self.assertEqual(put[0][2]["fields"][0]["value"], "qbittorrent")
 
     def test_set_download_client_host_noop(self):
@@ -185,8 +186,10 @@ class AccountTest(unittest.TestCase):
         def make_arr(name, host, version, compose_out):
             arrs[name] = FakeArr(name)
             return arrs[name]
+        self.waited = []
         with mock.patch("installer.apps.call", self.fake_call(refuse=refuse)), \
                 mock.patch("installer.apps.Arr", make_arr), \
+                mock.patch("installer.apps.wait_for", lambda url, **k: self.waited.append(url)), \
                 mock.patch("installer.apps.read_when", lambda *a, **k: "bkey"):
             failed = apps.change_account(acct(), new, host_of, lambda *a: "", current or {}, lambda app: None)
         return failed, arrs
@@ -220,3 +223,11 @@ class AccountTest(unittest.TestCase):
         rename = next(c for c in self.seen if c[0] == "POST" and c[1].endswith("/Users/u1"))
         self.assertEqual(rename[2]["Name"], "bob")
         self.assertFalse([c for c in self.seen if c[1].endswith("/Password")])  # same password: left alone
+
+
+class AccountWaitTest(AccountTest):
+    def test_change_account_waits_for_each_app(self):
+        # A time zone or folder change has just recreated them: they may still be starting.
+        self.run_change(acct(password="new-pass1"))
+        for app in ("bazarr", "qbittorrent", "jellyfin"):
+            self.assertTrue(any(f"//{app}:" in url for url in self.waited), app)

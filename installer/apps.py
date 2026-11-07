@@ -237,7 +237,8 @@ class Arr:
             field = next(f for f in client["fields"] if f["name"] == "host")
             if field.get("value") != host:
                 field["value"] = host
-                self("PUT", f"/downloadclient/{client['id']}", client)
+                # forceSave: qBittorrent may still be starting; the app would refuse a client it cannot reach yet.
+                self("PUT", f"/downloadclient/{client['id']}?forceSave=true", client)
 
     def rescan(self) -> None:
         self("POST", "/command", {"name": "RescanMovie" if self.name == "radarr" else "RescanSeries"})
@@ -445,8 +446,10 @@ def change_account(old: Settings, new: Settings, host_of: Callable[[str], str], 
         attempt(name, lambda name=name, version=version:
                 Arr(name, host_of(name), version, compose_out).login(new.username, new.password))
 
+    # Each app may have just been recreated (time zone, folder): wait for it before deciding it failed.
     def bazarr():
         key = read_when(compose_out, "bazarr", "/config/config/config.yaml", r"^\s+apikey: '?([0-9a-f]{8,})")
+        wait_for(f"http://{host_of('bazarr')}/api/system/status?apikey={key}")
         call("POST", f"http://{host_of('bazarr')}/api/system/settings",
              {"settings-auth-username": new.username, "settings-auth-password": new.password},
              {"X-API-KEY": key}, form=True)
@@ -454,6 +457,7 @@ def change_account(old: Settings, new: Settings, host_of: Callable[[str], str], 
 
     def qbittorrent():
         host = host_of("qbittorrent")
+        wait_for(f"http://{host}/api/v2/app/version", ok_status=True)
         if not _qbit_login(host, old.username, current.get("qbittorrent", old.password)):
             raise RuntimeError("qBittorrent refused the current password")
         prefs = {"web_ui_username": new.username, "web_ui_password": new.password}
@@ -462,6 +466,7 @@ def change_account(old: Settings, new: Settings, host_of: Callable[[str], str], 
 
     def jellyfin():
         host, pw = host_of("jellyfin"), current.get("jellyfin", old.password)
+        wait_for(f"http://{host}/System/Info/Public")
         auth, uid = _jellyfin_auth(host, old.username, pw)
         if new.password != old.password:
             call("POST", f"http://{host}/Users/{uid}/Password", {"CurrentPw": pw, "NewPw": new.password}, auth)
@@ -477,5 +482,6 @@ def rescan_all(s: Settings, host_of: Callable[[str], str], compose_out: ComposeO
     """After a new media folder: Radarr, Sonarr and Jellyfin look at what is there."""
     for name in ("radarr", "sonarr"):
         Arr(name, host_of(name), "v3", compose_out).rescan()
+    wait_for(f"http://{host_of('jellyfin')}/System/Info/Public")
     auth, _ = _jellyfin_auth(host_of("jellyfin"), s.username, s.password)
     call("POST", f"http://{host_of('jellyfin')}/Library/Refresh", headers=auth)

@@ -48,8 +48,9 @@ def cycle(dk=docker, fl=flow, state_dir: str = flow.STATE_DIR) -> dict | None:
 
 
 def _cycle(dk, fl, state_dir: str) -> dict | None:
-    # A removal or a settings change owns the stack while its worker exists.
-    removing = lambda: dk.container_state(dk.WORKER)[0] or dk.container_state(dk.APPLY_WORKER)[0]
+    # A removal owns the stack while its worker exists; a settings change while its worker runs (a finished one
+    # nobody read must not keep the apps stopped after the next reboot).
+    removing = lambda: dk.container_state(dk.WORKER)[0] or dk.container_state(dk.APPLY_WORKER)[1]
     if not fl.is_complete(state_dir) or removing():
         return None
     s = fl.load_settings(state_dir)

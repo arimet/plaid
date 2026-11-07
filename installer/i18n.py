@@ -106,6 +106,9 @@ T: dict[str, dict[str, str]] = {
         "warn_folder_no_library": "This folder holds no library. Radarr and Sonarr will mark your films and "
                                   "series as missing, and downloads in progress will stop.",
         "err_apply_failed": "The change did not go through. Your previous settings are back.",
+        "warn_folder_empty": "This folder is empty. If it is an external disk, check it is plugged in: otherwise "
+                             "downloads would fill this machine’s own disk. Radarr and Sonarr will also mark your "
+                             "films and series as missing.",
         "step_prepare": "Preparing",
         "step_folders": "Creating the folders",
         "step_download": "Downloading the apps",
@@ -316,6 +319,9 @@ T: dict[str, dict[str, str]] = {
         "warn_folder_no_library": "Ce dossier ne contient pas de bibliothèque. Radarr et Sonarr marqueront vos "
                                   "films et séries comme manquants, et les téléchargements en cours s’arrêteront.",
         "err_apply_failed": "Le changement n’est pas passé. Vos réglages précédents sont revenus.",
+        "warn_folder_empty": "Ce dossier est vide. Si c’est un disque externe, vérifiez qu’il est branché : sinon "
+                             "les téléchargements rempliraient le disque de cette machine. Radarr et Sonarr "
+                             "marqueront aussi vos films et séries comme manquants.",
         "step_prepare": "Préparation",
         "step_folders": "Création des dossiers",
         "step_download": "Téléchargement des applis",

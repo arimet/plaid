@@ -86,8 +86,10 @@ def outage(chg: dict[str, str]) -> str:
 
 # ---------------------------------------------------------------- checking and applying
 
+# An empty folder may be the mount point of a disk that is not plugged in (Linux, fstab): it cannot be told
+# apart from a new folder on the system disk, so it is a warning that asks, not a refusal.
 FOLDER_CHECK = {"missing": "err_folder_missing", "unknown": "err_folder_unreadable",
-                "empty": "warn_folder_no_library", "other": "warn_folder_no_library"}
+                "empty": "warn_folder_empty", "other": "warn_folder_no_library"}
 
 
 def check(old: Settings, new: Settings, dk=docker) -> list[str]:
@@ -149,7 +151,9 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
             elif step == "step_compose":
                 if chg.get("tailscale") == "remove":  # off the user's tailnet before its state goes
                     logout()
-                flow._write_state(new, state_dir, src_new, has_dri)
+                # The apps still have the old account until step_account: keep signing in with it meanwhile.
+                flow._write_state(replace(new, username=old.username, password=old.password), state_dir, src_new,
+                                  has_dri)
                 dk.compose(state_dir, "up", "-d", "--remove-orphans")
                 if chg.get("tailscale") == "remove":
                     dk.remove("volume", f"{docker.PROJECT}_tailscale-state")
@@ -164,7 +168,9 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
                 dk.remove("volume", f"{docker.PROJECT}_tailscale-state")
                 dk.compose(state_dir, "up", "-d", "tailscale")
             elif step == "step_rescan":
-                ops.rescan(old)  # the account changes last: the current one still opens the apps here
+                # Best effort: a scan that fails (Jellyfin still starting, password changed by hand) must not
+                # undo the new folder; the apps also scan on their own schedule.
+                _try(lambda: ops.rescan(old))  # the account changes last: the current one opens the apps here
     except Exception as e:  # noqa: BLE001 - shown with its detail; the stack goes back to how it was
         _rollback(old, started, dk, state_dir, has_dri, ops, vpn_wait)
         report(Progress(step, error="err_apply_failed", detail=str(e)))

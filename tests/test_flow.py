@@ -364,3 +364,12 @@ class StaleGuardStatusTest(unittest.TestCase):
             with open(os.path.join(d, "guard.json"), "w") as f:
                 json.dump({"disk": "missing", "vpn": "down"}, f)  # no time: unknown age
             self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off"})
+
+
+class RemovalTakesApplyWorkerTest(unittest.TestCase):
+    def test_uninstall_worker_removes_a_leftover_apply_worker(self):
+        dk = FakeDocker()
+        payload = base64.b64encode(json.dumps({"settings.json": settings().to_json()}).encode()).decode()
+        with tempfile.TemporaryDirectory() as d:
+            flow.uninstall_worker(payload, False, dk=dk, work_dir=d)
+        self.assertLess(dk.calls.index(("rm", "container", "plaid-apply")), dk.calls.index(("rm", "volume", "plaid-state")))
