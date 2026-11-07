@@ -295,6 +295,8 @@ class DisksTest(unittest.TestCase):
         self.assertEqual([(d["path"], d["name"], d["system"]) for d in got],
                          [("/Users/zoe", "", True), ("/Volumes/Films", "Films", False)])
         self.assertEqual(got[0]["free"], 108587336 * 1024)
+        # Docker Desktop's /Volumes share reports the Mac's own disk: an external disk's room is unknown.
+        self.assertEqual((got[1]["free"], got[1]["total"]), (None, None))
         self.assertNotIn("/Users/zoe", " ".join(run.calls[0]))  # only the /Users share, for its free space
 
     def test_windows_disks_are_drive_letters(self):
@@ -328,6 +330,7 @@ class BrowseTest(unittest.TestCase):
         run = ScriptRun((0, "v 100 50 50 50% /v\nSeries\n", ""))
         got = docker.browse("/Volumes/Films/Movies", "mac", run=run)
         self.assertEqual((got["parent"], got["dirs"]), ("/Volumes/Films", ["Series"]))
+        self.assertIsNone(got["free"])
         self.assertIn("type=bind,src=/Volumes,dst=/v,readonly", run.calls[0])
         self.assertEqual(run.calls[0][-1], "Films/Movies")  # path inside /v, given as an argument
         self.assertIsNone(docker.browse("/Volumes/Films", "mac", run=ScriptRun((0, "v 1 1 0 9% /v\n", "")))["parent"])
@@ -366,6 +369,11 @@ class DiskCheckTest(unittest.TestCase):
         self.assertEqual(docker.disk_check("/Users/zoe/Plaid", "mac", "/Users/zoe", run=run),
                          {"free": 5 * 1024, "hardlinks": None})
         self.assertIn("type=bind,src=/Users,dst=/m,readonly", run.calls[1])
+
+    def test_mac_volume_room_is_unknown(self):
+        run = ScriptRun((0, "v 10 5 5 50% /m\n1\n", ""))
+        self.assertEqual(docker.disk_check("/Volumes/Films/Plaid", "mac", "/Users/zoe", run=run),
+                         {"free": None, "hardlinks": False})
 
     def test_unknown(self):
         self.assertEqual(docker.disk_check("/mnt/x", "linux", "/home/z", run=ScriptRun((3, "", "boom"))),

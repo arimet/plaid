@@ -114,6 +114,11 @@ def write_marker(src: str, run: Run = default_run) -> None:
 # -- disks and folders, for the folder picker and the checks before installing
 
 DESKTOP = ("mac", "windows")  # Docker Desktop: the host's disks come through its file shares
+
+
+def _room_known(path: str, platform: str) -> bool:
+    """Docker Desktop's /Volumes share answers with the Mac's own disk: an external disk's room cannot be read."""
+    return not (platform == "mac" and path.startswith("/Volumes/"))
 DISK_TYPES = {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "ntfs", "ntfs3", "fuseblk", "exfat", "vfat",
               "nfs", "nfs4", "cifs", "smb3"}
 NOT_DISKS = ("/boot", "/var/lib/docker", "/snap", "/run", "/dev", "/proc", "/sys")
@@ -187,7 +192,8 @@ def disks(platform: str, home: str, run: Run = default_run) -> list[dict]:
                 continue
             system = name.lower() == "c"
             path, name = (home, "") if system else (f"{name.upper()}:\\", f"{name.upper()}:")
-        found.append({"path": path, "name": name, "free": space[0], "total": space[1], "system": system})
+        free, total = space if _room_known(path, platform) else (None, None)
+        found.append({"path": path, "name": name, "free": free, "total": total, "system": system})
     return sorted(found, key=lambda d: not d["system"])
 
 
@@ -233,7 +239,7 @@ def browse(path: str, platform: str, run: Run = default_run) -> dict:
         return {"error": "err_folder_missing" if missing else "err_folder_unreadable"}
     lines = result.stdout.splitlines()
     space = _space(lines[0]) if lines else None
-    free, total = space or (None, None)
+    free, total = space if space and _room_known(norm, platform) else (None, None)
     return {"path": norm, "parent": parent, "dirs": [d for d in lines[1:] if d and "," not in d],
             "free": free, "total": total}
 
@@ -258,7 +264,8 @@ def disk_check(path: str, platform: str, home: str, run: Run = default_run) -> d
             lines = result.stdout.splitlines() + ["", ""]
             space = _space(lines[0])
             links = lines[1].strip()
-            return {"free": space[0] if space else None, "hardlinks": None if links in ("-", "") else links == "2"}
+            free = space[0] if space and _room_known(path, platform) else None
+            return {"free": free, "hardlinks": None if links in ("-", "") else links == "2"}
         if "does not exist" not in (result.stderr or ""):
             return unknown
     return unknown
