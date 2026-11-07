@@ -417,6 +417,7 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
   {guard_html(lang, s, status or {})}
   <p class="lead">{lead}{t(lang, "done_login", username="<b>" + E(s.username) + "</b>")}</p>
   {apps}
+  <hr class="sep panel-sep">
   <div class="pgrid-foot">{disk_html(lang, s, status or {})}
   {maintenance_html(lang, last_update)}
   {backup_html(lang, s, backup_status or {})}</div>

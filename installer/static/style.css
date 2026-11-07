@@ -283,7 +283,8 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 .state[data-state="starting"] i{background:var(--warn)}
 .state[data-state="failing"] i,.state[data-state="stopped"] i{background:var(--danger)}
 .state[data-state="failing"],.state[data-state="stopped"]{color:var(--danger-text)}
-.pgrid-foot{display:flex;flex-direction:column;gap:28px;margin-top:8px}
+.panel-sep{margin:28px 0 12px}  /* the apps above, the machine's own matters below */
+.pgrid-foot{display:flex;flex-direction:column;gap:28px}
 .pcard{display:flex;flex-direction:column;gap:12px}
 .maint{display:flex;flex-direction:column;gap:12px;align-items:flex-start}
 
@@ -304,7 +305,7 @@ fieldset.field legend{padding:0;margin-bottom:8px}
   body.wide .sgroup{display:grid;grid-template-columns:var(--cols);column-gap:var(--colgap);align-items:start}
   body.wide .sfields{display:flex;flex-direction:column;gap:18px}
   body.wide .settings > .btn.primary{margin-left:calc((100% - var(--colgap)) * .4 + var(--colgap))}
-  body.wide .sep{margin:0}
+  body.wide .settings .sep{margin:0}
   body.wide .daily-apps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
   body.wide .behind-apps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
   body.wide .pgrid-foot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start;margin-top:12px}
