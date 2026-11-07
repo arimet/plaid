@@ -149,6 +149,7 @@ label.l,legend.l{font:700 14px/1.2 Nunito,sans-serif;color:var(--text)}
 .note.warn.outage svg{stroke:var(--warn)}
 .note.warn.outage::before{display:none}
 .actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.actions .btn{flex:0 0 auto}  /* side by side, each its own size: the danger does not outweigh "try again" */
 .manual{list-style:none;padding:6px 20px;border-radius:var(--r-lg);box-shadow:var(--inset)}
 .app-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0}
 .app-row+.app-row{border-top:1px solid var(--shadow-dark)}
