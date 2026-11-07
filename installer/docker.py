@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import ntpath
 import posixpath
+import re
 import socket
 import subprocess
 import uuid
@@ -108,6 +109,159 @@ def write_marker(src: str, run: Run = default_run) -> None:
     # --mount, not -v: if the disk went away meanwhile, fail instead of creating an empty folder to mark.
     _check(run, ["docker", "run", "--rm", "--mount", f"type=bind,src={src},dst=/m", HELPER, "touch", f"/m/{MARKER}"],
            timeout=HELPER_TIMEOUT)
+
+
+# -- disks and folders, for the folder picker and the checks before installing
+
+DESKTOP = ("mac", "windows")  # Docker Desktop: the host's disks come through its file shares
+DISK_TYPES = {"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "ntfs", "ntfs3", "fuseblk", "exfat", "vfat",
+              "nfs", "nfs4", "cifs", "smb3"}
+NOT_DISKS = ("/boot", "/var/lib/docker", "/snap", "/run", "/dev", "/proc", "/sys")
+_DF = re.compile(r"(\d+)\s+(\d+)\s+(\d+)\s+\d+%\s")  # 1024-blocks, used, available, capacity
+_DF_TYPED = re.compile(r"^(.*?)\s+(\S+)\s+(\d+)\s+\d+\s+(\d+)\s+\d+%\s+(.*)$")  # fs, type, blocks, avail, mount
+
+
+def _space(df_line: str) -> tuple[int, int] | None:
+    """(free, total) in bytes from a `df -kP` line."""
+    m = _DF.search(df_line + " ")
+    return (int(m.group(3)) * 1024, int(m.group(1)) * 1024) if m else None
+
+
+def _under(path: str, roots) -> bool:
+    return any(path == r or path.startswith(r + "/") for r in roots)
+
+
+def _helper(mounts: list[str], cmd: list[str], run: Run) -> subprocess.CompletedProcess:
+    """A short throwaway container; one that hangs is cut at PROBE_TIMEOUT and removed."""
+    name = f"plaid-probe-{uuid.uuid4().hex[:8]}"
+    args = ["docker", "run", "--rm", "--name", name]
+    for m in mounts:
+        args += ["-v", m] if m.endswith(":ro") else ["--mount", m]
+    result = run([*args, HELPER, *cmd], timeout=PROBE_TIMEOUT)
+    if result.returncode == 124:
+        run(["docker", "rm", "-f", name])
+    return result
+
+
+def parse_df(out: str) -> list[dict]:
+    """The host's real disks from `df -kPT` run with the host's root at /host."""
+    best: dict[str, dict] = {}
+    for line in out.splitlines()[1:]:
+        m = _DF_TYPED.match(line.strip())
+        if not m or m.group(2) not in DISK_TYPES or not _under(m.group(5), ["/host"]):
+            continue
+        path = m.group(5)[len("/host"):] or "/"
+        if path != "/" and _under(path, NOT_DISKS):
+            continue
+        disk = {"path": path, "name": "" if path == "/" else posixpath.basename(path),
+                "free": int(m.group(4)) * 1024, "total": int(m.group(3)) * 1024, "system": path == "/"}
+        if m.group(1) not in best or len(path) < len(best[m.group(1)]["path"]):  # one disk bound twice
+            best[m.group(1)] = disk
+    return sorted(best.values(), key=lambda d: (not d["system"], d["path"]))
+
+
+def disks(platform: str, home: str, run: Run = default_run) -> list[dict]:
+    """{path, name, free, total, system} for each disk. On Docker Desktop the system disk is the home folder, read
+    only for its free space: listing the Mac home through a container hung Docker Desktop."""
+    if platform not in DESKTOP:
+        result = _helper(["/:/host:ro"], ["df", "-kPT"], run)
+        return parse_df(result.stdout) if result.returncode == 0 else []
+    if platform == "mac":
+        mounts = ["type=bind,src=/Users,dst=/u,readonly", "type=bind,src=/Volumes,dst=/h,readonly"]
+        script = ('printf "\\t"; df -kP /u | tail -1; for d in /h/*; do [ -L "$d" ] || [ ! -d "$d" ] && continue; '
+                  'printf "%s\\t" "${d#/h/}"; df -kP "$d" | tail -1; done')
+    else:
+        mounts = ["type=bind,src=/run/desktop/mnt/host,dst=/h,readonly"]
+        script = 'for d in /h/*; do printf "%s\\t" "${d#/h/}"; df -kP "$d" | tail -1; done'
+    result = _helper(mounts, ["sh", "-c", script], run)
+    found = []
+    for line in result.stdout.splitlines() if result.returncode == 0 else []:
+        name, _, df_line = line.partition("\t")
+        space = _space(df_line)
+        if platform == "mac":
+            if not space or name.startswith((".", "com.apple")):
+                continue
+            system, path = name == "", f"/Volumes/{name}" if name else home
+        else:
+            if not space or len(name) != 1 or not name.isalpha():
+                continue
+            system = name.lower() == "c"
+            path, name = (home, "") if system else (f"{name.upper()}:\\", f"{name.upper()}:")
+        found.append({"path": path, "name": name, "free": space[0], "total": space[1], "system": system})
+    return sorted(found, key=lambda d: not d["system"])
+
+
+def browsable(path: str, platform: str) -> bool:
+    """Folders the picker may open. Never the system disk on Docker Desktop, never the kernel's own folders."""
+    if "," in path:  # breaks --mount; ponytail: quote the CSV field if someone has one
+        return False
+    if platform == "windows":
+        norm = ntpath.normpath(path)
+        return bool(re.match(r"^[A-Za-z]:\\", norm)) and norm[0].lower() != "c"
+    if not path.startswith("/"):
+        return False
+    norm = posixpath.normpath(path)
+    if platform == "mac":
+        parts = norm.split("/")
+        return len(parts) >= 3 and parts[1] == "Volumes" and parts[2] != "Macintosh HD"
+    return not _under(norm, ["/proc", "/sys", "/dev", "/run"])
+
+
+_LIST = 'df -kP . | tail -1; for d in */; do [ -d "$d" ] && printf "%s\\n" "${d%/}"; done'
+
+
+def browse(path: str, platform: str, run: Run = default_run) -> dict:
+    """{path, parent, dirs, free, total} of a folder, or {error}: hidden folders and folders with a comma left out."""
+    if not browsable(path, platform):
+        return {"error": "err_folder_unreadable"}
+    if platform == "mac":
+        norm = posixpath.normpath(path)
+        rel = norm[len("/Volumes/"):]
+        # Through /Volumes, so a volume that is a link (to the Mac's own disk) is seen as one and refused.
+        result = _helper(["type=bind,src=/Volumes,dst=/v,readonly"],
+                         ["sh", "-c", f'[ -L "/v/${{1%%/*}}" ] && exit 3; cd "/v/$1" || exit 2; {_LIST}', "sh", rel],
+                         run)
+        parent = None if "/" not in rel else posixpath.dirname(norm)
+    else:
+        norm = ntpath.normpath(path) if platform == "windows" else posixpath.normpath(path)
+        result = _helper([f"type=bind,src={host_path(norm, platform)},dst=/m,readonly"],
+                         ["sh", "-c", f"cd /m || exit 2; {_LIST}"], run)
+        up = (ntpath if platform == "windows" else posixpath).dirname(norm)
+        parent = None if up == norm else up
+    if result.returncode != 0:
+        missing = result.returncode == 2 or "does not exist" in (result.stderr or "")
+        return {"error": "err_folder_missing" if missing else "err_folder_unreadable"}
+    lines = result.stdout.splitlines()
+    space = _space(lines[0]) if lines else None
+    free, total = space or (None, None)
+    return {"path": norm, "parent": parent, "dirs": [d for d in lines[1:] if d and "," not in d],
+            "free": free, "total": total}
+
+
+_LINK = ('df -kP /m | tail -1; f=/m/.plaid-link-$$; if touch "$f" 2>/dev/null; then ln "$f" "$f.2" 2>/dev/null; '
+         'stat -c %h "$f"; rm -f "$f" "$f.2"; else echo -; fi')
+
+
+def disk_check(path: str, platform: str, home: str, run: Run = default_run) -> dict:
+    """{free, hardlinks} of the disk a media folder is on, from the folder or, not made yet, its parent. A hard link
+    is tried and removed: False means every finished download gets copied. None when it cannot be told."""
+    unknown = {"free": None, "hardlinks": None}
+    mod = ntpath if platform == "windows" else posixpath
+    for target in (path, mod.dirname(mod.normpath(path))):
+        if platform in DESKTOP and mod.normpath(target).lower() == mod.normpath(home).lower():
+            share = "/Users" if platform == "mac" else host_path(target[:3], platform)
+            result = _helper([f"type=bind,src={share},dst=/m,readonly"], ["sh", "-c", "df -kP /m | tail -1"], run)
+            space = _space(result.stdout) if result.returncode == 0 else None
+            return {"free": space[0], "hardlinks": None} if space else unknown
+        result = _helper([f"type=bind,src={host_path(target, platform)},dst=/m"], ["sh", "-c", _LINK], run)
+        if result.returncode == 0:
+            lines = result.stdout.splitlines() + ["", ""]
+            space = _space(lines[0])
+            links = lines[1].strip()
+            return {"free": space[0] if space else None, "hardlinks": None if links in ("-", "") else links == "2"}
+        if "does not exist" not in (result.stderr or ""):
+            return unknown
+    return unknown
 
 
 def stack_containers(run: Run = default_run) -> dict[str, dict]:

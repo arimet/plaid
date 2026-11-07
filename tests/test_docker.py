@@ -246,3 +246,129 @@ class SettingsProbeTest(unittest.TestCase):
         docker.run_detached("img", ["--apply-worker"], {}, docker.APPLY_WORKER, run=run, volumes=("plaid-state:/state",))
         self.assertIn("plaid-state:/state", run.calls[0])
         self.assertIn("plaid-apply", run.calls[0])
+
+
+class ScriptRun:
+    """One result per call, in order: (returncode, stdout, stderr)."""
+    def __init__(self, *results):
+        self.calls, self.results = [], list(results)
+
+    def __call__(self, args, timeout=None):
+        self.calls.append(args)
+        code, out, err = self.results.pop(0)
+        return subprocess.CompletedProcess(args, code, out, err)
+
+
+LINUX_DF = """Filesystem           Type       1024-blocks    Used Available Capacity Mounted on
+overlay              overlay    474095688  38086160 411853320   8% /
+overlay              overlay       812676       432    812244   0% /host
+/dev/sda2            ext4       240000000 100000000 140000000  42% /host
+/dev/sda1            vfat          523248      6220    517028   1% /host/boot/efi
+tmpfs                tmpfs         812676       796    811880   0% /host/run
+/dev/sdb1            exfat     1953000000 953000000 1000000000  49% /host/media/zoe/My Films
+/dev/sdc1            ext4      3906000000 906000000 3000000000  23% /host/mnt/films
+/dev/sdc1            ext4      3906000000 906000000 3000000000  23% /host/srv/films-bind
+/dev/sda2            ext4       240000000 100000000 140000000  42% /host/var/lib/docker
+//nas/share          cifs      7812000000 812000000 7000000000  10% /host/mnt/nas
+"""
+
+
+class DisksTest(unittest.TestCase):
+    def test_parse_df_keeps_real_disks(self):
+        got = docker.parse_df(LINUX_DF)
+        self.assertEqual([d["path"] for d in got], ["/", "/media/zoe/My Films", "/mnt/films", "/mnt/nas"])
+        root, films = got[0], got[1]
+        self.assertTrue(root["system"])
+        self.assertEqual((films["name"], films["free"], films["total"], films["system"]),
+                         ("My Films", 1000000000 * 1024, 1953000000 * 1024, False))
+
+    def test_linux_disks_read_the_host_mounts(self):
+        run = ScriptRun((0, LINUX_DF, ""))
+        self.assertEqual(len(docker.disks("linux", "/home/zoe", run=run)), 4)
+        self.assertIn("/:/host:ro", run.calls[0])
+
+    def test_mac_disks_never_list_the_home(self):
+        out = ("\t/run/host_mark/Users 482797652 374210316 108587336  78% /u\n"
+               "Films\t/run/host_mark/Volumes 1953000000 953000000 1000000000  49% /v/Films\n")
+        run = ScriptRun((0, out, ""))
+        got = docker.disks("mac", "/Users/zoe", run=run)
+        self.assertEqual([(d["path"], d["name"], d["system"]) for d in got],
+                         [("/Users/zoe", "", True), ("/Volumes/Films", "Films", False)])
+        self.assertEqual(got[0]["free"], 108587336 * 1024)
+        self.assertNotIn("/Users/zoe", " ".join(run.calls[0]))  # only the /Users share, for its free space
+
+    def test_windows_disks_are_drive_letters(self):
+        out = "c\tC: 1000 500 500 50% /h/c\nd\tD: 4000 1000 3000 25% /h/d\nwsl\tx 1 1 0 99% /h/wsl\n"
+        got = docker.disks("windows", "C:\\Users\\Zoé", run=ScriptRun((0, out, "")))
+        self.assertEqual([(d["path"], d["system"]) for d in got], [("C:\\Users\\Zoé", True), ("D:\\", False)])
+
+    def test_disks_probe_failure_is_empty(self):
+        self.assertEqual(docker.disks("linux", "/home/zoe", run=ScriptRun((125, "", "boom"))), [])
+
+
+class BrowseTest(unittest.TestCase):
+    def test_browsable(self):
+        for path, platform in (("/Volumes/Films", "mac"), ("/Volumes/Films/Movies", "mac"), ("D:\\", "windows"),
+                               ("D:\\Films", "windows"), ("/mnt/films", "linux"), ("/", "linux"),
+                               ("/volume1", "synology")):
+            self.assertTrue(docker.browsable(path, platform), path)
+        for path, platform in (("/Users/zoe", "mac"), ("/Volumes", "mac"), ("/Volumes/../Users", "mac"),
+                               ("C:\\Users", "windows"), ("/proc/1", "linux"), ("/sys", "linux"),
+                               ("relative", "linux"), ("/mnt/a,b", "linux")):
+            self.assertFalse(docker.browsable(path, platform), path)
+
+    def test_browse_lists_folders_and_space(self):
+        run = ScriptRun((0, "/dev/sdc1 3906000000 906000000 3000000000 23% /m\nMovies\nTV shows\nx,y\n", ""))
+        got = docker.browse("/mnt/films", "linux", run=run)
+        self.assertEqual(got, {"path": "/mnt/films", "parent": "/mnt", "dirs": ["Movies", "TV shows"],
+                               "free": 3000000000 * 1024, "total": 3906000000 * 1024})
+        self.assertIn("type=bind,src=/mnt/films,dst=/m,readonly", run.calls[0])
+
+    def test_browse_mac_reads_through_volumes(self):
+        run = ScriptRun((0, "v 100 50 50 50% /v\nSeries\n", ""))
+        got = docker.browse("/Volumes/Films/Movies", "mac", run=run)
+        self.assertEqual((got["parent"], got["dirs"]), ("/Volumes/Films", ["Series"]))
+        self.assertIn("type=bind,src=/Volumes,dst=/v,readonly", run.calls[0])
+        self.assertEqual(run.calls[0][-1], "Films/Movies")  # path inside /v, given as an argument
+        self.assertIsNone(docker.browse("/Volumes/Films", "mac", run=ScriptRun((0, "v 1 1 0 9% /v\n", "")))["parent"])
+
+    def test_browse_errors(self):
+        self.assertEqual(docker.browse("/Users/zoe", "mac", run=ScriptRun()), {"error": "err_folder_unreadable"})
+        missing = ScriptRun((125, "", "bind source path does not exist: /mnt/x"))
+        self.assertEqual(docker.browse("/mnt/x", "linux", run=missing), {"error": "err_folder_missing"})
+        self.assertEqual(docker.browse("/mnt/x", "linux", run=ScriptRun((3, "", "boom"))),
+                         {"error": "err_folder_unreadable"})
+
+
+class DiskCheckTest(unittest.TestCase):
+    def test_existing_folder(self):
+        run = ScriptRun((0, "/dev/sdc1 3906000000 906000000 3000000000 23% /m\n2\n", ""))
+        self.assertEqual(docker.disk_check("/mnt/films/Plaid", "linux", "/home/zoe", run=run),
+                         {"free": 3000000000 * 1024, "hardlinks": True})
+        self.assertIn("type=bind,src=/mnt/films/Plaid,dst=/m", run.calls[0])
+        self.assertNotIn("readonly", " ".join(run.calls[0]))
+
+    def test_no_hardlinks_and_read_only(self):
+        no_link = ScriptRun((0, "d 10 5 5 50% /m\n1\n", ""))
+        self.assertFalse(docker.disk_check("/media/usb", "linux", "/home/z", run=no_link)["hardlinks"])
+        read_only = ScriptRun((0, "d 10 5 5 50% /m\n-\n", ""))
+        self.assertIsNone(docker.disk_check("/media/usb", "linux", "/home/z", run=read_only)["hardlinks"])
+
+    def test_new_folder_checks_its_parent(self):
+        run = ScriptRun((125, "", "bind source path does not exist"), (0, "d 10 5 5 50% /m\n2\n", ""))
+        self.assertEqual(docker.disk_check("/mnt/films/Plaid", "linux", "/home/z", run=run),
+                         {"free": 5 * 1024, "hardlinks": True})
+        self.assertIn("type=bind,src=/mnt/films,dst=/m", run.calls[1])
+
+    def test_desktop_never_opens_the_home(self):
+        # Docker Desktop hung on the Mac home folder: only the /Users share's free space, no link test there.
+        run = ScriptRun((125, "", "bind source path does not exist"), (0, "u 10 5 5 50% /m\n", ""))
+        self.assertEqual(docker.disk_check("/Users/zoe/Plaid", "mac", "/Users/zoe", run=run),
+                         {"free": 5 * 1024, "hardlinks": None})
+        self.assertIn("type=bind,src=/Users,dst=/m,readonly", run.calls[1])
+
+    def test_unknown(self):
+        self.assertEqual(docker.disk_check("/mnt/x", "linux", "/home/z", run=ScriptRun((3, "", "boom"))),
+                         {"free": None, "hardlinks": None})
+        gone = ScriptRun((125, "", "does not exist"), (125, "", "does not exist"))
+        self.assertEqual(docker.disk_check("/mnt/x/y", "linux", "/home/z", run=gone), {"free": None, "hardlinks": None})
