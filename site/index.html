@@ -600,14 +600,19 @@ footer a{color:var(--text-2)}
     <div>
       <ol>
         <li><span data-l="en">Install <a href="https://www.docker.com/products/docker-desktop/">Docker Desktop</a> and open it once.</span><span data-l="fr">Installez <a href="https://www.docker.com/products/docker-desktop/">Docker Desktop</a> et ouvrez-le une fois.</span></li>
-        <li><span data-l="en">Download Plaid and unzip it.</span><span data-l="fr">Téléchargez Plaid et dézippez-le.</span></li>
-        <li><span data-l="en">Right-click <b>install.command</b>, then Open. The assistant opens in your browser.</span><span data-l="fr">Clic droit sur <b>install.command</b>, puis Ouvrir. L’assistant s’ouvre dans votre navigateur.</span></li>
+        <li><span data-l="en">Open <b>Terminal</b> (Applications › Utilities) and paste:</span><span data-l="fr">Ouvrez le <b>Terminal</b> (Applications › Utilitaires) et collez :</span></li>
       </ol>
-      <p class="note"><span data-l="en">The first time, macOS warns about an unidentified developer: right-click then Open lets it run.</span><span data-l="fr">La première fois, macOS prévient d’un développeur non identifié : clic droit puis Ouvrir permet de le lancer.</span></p>
+      <div class="cmd"><code id="cmd-mac">curl -fsSL https://arimet.github.io/plaid/get | sh</code>
+        <button class="pill" type="button" data-copy="cmd-mac"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
+      <p class="note"><span data-l="en">The assistant opens in your browser. You can close the Terminal afterwards.</span><span data-l="fr">L’assistant s’ouvre dans votre navigateur. Vous pouvez fermer le Terminal ensuite.</span></p>
     </div>
-    <div class="get"><a class="btn primary" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-mac.zip">
-      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14"/></svg>
-      <span data-l="en">Download for Mac</span><span data-l="fr">Télécharger pour Mac</span></a></div>
+    <div>
+      <p><span data-l="en">Rather not use the Terminal? Download the launcher, unzip it and double-click <b>install.command</b>.</span><span data-l="fr">Vous préférez éviter le Terminal ? Téléchargez le lanceur, dézippez-le et double-cliquez sur <b>install.command</b>.</span></p>
+      <p class="note"><span data-l="en">macOS blocks it the first time, because it is not signed with an Apple developer account. Open System Settings › Privacy &amp; Security, click <b>Open Anyway</b> next to install.command, then open it again.</span><span data-l="fr">macOS le bloque la première fois, parce qu’il n’est pas signé avec un compte développeur Apple. Ouvrez Réglages Système › Confidentialité et sécurité, cliquez sur <b>Ouvrir quand même</b> à côté d’install.command, puis rouvrez-le.</span></p>
+      <div class="get"><a class="btn soft" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-mac.zip">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14"/></svg>
+        <span data-l="en">Download the Mac launcher</span><span data-l="fr">Télécharger le lanceur Mac</span></a></div>
+    </div>
   </div>
 
   <div class="panel" role="tabpanel" id="p-win" aria-labelledby="t-win" hidden>

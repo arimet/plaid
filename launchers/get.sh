@@ -1,5 +1,5 @@
 #!/bin/sh
-# Plaid launcher for Linux PCs, mini PCs and Synology NAS.
+# Plaid launcher for Linux PCs, mini PCs, Synology NAS and Macs (no Gatekeeper prompt, unlike install.command).
 #   curl -fsSL https://raw.githubusercontent.com/arimet/plaid/main/launchers/get.sh | sh
 #   ... | sh -s -- --cli         same questions, in the terminal
 #   ... | sh -s -- --uninstall   remove the stack from the terminal
@@ -24,6 +24,19 @@ if ! command -v docker >/dev/null 2>&1; then
   fi
   echo "Installing Docker (this takes a few minutes)..."
   curl -fsSL https://get.docker.com | sh
+fi
+
+if [ "$PLATFORM" = mac ]; then
+  # Docker Desktop may be installed but not started: start it and wait, as install.command does.
+  export PATH="$PATH:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin"
+  until docker info >/dev/null 2>&1; do
+    [ -d /Applications/Docker.app ] && open -g -a Docker
+    echo "Waiting for Docker Desktop..."
+    sleep 5
+  done
+  # Start Docker Desktop at login, or the apps stop when the Mac restarts. Best effort.
+  plutil -replace AutoStart -bool YES "$HOME/Library/Group Containers/group.com.docker/settings-store.json" \
+    >/dev/null 2>&1 || true
 fi
 
 DOCKER="docker"
@@ -65,6 +78,10 @@ start_panel() {
   echo
   echo "Plaid is ready. Open this address in a browser on this network:"
   echo "    http://$ADDR:7575"
+  if [ "$PLATFORM" = mac ]; then  # the Mac has a screen: open the assistant there
+    until curl -fs http://localhost:7575/api/ping >/dev/null 2>&1; do sleep 1; done
+    open http://localhost:7575
+  fi
 }
 
 # After a terminal run that left neither a stack nor an assistant (cancelled, rolled back or removed),

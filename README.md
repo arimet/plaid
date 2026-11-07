@@ -137,13 +137,31 @@ A Raspberry Pi 4 or 5 with 4 GB of RAM or more runs the stack with Raspberry Pi 
 
 </details>
 
-### 🍎 Mac · 🪟 Windows
+### 🍎 Mac
+
+1. [Install Docker Desktop](#install-docker-desktop) and open it once.
+2. Open **Terminal** (Applications › Utilities) and paste:
+
+   ```bash
+   curl -fsSL https://arimet.github.io/plaid/get | sh
+   ```
+
+3. The assistant opens in your browser at <http://localhost:7575>. You can close the Terminal.
+
+<details>
+<summary><b>Without the Terminal</b></summary>
+
+Download `Plaid-mac.zip` from the [latest release](https://github.com/arimet/plaid/releases/latest), unzip it and double-click `install.command`.
+
+macOS blocks it the first time, because it is not signed with an Apple developer account. Open **System Settings › Privacy & Security**, click **Open Anyway** next to install.command, then open it again.
+
+</details>
+
+### 🪟 Windows
 
 1. [Install Docker Desktop](#install-docker-desktop).
-2. Download the launcher from the [latest release](https://github.com/arimet/plaid/releases/latest): `Plaid-mac.zip` or `Plaid-windows.zip`.
-3. Unzip it and open the launcher:
-   - **Mac**: right-click `install.command`, choose **Open**, then **Open** again. macOS asks this the first time, for any file from an unidentified developer.
-   - **Windows**: double-click `install.bat`. If SmartScreen warns you, click **More info**, then **Run anyway**.
+2. Download `Plaid-windows.zip` from the [latest release](https://github.com/arimet/plaid/releases/latest) and unzip it.
+3. Double-click `install.bat`. If SmartScreen warns you, click **More info**, then **Run anyway**.
 4. The assistant opens in your browser at <http://localhost:7575>.
 
 <details>
