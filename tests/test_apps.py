@@ -204,7 +204,7 @@ class AccountTest(unittest.TestCase):
         self.assertEqual(bazarr[2]["settings-auth-password"], "new-pass1")
         prefs = next(c for c in self.seen if c[1].endswith("/app/setPreferences"))
         self.assertIn("new-pass1", prefs[2]["json"])
-        pw = next(c for c in self.seen if c[1].endswith("/Users/u1/Password"))
+        pw = next(c for c in self.seen if c[1].endswith("/Users/Password?userId=u1"))  # Jellyfin 10.9+ routes
         self.assertEqual(pw[2], {"CurrentPw": "old-pass1", "NewPw": "new-pass1"})
 
     def test_change_account_reports_failures(self):
@@ -218,11 +218,11 @@ class AccountTest(unittest.TestCase):
 
     def test_jellyfin_rename_only_when_username_changes(self):
         self.run_change(acct(password="new-pass1"))
-        self.assertFalse([c for c in self.seen if c[0] == "POST" and c[1].endswith("/Users/u1")])
+        self.assertFalse([c for c in self.seen if c[0] == "POST" and c[1].endswith("/Users?userId=u1")])
         self.run_change(acct(username="bob"))
-        rename = next(c for c in self.seen if c[0] == "POST" and c[1].endswith("/Users/u1"))
+        rename = next(c for c in self.seen if c[0] == "POST" and c[1].endswith("/Users?userId=u1"))
         self.assertEqual(rename[2]["Name"], "bob")
-        self.assertFalse([c for c in self.seen if c[1].endswith("/Password")])  # same password: left alone
+        self.assertFalse([c for c in self.seen if "/Password" in c[1]])  # same password: left alone
 
 
 class AccountWaitTest(AccountTest):

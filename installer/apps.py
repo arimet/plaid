@@ -468,12 +468,13 @@ def change_account(old: Settings, new: Settings, host_of: Callable[[str], str], 
         host, pw = host_of("jellyfin"), current.get("jellyfin", old.password)
         wait_for(f"http://{host}/System/Info/Public")
         auth, uid = _jellyfin_auth(host, old.username, pw)
+        # Jellyfin 10.9+ routes: the user id goes in the query (the /Users/{id}/... forms are gone).
         if new.password != old.password:
-            call("POST", f"http://{host}/Users/{uid}/Password", {"CurrentPw": pw, "NewPw": new.password}, auth)
+            call("POST", f"http://{host}/Users/Password?userId={uid}", {"CurrentPw": pw, "NewPw": new.password}, auth)
         if new.username != old.username:
             user = call("GET", f"http://{host}/Users/{uid}", headers=auth)
             user["Name"] = new.username
-            call("POST", f"http://{host}/Users/{uid}", user, auth)
+            call("POST", f"http://{host}/Users?userId={uid}", user, auth)
     attempt("jellyfin", jellyfin)
     return failed
 
