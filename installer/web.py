@@ -342,18 +342,19 @@ def backups_page(lang: str, s: Settings, found: list[dict]) -> str:
     from installer import backup
     head = f'<h1>{E(t(lang, "backups_title"))}</h1><p class="lead">{E(t(lang, "backups_help"))}</p>'
     if not found:
-        return subpage(lang, head + f'<p class="hint">{E(t(lang, "backups_none", folder=backup.where(s)))}</p>')
+        return subpage(lang, f'<p class="hint">{E(t(lang, "backups_none", folder=backup.where(s)))}</p>', side=head)
     rows = "".join(f'<li class="app-row"><span><b>{E(backup_date(lang, b["name"]))}</b><br><small>'
                    f'{E(human_size(b["size"], lang))}</small></span><a class="btn" href="/backups/confirm?name='
                    f'{E(urllib.parse.quote(b["name"]))}">{E(t(lang, "backups_pick"))}</a></li>' for b in found)
-    return subpage(lang, head + f'<ul class="manual">{rows}</ul>')
+    return subpage(lang, f'<ul class="manual">{rows}</ul>', side=head)
 
 
 def restore_confirm_page(lang: str, name: str) -> str:
-    return subpage(lang, f'<h1>{E(t(lang, "backups_confirm", date=backup_date(lang, name)))}</h1>'
-                         f'<p class="lead">{E(t(lang, "backups_help"))}</p><form method="post" action="/api/restore">'
+    return subpage(lang, f'<form method="post" action="/api/restore">'
                          f'<input type="hidden" name="name" value="{E(name)}"><button class="btn danger" '
-                         f'type="submit">{E(t(lang, "backups_confirm_btn"))}</button></form>')
+                         f'type="submit">{E(t(lang, "backups_confirm_btn"))}</button></form>',
+                   side=f'<h1>{E(t(lang, "backups_confirm", date=backup_date(lang, name)))}</h1>'
+                        f'<p class="lead">{E(t(lang, "backups_help"))}</p>')
 
 
 def disk_html(lang: str, s: Settings, status: dict) -> str:
@@ -423,8 +424,12 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
     return subpage(lang, body, back=False, wide=True)
 
 
-def subpage(lang: str, body: str, back: bool = True, menu: bool = True, head: str = "", wide: bool = False) -> str:
+def subpage(lang: str, body: str, back: bool = True, menu: bool = True, head: str = "", wide: bool = False,
+            side: str = "") -> str:
+    """`side`: the page's title and explanation, beside `body` on a computer screen, above it on a phone."""
     link = f'<a class="back" href="/">‹ {E(t(lang, "nav_back"))}</a>' if back else ""
+    if side:
+        body, wide = f'<div class="split"><div class="step-head">{side}</div><div class="step-body">{body}</div></div>', True
     return page(lang, f'<section id="done">{link}{body}</section>', foot='<div style="height:32px"></div>',
                 menu=header_menu(lang) if menu else "", head=head, wide=wide)
 
@@ -618,16 +623,15 @@ def settings_summary(lang: str, form: dict, chg: dict[str, str], old: Settings, 
         _field(t(lang, "settings_current_password", app=APP_NAMES[app]), f"current_{app}", kind="password",
                hint=t(lang, "settings_current_password_help", app=APP_NAMES[app])) for app in ask)
     apply = "" if blocked else f'<button class="btn primary" type="submit">{E(t(lang, "settings_apply"))}</button>'
-    body = f"""<h1>{E(t(lang, "settings_summary"))}</h1>
-  <p class="lead">{E(t(lang, "settings_summary_lead"))}</p>
-  <ul class="diff">{rows}</ul>
+    side = f'<h1>{E(t(lang, "settings_summary"))}</h1><p class="lead">{E(t(lang, "settings_summary_lead"))}</p>'
+    body = f"""<ul class="diff">{rows}</ul>
   <div class="note{"" if downtime == "outage_none" else " warn"} outage">{CLOCK}<span>{E(t(lang, downtime))}</span></div>
   {notes}
   <form method="post" action="/settings/apply" class="settings">{hidden}{prompts}
   <div class="actions">{apply}
   <button class="btn" type="submit" formaction="/settings/edit">{E(t(lang, "settings_edit"))}</button></div>
   </form>"""
-    return subpage(lang, body)
+    return subpage(lang, body, side=side)
 
 
 def update_lines(lang: str, last: dict) -> list[tuple[str, str]]:
@@ -691,56 +695,53 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
         title = t(lang, error if own else f"err_{kind}_failed" if kind else "err_apply_failed")
         head = ""
         extra = f'<pre class="detail">{E(last.get("detail") or "")}</pre>'
-    body = f'<h1>{E(title)}</h1><ul class="steps">{steps}</ul>{extra}'
-    return subpage(lang, body, head=head)
+    return subpage(lang, f'<ul class="steps">{steps}</ul>{extra}', head=head, side=f'<h1>{E(title)}</h1>')
 
 
 def remote_page(lang: str, s: Settings) -> str:
     key = "remote_done_steps" if s.tailscale_key else "remote_desktop_steps"
-    return subpage(lang, f'<h1>{E(t(lang, "remote_done_title"))}</h1><p class="lead">{E(t(lang, "nav_remote_desc"))}</p>'
-                         f'<div class="tip">{steps_html(lang, key)}</div>')
+    return subpage(lang, f'<div class="tip">{steps_html(lang, key)}</div>',
+                   side=f'<h1>{E(t(lang, "remote_done_title"))}</h1><p class="lead">{E(t(lang, "nav_remote_desc"))}</p>')
 
 
 def torrents_page(lang: str, found: list[dict] | None, removed: int | None = None) -> str:
     """Finished torrents already in the library. `found` None: an app did not answer."""
     head = f'<h1>{E(t(lang, "torrents_title"))}</h1>'
+    side = head + f'<p class="lead">{E(t(lang, "torrents_help"))}</p><p class="hint">{E(t(lang, "torrents_kept"))}</p>'
     if removed is not None:
-        return subpage(lang, head + f'<p class="lead">{E(t(lang, "torrents_done", n=removed))}</p>')
+        return subpage(lang, f'<p class="lead">{E(t(lang, "torrents_done", n=removed))}</p>', side=head)
     if found is None:
-        return subpage(lang, head + f'<p class="note warn">{E(t(lang, "torrents_error"))}</p>')
+        return subpage(lang, f'<p class="note warn">{E(t(lang, "torrents_error"))}</p>', side=side)
     if not found:
-        return subpage(lang, head + f'<p class="lead">{E(t(lang, "torrents_none"))}</p>'
-                                    f'<p class="hint">{E(t(lang, "torrents_kept"))}</p>')
+        return subpage(lang, f'<p class="lead">{E(t(lang, "torrents_none"))}</p>', side=side)
     rows = "".join(f'<li class="app-row"><span>{E(x["name"])}</span><b>{E(human_size(x["size"], lang))}</b></li>'
                    for x in found)
-    return subpage(lang, head + f'<p class="lead">{E(t(lang, "torrents_help"))}</p><ul class="manual">{rows}</ul>'
-                                f'<p class="hint">{E(t(lang, "torrents_kept"))}</p>'
-                                f'<form method="post" action="/torrents">'
+    return subpage(lang, f'<ul class="manual">{rows}</ul><form method="post" action="/torrents">'
                                 f'<input type="hidden" name="hashes" value="{E("|".join(x["hash"] for x in found))}">'
                                 f'<button class="btn danger" type="submit">'
-                                f'{E(t(lang, "torrents_btn", n=len(found)))}</button></form>')
+                                f'{E(t(lang, "torrents_btn", n=len(found)))}</button></form>', side=side)
 
 
 def trackers_page(lang: str) -> str:
     steps = steps_html(lang, "prowlarr_steps")
-    return subpage(lang, f"""<h1>{E(t(lang, "trackers_title"))}</h1><p class="lead">{E(t(lang, "trackers_help"))}</p>
-  <input class="input" id="tracker-search" type="search" autocomplete="off" placeholder="{E(t(lang, "trackers_search"))}"
+    side = f"""<h1>{E(t(lang, "trackers_title"))}</h1><p class="lead">{E(t(lang, "trackers_help"))}</p>
+  <p class="hint">{E(t(lang, "trackers_rights"))}</p>"""
+    return subpage(lang, f"""<input class="input" id="tracker-search" type="search" autocomplete="off" placeholder="{E(t(lang, "trackers_search"))}"
    aria-label="{E(t(lang, "trackers_search"))}">
   <ul class="trackers" id="tracker-list" aria-live="polite"><li class="hint">{E(t(lang, "trackers_loading"))}</li></ul>
-  <p class="hint" id="tracker-more"></p><p class="hint">{E(t(lang, "trackers_rights"))}</p>
+  <p class="hint" id="tracker-more"></p>
   <div class="tip"><h2>{E(t(lang, "prowlarr_title"))}</h2><p>{E(t(lang, "prowlarr_default"))}</p>{steps}
-  <p>{E(t(lang, "prowlarr_cloudflare"))} <a href="https://wiki.servarr.com/prowlarr/indexers" target="_blank" rel="noopener">{E(t(lang, "prowlarr_docs"))}</a></p></div>""")
+  <p>{E(t(lang, "prowlarr_cloudflare"))} <a href="https://wiki.servarr.com/prowlarr/indexers" target="_blank" rel="noopener">{E(t(lang, "prowlarr_docs"))}</a></p></div>""", side=side)
 
 
 def remove_page(lang: str, s: Settings, media_size: int) -> str:
     size = human_size(media_size, lang)
     return subpage(lang, f"""<form id="uninstall" class="field-group">
-    <h1>{E(t(lang, "uninstall_title"))}</h1>
-    <p class="lead">{E(t(lang, "uninstall_text"))}</p>
     <label class="check"><input type="checkbox" name="remove_media"><div><b>{E(t(lang, "uninstall_media", path=s.data_dir, size=size))}</b></div></label>
     <button class="btn danger" type="submit">{E(t(lang, "btn_uninstall"))}</button>
   </form>
-  <p class="lead" id="uninstall-status" aria-live="polite" hidden></p>""")
+  <p class="lead" id="uninstall-status" aria-live="polite" hidden></p>""",
+                   side=f'<h1>{E(t(lang, "uninstall_title"))}</h1><p class="lead">{E(t(lang, "uninstall_text"))}</p>')
 
 
 def login_page(lang: str, error: bool) -> str:

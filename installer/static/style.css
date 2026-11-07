@@ -85,7 +85,7 @@ h2{font-size:19px;line-height:1.25;font-weight:800}
 
 /* ----------------------------------------------------------------- layout */
 main{width:100%;max-width:var(--page);margin:0 auto;padding:24px 16px 0;display:flex;flex-direction:column;gap:20px;flex:1}
-#wizard,#wizard section,#progress,#done,#uninstall,.step-head,.step-body{display:flex;flex-direction:column;gap:18px}
+#wizard,#wizard section,#progress,#done,#uninstall,.split,.step-head,.step-body{display:flex;flex-direction:column;gap:18px}
 #wizard section[hidden],#progress[hidden],#wizard[hidden],#uninstall[hidden]{display:none}
 #done > h2{margin-top:10px}
 .back{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font:600 14px/1 Inter,sans-serif;color:var(--text-2);
@@ -293,7 +293,7 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 @media (min-width:960px){
   body.wide{--page:1120px;--cols:minmax(0,.8fr) minmax(0,1.2fr);--colgap:72px}
   body.wide main{padding-top:40px;gap:28px;flex:0 0 auto}  /* the buttons follow the fields, not the bottom of the screen */
-  body.wide #wizard section:not([hidden]),body.wide #progress:not([hidden]){display:grid;grid-template-columns:var(--cols);
+  body.wide #wizard section:not([hidden]),body.wide #progress:not([hidden]),body.wide .split{display:grid;grid-template-columns:var(--cols);
     column-gap:var(--colgap);align-items:start}
   body.wide .step-head{position:sticky;top:32px}
   body.wide .step-head h1{font-size:44px}
