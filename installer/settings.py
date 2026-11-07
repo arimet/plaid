@@ -25,6 +25,13 @@ class Settings:
     home: str = ""
     platform: str = "linux"  # linux | mac | windows | synology
     tailscale_key: str = ""  # optional: joins the machine to the user's tailnet (Linux and Synology)
+    # Languages and quality (media.py). None = never chosen: installs made before these existed.
+    audio_lang: str | None = None
+    profiles: list[str] | None = None
+    default_profile: str | None = None
+    subtitle_langs: list[str] | None = None
+    metadata_lang: str | None = None
+    arr_ids: dict = field(default_factory=dict)  # {"radarr": {"formats": {...}, "profiles": {...}}, "sonarr": ...}
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -87,4 +94,5 @@ def validate(s: Settings) -> list[str]:
             errors.append("err_vpn_fields")
     if s.tailscale_key and not s.tailscale_key.strip().startswith("tskey-"):
         errors.append("err_tailscale_key")
-    return errors
+    from installer import media
+    return errors + media.validate(s)
