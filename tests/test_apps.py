@@ -446,3 +446,51 @@ class DeleteErrorTest(unittest.TestCase):
         app = Broken("radarr", profiles=[{"id": 8, "name": "VO sous-titrée · 4K"}])
         with self.assertRaises(apps.HttpError):  # a failure, not "still used by films"
             app.ensure_media(chosen(), {"formats": {}, "profiles": {"orig-4k": 8}})
+
+
+class HistoryArr(FakeArr):
+    def __init__(self, name, imported):
+        super().__init__(name)
+        self.imported = imported
+
+    def __call__(self, method, path, body=None):
+        self.calls.append((method, path, body))
+        if path.startswith("/history/since"):
+            return [{"downloadId": h, "eventType": "downloadFolderImported"} for h in self.imported]
+
+
+class TorrentCleanupTest(unittest.TestCase):
+    TORRENTS = [{"hash": "aaa", "name": "Dune.2024.1080p", "size": 9 * 10 ** 9},
+                {"hash": "bbb", "name": "Show.S01.1080p", "size": 30 * 10 ** 9},
+                {"hash": "ccc", "name": "Linux.iso", "size": 10 ** 9}]  # added by hand: never imported
+
+    def fake_call(self, login_ok=True):
+        self.seen = []
+
+        def call(method, url, body=None, headers=None, form=False):
+            self.seen.append((method, url, body))
+            if url.endswith("/auth/login"):
+                return "Ok." if login_ok else "Fails."
+            if "/torrents/info" in url:
+                return self.TORRENTS
+            return None
+        return call
+
+    def test_only_imported_torrents_are_listed(self):
+        radarr, sonarr = HistoryArr("radarr", ["AAA"]), HistoryArr("sonarr", ["BBB", "ZZZ"])
+        with mock.patch("installer.apps.call", self.fake_call()):
+            got = apps.finished_torrents(acct(), "qbittorrent:8080", [radarr, sonarr])
+        self.assertEqual([t["name"] for t in got], ["Dune.2024.1080p", "Show.S01.1080p"])
+        self.assertEqual(radarr.calls[0][1], "/history/since?date=2000-01-01&eventType=3")
+        self.assertIn(("GET", "http://qbittorrent:8080/api/v2/torrents/info?filter=completed", None), self.seen)
+
+    def test_delete_with_files(self):
+        with mock.patch("installer.apps.call", self.fake_call()):
+            apps.delete_torrents(acct(), "qbittorrent:8080", ["aaa", "bbb"])
+        self.assertEqual(self.seen[-1], ("POST", "http://qbittorrent:8080/api/v2/torrents/delete",
+                                         {"hashes": "aaa|bbb", "deleteFiles": "true"}))
+
+    def test_refused_login_raises(self):
+        with mock.patch("installer.apps.call", self.fake_call(login_ok=False)):
+            with self.assertRaises(RuntimeError):
+                apps.finished_torrents(acct(), "qbittorrent:8080", [])

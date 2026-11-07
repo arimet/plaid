@@ -134,6 +134,28 @@ def configure_qbittorrent(s: Settings, host: str, compose_out: ComposeOut, log: 
     return key
 
 
+IMPORTED = 3  # downloadFolderImported, in Radarr's and Sonarr's history alike
+
+
+def finished_torrents(s: Settings, host: str, arrs: list) -> list[dict]:
+    """{hash, name, size} of the finished torrents whose files Radarr or Sonarr already put in the library. A torrent
+    they never imported (added by hand, still to sort) is never listed."""
+    imported = {h["downloadId"].upper() for arr in arrs
+                for h in arr("GET", f"/history/since?date=2000-01-01&eventType={IMPORTED}") or [] if h.get("downloadId")}
+    if not _qbit_login(host, s.username, s.password):
+        raise RuntimeError("qBittorrent refused the login")
+    torrents = call("GET", f"http://{host}/api/v2/torrents/info?filter=completed", headers={"Host": host}) or []
+    return [{"hash": x["hash"], "name": x["name"], "size": x["size"]} for x in torrents if x["hash"].upper() in imported]
+
+
+def delete_torrents(s: Settings, host: str, hashes: list[str]) -> None:
+    """Removes the torrents and their files in torrents/: the library keeps its own hard link or copy."""
+    if not _qbit_login(host, s.username, s.password):
+        raise RuntimeError("qBittorrent refused the login")
+    call("POST", f"http://{host}/api/v2/torrents/delete", {"hashes": "|".join(hashes), "deleteFiles": "true"},
+         {"Host": host}, form=True)
+
+
 # ---------------------------------------------------------------- Jellyfin
 
 JELLYFIN_CLIENT = 'MediaBrowser Client="Plaid", Device="Plaid", DeviceId="plaid", Version="1.0"'

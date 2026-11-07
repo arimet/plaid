@@ -286,6 +286,27 @@ def start_apply(new: Settings, current: dict[str, str], dk=docker, state_dir: st
     _start_worker({"settings": json.loads(new.to_json()), "current": current}, dk, state_dir)
 
 
+def _torrent_apps(s: Settings, dk, state_dir: str):
+    from installer.reconfigure import host_of_for
+    host_of = host_of_for(s)
+    compose_out = lambda *args: dk.compose(state_dir, *args).stdout
+    return host_of("qbittorrent"), [apps.Arr(name, host_of(name), "v3", compose_out) for name in ("radarr", "sonarr")]
+
+
+def finished_torrents(s: Settings, dk=docker, state_dir: str = STATE_DIR) -> list[dict]:
+    host, arrs = _torrent_apps(s, dk, state_dir)
+    return apps.finished_torrents(s, host, arrs)
+
+
+def clean_torrents(s: Settings, dk=docker, state_dir: str = STATE_DIR) -> int:
+    """Deletes the finished torrents already in the library, as listed right now. Returns how many."""
+    host, arrs = _torrent_apps(s, dk, state_dir)
+    found = apps.finished_torrents(s, host, arrs)
+    if found:
+        apps.delete_torrents(s, host, [x["hash"] for x in found])
+    return len(found)
+
+
 def last_update(state_dir: str = STATE_DIR) -> dict | None:
     from installer import update
     return update.last(state_dir)

@@ -202,7 +202,7 @@ def installed_flow():
 
 
 class PanelCliTest(TuiCliTest):
-    # Menu order: apps, trackers, remote, remove, quit. Up from the top wraps to "quit".
+    # Menu order: apps, trackers, remote, settings, update, torrents, remove, quit. Up wraps to "quit".
     def test_apps_then_quit(self):
         flow = installed_flow()
         t, out = self.term("\r", "\r", "\x1b[A\r")  # apps · Enter to come back · quit
@@ -220,7 +220,7 @@ class PanelCliTest(TuiCliTest):
     def test_remove_from_the_menu(self):
         flow = installed_flow()
         # remove · confirm (left = yes) · keep the media folder (Enter = no)
-        t, out = self.term("\x1b[B\x1b[B\x1b[B\x1b[B\r", "\x1b[D\r", "\r")
+        t, out = self.term("\x1b[B" * 6 + "\r", "\x1b[D\r", "\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIs(flow.removed, False)
 
@@ -357,3 +357,37 @@ class DiskLinesTest(unittest.TestCase):
         flow.disks = lambda platform, home: [{"path": "/Volumes/Films", "name": "Films", "free": None, "total": None,
                                               "system": False}]
         self.assertEqual(cli._disk_lines(flow, ENV, "fr"), ["Films · /Volumes/Films"])
+
+
+class MaintenanceCliTest(TuiCliTest):
+    def test_apps_page_shows_states(self):
+        flow = installed_flow()
+        flow.status = {"disk": "ok", "vpn": "off", "apps": {"jellyfin": "running", "radarr": "failing"},
+                       "free": 5 * 1024 ** 3, "total": 500 * 1024 ** 3}
+        t, out = self.term("\r", "\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertIn("En marche", out.getvalue())
+        self.assertIn("En panne", out.getvalue())
+        self.assertIn("5,0 Go libres sur 500 Go", out.getvalue())
+
+    def test_update_from_the_menu(self):
+        flow = installed_flow()
+        flow.updates = []
+        flow.start_update = lambda: flow.updates.append(True)
+        flow.apply_status = lambda: {"state": "done" if flow.updates else "idle", "events": [
+            {"step": "step_pull"}, {"step": "step_done", "done": True, "detail": "radarr"}]}
+        t, out = self.term("\x1b[B" * 4 + "\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertEqual(flow.updates, [True])
+        self.assertIn("Mises à jour : Radarr.", out.getvalue())
+
+    def test_torrents_from_the_menu(self):
+        flow = installed_flow()
+        flow.cleaned = []
+        flow.finished_torrents = lambda s: [{"hash": "a", "name": "Dune.2024.1080p", "size": 9 * 1024 ** 3}]
+        flow.clean_torrents = lambda s: flow.cleaned.append(s) or 1
+        t, out = self.term("\x1b[B" * 5 + "\r", "\x1b[D\r", "\x1b[A\r")  # torrents · yes · quit
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertIn("Dune.2024.1080p", out.getvalue())
+        self.assertEqual(len(flow.cleaned), 1)
+        self.assertIn("Torrents supprimés : 1.", out.getvalue())

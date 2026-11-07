@@ -313,7 +313,7 @@ def run_install_tui(term, flow, env: dict, lang: str) -> int:
     return 0
 
 
-def print_apps(term, lang: str, host: str) -> None:
+def print_apps(term, lang: str, host: str, states: dict | None = None) -> None:
     from installer.web import DAILY_APPS
     for title, group, daily in ((t(lang, "apps_daily"), [x for x in SERVICES if x in DAILY_APPS], True),
                                 (t(lang, "apps_behind"), [x for x in SERVICES if x not in DAILY_APPS], False)):
@@ -321,7 +321,9 @@ def print_apps(term, lang: str, host: str) -> None:
         for svc in group:
             url = term.style(f"http://{host}:{PORTS[svc]}", fg="accent2", underline=True)
             name = term.pad(term.style(APP_NAMES[svc], bold=True), 13)  # padded on what shows, not on the codes
-            term.line(f"  {term.style('■', fg=_APP_SWATCH[svc])} {name}{t(lang, 'app_' + svc).ljust(17)}{url}")
+            state = (states or {}).get(svc)
+            word = f"  {term.style(t(lang, 'state_' + state), dim=state == 'running')}" if state else ""
+            term.line(f"  {term.style('■', fg=_APP_SWATCH[svc])} {name}{t(lang, 'app_' + svc).ljust(17)}{url}{word}")
             if daily:
                 for chunk in term.wrap(t(lang, "appd_" + svc), 4):
                     term.line("    " + term.style(chunk, dim=True))
@@ -335,6 +337,7 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     code, notes = 0, []
     actions = [("apps", t(lang, "menu_apps")), ("trackers", t(lang, "menu_trackers")),
                ("remote", t(lang, "menu_remote")), ("settings", t(lang, "menu_settings")),
+               ("update", t(lang, "update_btn")), ("torrents", t(lang, "torrents_link")),
                ("remove", t(lang, "menu_remove")), ("quit", t(lang, "menu_quit"))]
     with term.fullscreen():
         try:
@@ -358,8 +361,12 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     flash = t(lang, "guard_disk_confirmed")
                 if choice == "apps":
                     term.page(t(lang, "menu_apps"), t(lang, "apps_open_anywhere"))
-                    print_apps(term, lang, host)
+                    print_apps(term, lang, host, status.get("apps"))
                     term.line()
+                    if status.get("free") is not None and status.get("total"):
+                        colon = " : " if lang == "fr" else ": "
+                        term.note(t(lang, "panel_disk") + colon + t(lang, "picker_free", free=human_size(
+                            status["free"], lang), total=human_size(status["total"], lang)))
                     term.note(t(lang, "done_login", username=s.username))
                     term.pause(t(lang, "cli_back"))
                 elif choice == "trackers":
@@ -376,6 +383,10 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     if result is not None:  # applied (or failed): the panel closes on its outcome
                         code, notes = result
                         break
+                elif choice == "update":
+                    flash = _update_tui(term, flow, lang)
+                elif choice == "torrents":
+                    flash = _torrents_tui(term, flow, lang, s)
                 elif choice == "remove":
                     term.page(t(lang, "uninstall_title"), t(lang, "uninstall_text"))
                     code, notes = _remove_steps(term, flow, lang, s.data_dir, size())
@@ -386,6 +397,62 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     if notes:
         _print_notes(term, notes)
     return code
+
+
+def _update_tui(term, flow, lang: str) -> str:
+    """Runs the apps' update in the worker and follows it. Returns the line the menu shows next."""
+    import time
+    from installer.tui import Steps
+    term.page(t(lang, "update_running"), t(lang, "update_help"))
+    if flow.apply_status()["state"] != "running":  # one operation at a time: follow the running one
+        flow.start_update()
+    steps = Steps(term, [(k, t(lang, k)) for k in ("step_pull", "step_recreate", "step_cleanup_images")])
+    while True:
+        status = flow.apply_status()
+        events = status["events"]
+        if events and status["state"] in ("running", "done", "failed"):
+            steps.advance(events[-1]["step"])
+        if status["state"] == "done":
+            steps.finish()
+            changed = [APP_NAMES.get(a, a) for a in (events[-1].get("detail") or "").split(",") if a]
+            return t(lang, "update_changed", apps=", ".join(changed)) if changed else t(lang, "update_none")
+        if status["state"] == "failed":
+            steps.failed = True
+            steps.render()
+            term.note(t(lang, "err_update_failed"), "error")
+            term.note(events[-1].get("detail", "") if events else "")
+            term.pause(t(lang, "cli_back"))
+            return ""
+        steps.render()
+        time.sleep(0.3)
+
+
+def _torrents_tui(term, flow, lang: str, s) -> str:
+    """Lists the finished torrents already in the library, deletes them on a yes."""
+    from installer.web import human_size
+    term.page(t(lang, "torrents_title"))
+    try:
+        found = flow.finished_torrents(s)
+    except Exception:  # qBittorrent, Radarr or Sonarr down or starting
+        term.note(t(lang, "torrents_error"), "warn")
+        term.pause(t(lang, "cli_back"))
+        return ""
+    if not found:
+        term.note(t(lang, "torrents_none"))
+        term.note(t(lang, "torrents_kept"))
+        term.pause(t(lang, "cli_back"))
+        return ""
+    term.note(t(lang, "torrents_help"))
+    for x in found:
+        term.note(f"{x['name']} · {human_size(x['size'], lang)}")
+    term.note(t(lang, "torrents_kept"))
+    if not term.confirm(t(lang, "torrents_btn", n=len(found)) + " ?", t(lang, "cli_yes_word"), t(lang, "cli_no_word"),
+                        default=False):
+        return ""
+    try:
+        return t(lang, "torrents_done", n=flow.clean_torrents(s))
+    except Exception:
+        return t(lang, "torrents_error")
 
 
 def _settings_tui(term, flow, env: dict, s) -> tuple[int, Notes] | None:

@@ -786,3 +786,45 @@ class UpdateWebTest(unittest.TestCase):
         self.assertIn("Tout était déjà à jour.", web.settings_progress("fr", none))
         failed = {"state": "failed", "events": [{"step": "step_pull", "error": "err_update_failed", "detail": "boom"}]}
         self.assertIn("La mise à jour n’a pas abouti", web.settings_progress("fr", failed))
+
+
+class TorrentsWebTest(unittest.TestCase):
+    start, req = WebTest.start, WebTest.req
+    open_panel = GuardWebTest.open_panel
+    FOUND = [{"hash": "aaa", "name": "Dune.<b>2024</b>.1080p", "size": 9 * 1024 ** 3}]
+
+    def setUp(self):
+        FakeFlow.finished_torrents = lambda flow, s: list(self.FOUND)
+        FakeFlow.clean_torrents = lambda flow, s: self.cleaned.append(s) or 1
+        self.cleaned = []
+        self.addCleanup(lambda: (delattr(FakeFlow, "finished_torrents"), delattr(FakeFlow, "clean_torrents")))
+
+    def test_panel_links_to_the_cleanup(self):
+        self.assertIn('href="/torrents"', self.open_panel())
+
+    def test_torrents_page_lists_them(self):
+        self.open_panel()
+        status, _, html = self.req("GET", "/torrents", headers={"Cookie": self.cookie})
+        self.assertEqual(status, 200)
+        self.assertIn("Dune.&lt;b&gt;2024&lt;/b&gt;.1080p", html)
+        self.assertIn("9,0 Go", html)
+        self.assertIn("Supprimer ces torrents (1)", html)
+
+    def test_clean(self):
+        self.open_panel()
+        status, _, html = self.req("POST", "/torrents", "", {"Cookie": self.cookie,
+                                                            "Content-Type": "application/x-www-form-urlencoded"})
+        self.assertEqual((status, len(self.cleaned)), (200, 1))
+        self.assertIn("Torrents supprimés : 1.", html)
+
+    def test_needs_login(self):
+        self.open_panel()
+        self.assertEqual(self.req("GET", "/torrents")[0], 303)
+        self.assertEqual(self.req("POST", "/torrents", "")[0], 401)
+        self.assertEqual(self.cleaned, [])
+
+    def test_apps_down(self):
+        FakeFlow.finished_torrents = lambda flow, s: 1 / 0
+        self.open_panel()
+        _, _, html = self.req("GET", "/torrents", headers={"Cookie": self.cookie})
+        self.assertIn("ne répond pas", html)

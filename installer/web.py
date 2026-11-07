@@ -306,7 +306,7 @@ def maintenance_html(lang: str, last: dict | None) -> str:
     return (f'<h2>{E(t(lang, "maint_title"))}</h2><div class="maint">'
             f'<p class="hint">{E(t(lang, "update_help"))} {E(when)}</p>'
             f'<form method="post" action="/api/update"><button class="btn" type="submit">{E(t(lang, "update_btn"))}'
-            f'</button></form></div>')
+            f'</button></form><a href="/torrents">{E(t(lang, "torrents_link"))}</a></div>')
 
 
 def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status: dict | None = None,
@@ -591,6 +591,24 @@ def remote_page(lang: str, s: Settings) -> str:
                          f'<div class="tip">{steps_html(lang, key)}</div>')
 
 
+def torrents_page(lang: str, found: list[dict] | None, removed: int | None = None) -> str:
+    """Finished torrents already in the library. `found` None: an app did not answer."""
+    head = f'<h1>{E(t(lang, "torrents_title"))}</h1>'
+    if removed is not None:
+        return subpage(lang, head + f'<p class="lead">{E(t(lang, "torrents_done", n=removed))}</p>')
+    if found is None:
+        return subpage(lang, head + f'<p class="note warn">{E(t(lang, "torrents_error"))}</p>')
+    if not found:
+        return subpage(lang, head + f'<p class="lead">{E(t(lang, "torrents_none"))}</p>'
+                                    f'<p class="hint">{E(t(lang, "torrents_kept"))}</p>')
+    rows = "".join(f'<li class="app-row"><span>{E(x["name"])}</span><b>{E(human_size(x["size"], lang))}</b></li>'
+                   for x in found)
+    return subpage(lang, head + f'<p class="lead">{E(t(lang, "torrents_help"))}</p><ul class="manual">{rows}</ul>'
+                                f'<p class="hint">{E(t(lang, "torrents_kept"))}</p>'
+                                f'<form method="post" action="/torrents"><button class="btn danger" type="submit">'
+                                f'{E(t(lang, "torrents_btn", n=len(found)))}</button></form>')
+
+
 def trackers_page(lang: str) -> str:
     steps = steps_html(lang, "prowlarr_steps")
     return subpage(lang, f"""<h1>{E(t(lang, "trackers_title"))}</h1><p class="lead">{E(t(lang, "trackers_help"))}</p>
@@ -732,7 +750,7 @@ def make_handler(state: State):
                     return self.json(401, {})
                 status, detail = state.flow.uninstall_status()
                 return self.json(200, {"state": status, "detail": detail, "text": t(lang, "err_uninstall_failed")})
-            if path not in ("/", "/remote", "/trackers", "/remove", "/settings", "/settings/progress"):
+            if path not in ("/", "/remote", "/trackers", "/torrents", "/remove", "/settings", "/settings/progress"):
                 return self.send(404, "Not found", "text/plain")
             if self.locked():
                 return self.send(303, "", headers={"Location": "/login"})
@@ -749,6 +767,12 @@ def make_handler(state: State):
                 return self.send(200, settings_progress(lang, state.flow.apply_status(), host))
             if path == "/trackers":
                 return self.send(200, trackers_page(lang))
+            if path == "/torrents":
+                try:
+                    found = state.flow.finished_torrents(s)
+                except Exception:  # qBittorrent, Radarr or Sonarr down or starting
+                    found = None
+                return self.send(200, torrents_page(lang, found))
             if path == "/remove":
                 return self.send(200, remove_page(lang, s, state.flow.media_size(s)))
             host = (self.headers.get("Host") or "localhost").rsplit(":", 1)[0]
@@ -802,6 +826,13 @@ def make_handler(state: State):
                 except Exception as e:
                     return self.json(503, {"error": t(lang, "trackers_error"), "detail": str(e)})
                 return self.json(200, {"text": t(lang, "tracker_added")})
+            if path == "/torrents":
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                try:  # the list is made again here: only what is imported now goes
+                    return self.send(200, torrents_page(lang, [], state.flow.clean_torrents(s)))
+                except Exception:
+                    return self.send(200, torrents_page(lang, None))
             if path == "/api/update":
                 if self.locked() or s is None:
                     return self.json(401, {})
