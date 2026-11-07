@@ -296,7 +296,23 @@ Each app's own settings stay editable in the app.
 <details>
 <summary><b>Does Plaid update the apps?</b></summary>
 
-No. No FlareSolverr either, for now.
+When you ask. On the main page, each app shows whether it runs, and **Update the apps** downloads the new versions, restarts the apps that changed and deletes their old versions. Plaid says which apps it updated. If a download server refuses an app, the others are still updated and Plaid names the one left behind. No FlareSolverr, for now.
+
+</details>
+
+<details>
+<summary><b>What happens to finished torrents?</b></summary>
+
+They keep sharing until you remove them. **Clean up finished torrents**, on the main page, lists the ones Radarr or Sonarr already put in your library and removes them with their copy in the downloads. Your films and series stay. A torrent still being sorted, or one you added by hand, is never listed.
+
+</details>
+
+<details>
+<summary><b>Are my settings backed up?</b></summary>
+
+Yes, every night after 3:00 in the stack's time zone. Plaid stops the apps for a few seconds and saves their settings: the lists of films and series, Seerr's requests and users, Jellyfin's accounts and watch history, Prowlarr's trackers, qBittorrent's torrents, and Plaid's own settings. It keeps the last seven. Your film and series files are not in it.
+
+Backups go to `backups` inside your media folder. To keep one when the media disk breaks down, pick a folder on another disk in **⋯ › Settings › Backups**. On the main page, **Back up now** makes one at once, and **Restore a backup** puts the apps and Plaid back as they were that night.
 
 </details>
 
