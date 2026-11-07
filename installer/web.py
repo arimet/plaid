@@ -17,7 +17,7 @@ from pathlib import Path
 from installer import flow as default_flow
 from installer import media
 from installer.compose import PORTS, SERVICES
-from installer.flow import Progress
+from installer.flow import Progress, WorkerBusy
 from installer.i18n import APP_NAMES, T, t
 from installer.settings import Settings, validate
 from installer.vpn import PROVIDERS
@@ -850,8 +850,10 @@ def make_handler(state: State):
             if path == "/api/update":
                 if self.locked() or s is None:
                     return self.json(401, {})
-                if state.flow.apply_status()["state"] != "running":  # one operation at a time: show the running one
+                try:
                     state.flow.start_update()
+                except WorkerBusy:  # one operation at a time: show the running one
+                    pass
                 return self.send(303, "", headers={"Location": "/settings/progress"})
             if path == "/api/confirm-disk":
                 if self.locked() or s is None:
@@ -877,7 +879,10 @@ def make_handler(state: State):
                 if any(k.startswith("err_") for k in found) or state.flow.apply_status()["state"] == "running":
                     return self.json(409, {})
                 current = {a: data[f"current_{a}"] for a in ACCOUNT_PROMPTS if data.get(f"current_{a}")}
-                state.flow.start_apply(new, current)
+                try:
+                    state.flow.start_apply(new, current)
+                except WorkerBusy:  # an update started meanwhile, from the terminal: its progress
+                    pass
                 return self.send(303, "", headers={"Location": "/settings/progress"})
             if path == "/api/uninstall":
                 if self.locked() or s is None:

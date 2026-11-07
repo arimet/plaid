@@ -321,12 +321,26 @@ def start_update(dk=docker, state_dir: str = STATE_DIR) -> None:
     _start_worker({"kind": "update"}, dk, state_dir)
 
 
+class WorkerBusy(Exception):
+    """A settings change or an update already runs: one operation on the stack at a time."""
+
+
 def _start_worker(request: dict, dk, state_dir: str) -> None:
-    write_json(os.path.join(state_dir, APPLY_REQUEST), request)
+    """The web page and the terminal live in two containers: the worker's name is the lock they share."""
+    if apply_status(dk, state_dir)["state"] == "running":  # also removes a stopped one nobody read
+        raise WorkerBusy()
+    path = os.path.join(state_dir, APPLY_REQUEST)
+    write_json(path, request)
     write_json(os.path.join(state_dir, APPLY_FILE), [])
-    with OPS_LOCK:  # a running guard round finishes first; the next one sees the worker and stands back
-        dk.run_detached(dk.own_image(), ["--apply-worker"], {}, dk.APPLY_WORKER,
-                        volumes=(f"{STATE_VOLUME}:/state",))
+    try:
+        with OPS_LOCK:  # a running guard round finishes first; the next one sees the worker and stands back
+            dk.run_detached(dk.own_image(), ["--apply-worker"], {}, dk.APPLY_WORKER,
+                            volumes=(f"{STATE_VOLUME}:/state",))
+    except DockerError as e:
+        os.remove(path)  # it may hold secrets
+        if "already in use" in str(e):  # started from the other side in between
+            raise WorkerBusy() from e
+        raise
 
 
 def apply_status(dk=docker, state_dir: str = STATE_DIR) -> dict:

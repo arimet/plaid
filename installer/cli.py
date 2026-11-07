@@ -404,11 +404,13 @@ def _update_tui(term, flow, lang: str) -> str:
     import time
     from installer.tui import Steps
     term.page(t(lang, "update_running"), t(lang, "update_help"))
-    if flow.apply_status()["state"] == "running":  # one operation at a time
+    from installer.flow import WorkerBusy
+    try:
+        flow.start_update()
+    except WorkerBusy:  # one operation at a time
         term.note(t(lang, "update_busy"), "warn")
         term.pause(t(lang, "cli_back"))
         return ""
-    flow.start_update()
     steps = Steps(term, [(k, t(lang, k)) for k in ("step_pull", "step_recreate", "step_cleanup_images")])
     while True:
         status = flow.apply_status()
@@ -568,7 +570,13 @@ def _apply_tui(term, flow, lang: str, s, new, chg, host: str = "localhost") -> t
     if not term.confirm(t(lang, "settings_apply") + " ?", t(lang, "cli_yes_word"), t(lang, "cli_no_word"),
                         default=not found):
         return None
-    flow.start_apply(new, current)
+    from installer.flow import WorkerBusy
+    try:
+        flow.start_apply(new, current)
+    except WorkerBusy:  # an update runs, maybe started from the web page
+        term.note(t(lang, "update_busy"), "warn")
+        term.pause(t(lang, "cli_back"))
+        return None
     todo = reconfigure.steps(chg, bool(new.vpn_provider))
     steps = Steps(term, [(key, t(lang, key)) for key in todo])
     while True:

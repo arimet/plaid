@@ -397,8 +397,11 @@ class MaintenanceCliTest(TuiCliTest):
 class WorkerGoneCliTest(TuiCliTest):
     def test_update_waits_for_a_running_change_instead_of_following_it(self):
         flow = installed_flow()
+        from installer.flow import WorkerBusy
         flow.updates = []
-        flow.start_update = lambda: flow.updates.append(True)
+        def start_update():  # as flow.start_update does while a worker runs
+            raise WorkerBusy()
+        flow.start_update = start_update
         flow.apply_status = lambda: {"state": "running", "events": [{"step": "step_compose"}]}
         t, out = self.term("\x1b[B" * 4 + "\r", "\r", "\x1b[A\r")  # update · back · quit
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
@@ -419,3 +422,26 @@ class WorkerGoneCliTest(TuiCliTest):
         t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 1)
         self.assertIn("Le changement n’est pas passé", out.getvalue())
+
+    def test_change_refused_by_a_worker_started_meanwhile(self):
+        from installer.flow import WorkerBusy
+        flow = installed_flow()
+        def busy(new, current):
+            raise WorkerBusy()
+        flow.start_apply = busy
+        # time zone change · apply → busy note · back from settings · quit
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r", "\r",
+                           "\x1b[A\r", "\x1b[A\r")
+        cli.run_panel_tui(t, flow, ENV, flow.settings)
+        self.assertIn("Un autre changement est en cours", out.getvalue())
+
+    def test_update_refused_by_a_worker_started_meanwhile(self):
+        from installer.flow import WorkerBusy
+        flow = installed_flow()
+        flow.apply_status = lambda: {"state": "idle", "events": []}
+        def busy():
+            raise WorkerBusy()
+        flow.start_update = busy
+        t, out = self.term("\x1b[B" * 4 + "\r", "\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertIn("Un autre changement est en cours", out.getvalue())

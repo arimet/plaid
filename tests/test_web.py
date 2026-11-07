@@ -76,7 +76,10 @@ class FakeFlow:
     def last_update(self):
         return self.updated
 
-    def start_update(self):
+    def start_update(self):  # as flow.start_update: refused while a worker runs
+        from installer.flow import WorkerBusy
+        if self.apply_state["state"] == "running":
+            raise WorkerBusy()
         self.update_started = True
 
 
@@ -836,3 +839,18 @@ class TorrentsWebTest(unittest.TestCase):
         self.open_panel()
         _, _, html = self.req("GET", "/torrents", headers={"Cookie": self.cookie})
         self.assertIn("ne répond pas", html)
+
+
+class BusyWebTest(unittest.TestCase):
+    start, req = WebTest.start, WebTest.req
+    open_panel = GuardWebTest.open_panel
+
+    def test_update_started_elsewhere_meanwhile_shows_its_progress(self):
+        from installer.flow import WorkerBusy
+        self.open_panel()
+        def busy():
+            raise WorkerBusy()
+        self.flow.start_update = busy
+        status, headers, _ = self.req("POST", "/api/update", "", {"Cookie": self.cookie,
+                                                                  "Content-Type": "application/x-www-form-urlencoded"})
+        self.assertEqual((status, headers["Location"]), (303, "/settings/progress"))

@@ -457,3 +457,28 @@ class MinorFixesTest(ApplyTest):
                 mock.patch("installer.reconfigure.apps.seerr_default", lambda *a: None):
             _, kept = reconfigure._profiles(media_settings(), media_settings(), lambda svc: svc, lambda *a: "")
         self.assertEqual(kept, ["VO sous-titrée · 4K (Radarr, Sonarr)", "MULTi · 720p (Radarr)"])
+
+
+class OneWorkerTest(unittest.TestCase):
+    def test_a_running_worker_is_never_overwritten(self):
+        dk = FakeDocker(states={"plaid-apply": (True, True, 0)})
+        with tempfile.TemporaryDirectory() as d:
+            flow.write_json(os.path.join(d, "apply.json"), [{"step": "step_pull"}])
+            with self.assertRaises(flow.WorkerBusy):
+                flow.start_apply(settings(lang="fr"), {}, dk=dk, state_dir=d)
+            with self.assertRaises(flow.WorkerBusy):
+                flow.start_update(dk=dk, state_dir=d)
+            self.assertFalse(os.path.exists(os.path.join(d, "apply-request.json")))  # no secrets left behind
+            with open(os.path.join(d, "apply.json")) as f:
+                self.assertEqual(json.load(f), [{"step": "step_pull"}])  # the running one keeps its progress
+        self.assertFalse([c for c in dk.calls if c[0] == "detached"])
+
+    def test_a_name_clash_is_busy_and_takes_its_request_back(self):
+        dk = FakeDocker()
+        def clash(*a, **kw):
+            raise DockerError('Conflict. The container name "/plaid-apply" is already in use')
+        dk.run_detached = clash
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(flow.WorkerBusy):
+                flow.start_apply(settings(lang="fr"), {}, dk=dk, state_dir=d)
+            self.assertFalse(os.path.exists(os.path.join(d, "apply-request.json")))
