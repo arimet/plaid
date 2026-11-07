@@ -130,6 +130,10 @@ label.l{font:700 14px/1.2 Nunito,sans-serif;color:var(--text)}
 .note.alert::before{content:"";flex:none;width:8px;height:8px;margin-top:7px;border-radius:50%;background:var(--danger)}
 .note.alert b{color:var(--danger-text)}
 .note form{margin-top:12px}
+.settings h2{margin:24px 0 0}
+.settings .btn.primary{margin-top:16px}
+.check{display:flex;gap:10px;align-items:center;font-size:14px}
+.changes{padding-left:20px;line-height:1.7}
 
 /* ----------------------------------------------------------------- buttons */
 .foot{width:100%;max-width:560px;margin:0 auto;padding:22px 16px 26px;display:flex;gap:14px}

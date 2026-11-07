@@ -25,6 +25,23 @@ class FakeFlow:
     def guard_status(self):
         return self.status
 
+    found = []
+    refused = []
+    started = None
+    apply_state = {"state": "idle", "events": []}
+
+    def settings_check(self, old, new):
+        return list(self.found)
+
+    def check_logins(self, s):
+        return list(self.refused)
+
+    def start_apply(self, new, current):
+        self.started, self.current = new, current
+
+    def apply_status(self):
+        return self.apply_state
+
     def confirm_disk(self, s):
         self.confirmed = True
 
@@ -435,3 +452,106 @@ class GuardWebTest(WebTest):
         status, _, _ = self.req("POST", "/api/confirm-disk", "")
         self.assertEqual(status, 401)
         self.assertFalse(self.flow.confirmed)
+
+
+import urllib.parse
+from dataclasses import replace
+
+
+class SettingsWebTest(WebTest):
+    FORM_CT = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    def open(self, **changes):
+        self.flow = FakeFlow(installed=replace(settings(), **changes))
+        self.start(self.flow)
+        form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
+        _, headers, _ = self.req("POST", "/login", form, self.FORM_CT)
+        self.cookie = headers["Set-Cookie"].split(";")[0]
+
+    def post(self, path, data):
+        return self.req("POST", path, urllib.parse.urlencode(data), {**self.FORM_CT, "Cookie": self.cookie})
+
+    def get(self, path):
+        return self.req("GET", path, headers={"Cookie": self.cookie})
+
+    def test_settings_needs_login(self):
+        self.start(FakeFlow(installed=settings()))
+        status, headers, _ = self.req("GET", "/settings")
+        self.assertEqual((status, headers["Location"]), (303, "/login"))
+        self.assertEqual(self.req("POST", "/settings/apply", "lang=en", self.FORM_CT)[0], 401)
+
+    def test_settings_form_hides_secrets(self):
+        self.open(vpn_provider="protonvpn", vpn_fields={"WIREGUARD_PRIVATE_KEY": "k-secret-123"},
+                  tailscale_key="tskey-auth-secret9")
+        status, _, html = self.get("/settings")
+        self.assertEqual(status, 200)
+        for secret in ("k-secret-123", "tskey-auth-secret9", "secret-pass"):
+            self.assertNotIn(secret, html)
+        self.assertIn('value="/home/zoe/Plaid"', html)
+        self.assertIn('name="remove_tailscale"', html)
+
+    def test_settings_nothing_changed(self):
+        self.open()
+        _, _, html = self.post("/settings", {"lang": "fr", "data_dir": "/home/zoe/Plaid", "username": "zoe",
+                                             "timezone": "Europe/Paris", "vpn_provider": ""})
+        self.assertIn("Rien n’a changé", html)
+
+    def test_settings_summary_lists_changes(self):
+        self.open()
+        _, _, html = self.post("/settings", {"timezone": "America/Montreal", "vpn_provider": ""})
+        self.assertIn("Fuseau horaire : America/Montreal", html)
+        self.assertIn("Les applis sont indisponibles quelques dizaines de secondes.", html)
+        self.assertIn('action="/settings/apply"', html)
+        self.assertIn('name="timezone" value="America/Montreal"', html)
+
+    def test_settings_blocking_error_has_no_apply(self):
+        self.open()
+        self.flow.found = ["err_folder_missing"]
+        _, _, html = self.post("/settings", {"data_dir": "/media/usb", "vpn_provider": ""})
+        self.assertIn("Dossier introuvable", html)
+        self.assertNotIn('action="/settings/apply"', html)
+
+    def test_settings_passwords_must_match(self):
+        self.open()
+        _, _, html = self.post("/settings", {"password": "new-pass1", "password2": "other-pass", "vpn_provider": ""})
+        self.assertIn("Les mots de passe diffèrent.", html)
+        self.assertNotIn('action="/settings/apply"', html)
+
+    def test_settings_asks_current_password(self):
+        self.open()
+        self.flow.refused = ["jellyfin"]
+        _, _, html = self.post("/settings", {"password": "new-pass1", "password2": "new-pass1", "vpn_provider": ""})
+        self.assertIn('name="current_jellyfin"', html)
+        self.flow.refused = ["jellyfin"]
+        _, _, html = self.post("/settings", {"timezone": "UTC", "vpn_provider": ""})  # account unchanged: no question
+        self.assertNotIn('name="current_jellyfin"', html)
+
+    def test_settings_apply_starts_worker(self):
+        self.open()
+        status, headers, _ = self.post("/settings/apply", {"timezone": "America/Montreal", "vpn_provider": "",
+                                                           "current_jellyfin": "typed"})
+        self.assertEqual((status, headers["Location"]), (303, "/settings/progress"))
+        self.assertEqual(self.flow.started.timezone, "America/Montreal")
+        self.assertEqual(self.flow.current, {"jellyfin": "typed"})
+
+    def test_settings_apply_refuses_blocking_errors(self):
+        self.open()
+        self.flow.found = ["err_folder_missing"]
+        status, _, _ = self.post("/settings/apply", {"data_dir": "/media/usb", "vpn_provider": ""})
+        self.assertEqual(status, 409)
+        self.assertIsNone(self.flow.started)
+
+    def test_settings_progress_refreshes_while_running(self):
+        self.open()
+        self.flow.apply_state = {"state": "running", "events": [{"step": "step_compose"}]}
+        _, _, html = self.get("/settings/progress")
+        self.assertIn('http-equiv="refresh"', html)
+        self.assertIn("Redémarrage des applis", html)
+        self.flow.apply_state = {"state": "done", "events": [{"step": "step_done", "done": True, "detail": "jellyfin"}]}
+        _, _, html = self.get("/settings/progress")
+        self.assertNotIn('http-equiv="refresh"', html)
+        self.assertIn("Jellyfin", html)
+
+    def test_menu_has_settings(self):
+        self.open()
+        self.assertIn('href="/settings"', self.get("/")[2])

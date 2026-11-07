@@ -16,7 +16,7 @@ from pathlib import Path
 from installer import flow as default_flow
 from installer.compose import PORTS, SERVICES
 from installer.flow import Progress
-from installer.i18n import T, t
+from installer.i18n import APP_NAMES, T, t
 from installer.settings import Settings, validate
 from installer.vpn import PROVIDERS
 
@@ -78,6 +78,7 @@ def header_menu(lang: str) -> str:
         f'<small>{E(t(lang, desc))}</small></a>'
         for path, title, desc in (("/remote", "remote_done_title", "nav_remote_desc"),
                                   ("/trackers", "trackers_title", "nav_trackers_desc"),
+                                  ("/settings", "nav_settings", "nav_settings_desc"),
                                   ("/remove", "uninstall_title", "nav_remove_desc")))
     dots = ('<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="4" cy="10" r="2"/>'
             '<circle cx="10" cy="10" r="2"/><circle cx="16" cy="10" r="2"/></svg>')
@@ -86,14 +87,14 @@ def header_menu(lang: str) -> str:
 
 
 def page(lang: str, body: str, *, cloth: str = "", p: int = 100, foot: str = "", script: bool = True,
-         menu: str = "") -> str:
+         menu: str = "", head: str = "") -> str:
     current = ' aria-current="true"'
     links = "".join(f'<a href="?lang={code}"{current if code == lang else ""}>{code.upper()}</a>' for code in T)
     texts = json.dumps({k: v for k, v in T[lang].items()}, ensure_ascii=False).replace("</", "<\\/")
     return f"""<!doctype html>
 <html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Plaid</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/fonts.css">
-<link rel="stylesheet" href="/static/style.css"></head><body>
+<link rel="stylesheet" href="/static/style.css">{head}</head><body>
 <header class="topbar"><a class="brand" href="/"><span class="mark"><img src="/static/favicon.svg" alt="" width="26" height="26"></span><b>Plaid</b></a>
 <div class="top">{menu}<nav class="lang" aria-label="Language">{links}</nav></div></header>
 {f'<div class="track topline" aria-hidden="true"{"" if p >= 40 else " hidden"}><div class="fill" id="weave" style="--w:{p}%"></div></div>' if cloth == "part" else ""}
@@ -252,10 +253,131 @@ def panel_page(lang: str, s: Settings, host: str, complete: bool = True, status:
     return subpage(lang, body, back=False)
 
 
-def subpage(lang: str, body: str, back: bool = True, menu: bool = True) -> str:
+def subpage(lang: str, body: str, back: bool = True, menu: bool = True, head: str = "") -> str:
     link = f'<a class="back" href="/">‹ {E(t(lang, "nav_back"))}</a>' if back else ""
     return page(lang, f'<section id="done">{link}{body}</section>', foot='<div style="height:32px"></div>',
-                menu=header_menu(lang) if menu else "")
+                menu=header_menu(lang) if menu else "", head=head)
+
+
+# ---------------------------------------------------------------- settings
+
+LANG_NAMES = {"en": "English", "fr": "Français"}
+ACCOUNT_PROMPTS = ("jellyfin", "qbittorrent")  # the apps Plaid signs in to with a password, not a key
+
+
+def settings_data(form: dict) -> dict:
+    """The settings form as reconfigure.merge reads it: VPN fields are named vpn_<provider>_<FIELD>."""
+    provider = form.get("vpn_provider", "")
+    prefix = f"vpn_{provider}_"
+    return {**{k: form[k] for k in ("data_dir", "username", "password", "timezone", "lang", "tailscale_key")
+               if k in form},
+            "vpn_provider": provider,
+            "vpn_fields": {k[len(prefix):]: v for k, v in form.items() if provider and k.startswith(prefix)},
+            "remove_tailscale": bool(form.get("remove_tailscale"))}
+
+
+def _field(label: str, name: str, value: str = "", kind: str = "text", hint: str = "") -> str:
+    return (f'<div class="field"><label class="l" for="{name}">{E(label)}</label>'
+            f'<input class="input" id="{name}" name="{name}" type="{kind}" value="{E(value)}" autocomplete="off" '
+            f'spellcheck="false">{f"<p class={chr(34)}hint{chr(34)}>{E(hint)}</p>" if hint else ""}</div>')
+
+
+def settings_page(lang: str, s: Settings, note: str = "") -> str:
+    """Every setting, filled in. Secrets are never sent back: an empty field keeps the current one."""
+    keep = t(lang, "settings_keep_secret")
+    langs = "".join(f'<option value="{code}"{" selected" if code == s.lang else ""}>{name}</option>'
+                    for code, name in LANG_NAMES.items())
+    options = "".join(f'<option value="{pid}"{" selected" if pid == s.vpn_provider else ""}>{E(p.label)}</option>'
+                      for pid, p in PROVIDERS.items())
+    options += f'<option value=""{"" if s.vpn_provider else " selected"}>{E(t(lang, "vpn_none"))}</option>'
+    vpn_fields = "".join(
+        f'<div class="vpnf" data-for="{pid}">' + "".join(
+            _field(t(lang, "vpnf_" + f.lower()), f"vpn_{pid}_{f}", kind="password" if "KEY" in f or "PASSWORD" in f
+                   else "text", hint=keep if pid == s.vpn_provider else "") for f in p.fields) + "</div>"
+        for pid, p in PROVIDERS.items())
+    # Without JavaScript: only the chosen provider's fields show.
+    shown = "".join(f'form:has(#vpn_provider option[value="{pid}"]:checked) .vpnf[data-for="{pid}"]{{display:block}}'
+                    for pid in PROVIDERS)
+    remote = ""
+    if s.platform in REMOTE_PLATFORMS:
+        drop = (f'<label class="check"><input type="checkbox" name="remove_tailscale"> '
+                f'{E(t(lang, "settings_remove_tailscale"))}</label>' if s.tailscale_key else "")
+        remote = (f'<h2>{E(t(lang, "field_remote"))}</h2>'
+                  + _field(t(lang, "field_tailscale_key"), "tailscale_key", kind="password",
+                           hint=keep if s.tailscale_key else "") + drop)
+    body = f"""<h1>{E(t(lang, "nav_settings"))}</h1>
+  <p class="lead">{E(t(lang, "nav_settings_desc"))}</p>
+  {f'<p class="note">{E(note)}</p>' if note else ""}
+  <form method="post" action="/settings" class="field-group settings">
+  <div class="field"><label class="l" for="lang">{E(t(lang, "settings_lang"))}</label>
+  <select class="input" id="lang" name="lang">{langs}</select></div>
+  {_field(t(lang, "field_timezone"), "timezone", s.timezone, hint=t(lang, "settings_timezone_help"))}
+  {_field(t(lang, "field_folder"), "data_dir", s.data_dir, hint=t(lang, "settings_folder_help"))}
+  <h2>{E(t(lang, "field_username"))} · {E(t(lang, "field_password"))}</h2>
+  {_field(t(lang, "field_username"), "username", s.username)}
+  {_field(t(lang, "field_password"), "password", kind="password", hint=keep)}
+  {_field(t(lang, "field_password2"), "password2", kind="password")}
+  <h2>{E(t(lang, "field_vpn"))}</h2>
+  <div class="field"><select class="input" id="vpn_provider" name="vpn_provider"
+  aria-label="{E(t(lang, "field_vpn"))}">{options}</select></div>
+  {vpn_fields}
+  {remote}
+  <button class="btn primary" type="submit">{E(t(lang, "btn_check"))}</button>
+  </form>"""
+    return subpage(lang, body, head=f"<style>.vpnf{{display:none}}{shown}</style>")
+
+
+def change_lines(lang: str, chg: dict[str, str], new: Settings) -> list[str]:
+    value = {"lang": LANG_NAMES[new.lang], "timezone": new.timezone, "folder": new.data_dir,
+             "vpn": PROVIDERS[new.vpn_provider].label if new.vpn_provider else ""}
+    return [t(lang, f"change_{key}" + (f"_{kind}" if key in ("vpn", "tailscale") else ""), value=value.get(key, ""))
+            for key, kind in chg.items()]
+
+
+def settings_summary(lang: str, form: dict, chg: dict[str, str], new: Settings, found: list[str],
+                     ask: list[str]) -> str:
+    """What will change, the outage, the checks; the Apply form carries back only what was typed."""
+    from installer.reconfigure import outage
+    items = "".join(f"<li>{E(line)}</li>" for line in change_lines(lang, chg, new))
+    notes = "".join(f'<div class="note {"alert" if k.startswith("err_") else "warn"}"><div>'
+                    f'{E(t(lang, k, path=new.data_dir))}</div></div>' for k in found)
+    blocked = any(k.startswith("err_") for k in found)
+    hidden = "".join(f'<input type="hidden" name="{E(k)}" value="{E(v)}">' for k, v in form.items())
+    prompts = "".join(_field(t(lang, "settings_current_password", app=APP_NAMES[app]), f"current_{app}",
+                             kind="password", hint=t(lang, "settings_current_password_help", app=APP_NAMES[app]))
+                      for app in ask)
+    apply = "" if blocked else f"""<form method="post" action="/settings/apply" class="field-group">{hidden}{prompts}
+  <button class="btn primary" type="submit">{E(t(lang, "settings_apply"))}</button></form>"""
+    body = f"""<h1>{E(t(lang, "settings_summary"))}</h1>
+  <ul class="changes">{items}</ul>
+  <p class="lead">{E(t(lang, outage(chg)))}</p>
+  {notes}{apply}
+  <p><a href="/settings">{E(t(lang, "btn_back"))}</a></p>"""
+    return subpage(lang, body)
+
+
+def settings_progress(lang: str, status: dict) -> str:
+    events, state_ = status.get("events", []), status.get("state")
+    last = events[-1] if events else {}
+    shown = [e for e in events if e.get("step") != "step_done" and not e.get("error")]
+
+    def knot(i: int) -> str:  # same marks as the install: done, current, failed
+        if i < len(shown) - 1 or state_ == "done":
+            return f'<span class="knot ok">{CHECK}</span>'
+        return '<span class="knot bad"></span>' if state_ == "failed" else '<span class="knot now"></span>'
+    steps = "".join(f'<li>{knot(i)}<span>{E(t(lang, e["step"]))}</span></li>' for i, e in enumerate(shown))
+    if state_ == "running" or (state_ == "idle" and not events):
+        title, extra, head = t(lang, "settings_running"), "", '<meta http-equiv="refresh" content="2">'
+    elif state_ == "done":
+        missed = [APP_NAMES.get(a, a) for a in (last.get("detail") or "").split(",") if a]
+        title, head = t(lang, "settings_done"), ""
+        extra = (f'<div class="note warn"><div>{E(t(lang, "settings_not_changed", apps=", ".join(missed)))}</div></div>'
+                 if missed else "")
+    else:
+        title, head = t(lang, "err_apply_failed"), ""
+        extra = f'<pre class="detail">{E(last.get("detail") or "")}</pre>'
+    body = f'<h1>{E(title)}</h1><ul class="steps">{steps}</ul>{extra}'
+    return subpage(lang, body, head=head)
 
 
 def remote_page(lang: str, s: Settings) -> str:
@@ -390,7 +512,7 @@ def make_handler(state: State):
                     return self.json(401, {})
                 status, detail = state.flow.uninstall_status()
                 return self.json(200, {"state": status, "detail": detail, "text": t(lang, "err_uninstall_failed")})
-            if path not in ("/", "/remote", "/trackers", "/remove"):
+            if path not in ("/", "/remote", "/trackers", "/remove", "/settings", "/settings/progress"):
                 return self.send(404, "Not found", "text/plain")
             if self.locked():
                 return self.send(303, "", headers={"Location": "/login"})
@@ -400,6 +522,10 @@ def make_handler(state: State):
                 return self.send(200, form_page(lang, state.env, state.running, bool(s and s.vpn_provider)))
             if path == "/remote":
                 return self.send(200, remote_page(lang, s))
+            if path == "/settings":
+                return self.send(200, settings_page(lang, s))
+            if path == "/settings/progress":
+                return self.send(200, settings_progress(lang, state.flow.apply_status()))
             if path == "/trackers":
                 return self.send(200, trackers_page(lang))
             if path == "/remove":
@@ -459,6 +585,25 @@ def make_handler(state: State):
                     return self.json(401, {})
                 state.flow.confirm_disk(s)
                 return self.send(303, "", headers={"Location": "/"})
+            if path in ("/settings", "/settings/apply"):
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                from installer import reconfigure
+                new = reconfigure.merge(s, settings_data(data))
+                found = (["err_passwords_differ"] if data.get("password") and
+                         data.get("password") != data.get("password2") else [])
+                chg = reconfigure.changes(s, new)
+                if not chg:
+                    return self.send(200, settings_page(lang, s, t(lang, "settings_nothing")))
+                found += state.flow.settings_check(s, new)
+                if path == "/settings":
+                    ask = [a for a in state.flow.check_logins(s) if a in ACCOUNT_PROMPTS] if "account" in chg else []
+                    return self.send(200, settings_summary(lang, data, chg, new, found, ask))
+                if any(k.startswith("err_") for k in found) or state.flow.apply_status()["state"] == "running":
+                    return self.json(409, {})
+                current = {a: data[f"current_{a}"] for a in ACCOUNT_PROMPTS if data.get(f"current_{a}")}
+                state.flow.start_apply(new, current)
+                return self.send(303, "", headers={"Location": "/settings/progress"})
             if path == "/api/uninstall":
                 if self.locked() or s is None:
                     return self.json(401, {})

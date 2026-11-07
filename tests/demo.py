@@ -61,6 +61,29 @@ class DemoFlow:
     def confirm_disk(self, s):
         self.status = dict(self.status, disk="ok")
 
+    def settings_check(self, old, new):
+        return ["warn_folder_no_library"] if old.data_dir != new.data_dir else []
+
+    def check_logins(self, s):
+        return ["jellyfin"]
+
+    applied = None
+
+    def start_apply(self, new, current):
+        self.applied, self.apply_started = new, time.time()
+
+    def apply_status(self):
+        # Simulated: one step every 1.5 s, then done.
+        if not self.applied:
+            return {"state": "idle", "events": []}
+        steps = ["step_compose", "step_account", "step_save"]
+        n = int((time.time() - self.apply_started) / 1.5)
+        events = [{"step": st} for st in steps[:n + 1]]
+        if n >= len(steps):
+            self.settings = self.applied
+            return {"state": "done", "events": events + [{"step": "step_done", "done": True, "detail": "jellyfin"}]}
+        return {"state": "running", "events": events}
+
 
 if __name__ == "__main__":
     from installer.settings import Settings  # noqa: E402
