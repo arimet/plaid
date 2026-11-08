@@ -277,6 +277,8 @@ footer a{color:var(--text-2)}
   .reveal{opacity:1;transform:none}
 }
 </style>
+<!-- GoatCounter: no cookie, counts visits plus the download and copy clicks marked data-goatcounter-click. -->
+<script data-goatcounter="https://arimet.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="no-js">
 <div class="wrap">
@@ -586,13 +588,13 @@ footer a{color:var(--text-2)}
     <div>
       <p><span data-l="en">Open a terminal on the machine (over SSH for a NAS) and paste:</span><span data-l="fr">Ouvrez un terminal sur la machine (en SSH pour un NAS) et collez :</span></p>
       <div class="cmd"><code id="cmd">curl -fsSL https://arimet.github.io/plaid/get | sh</code>
-        <button class="pill" type="button" data-copy="cmd"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
+        <button class="pill" type="button" data-copy="cmd" data-goatcounter-click="plaid-copy-cmd"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
       <p class="note"><span data-l="en">It installs Docker if needed and prints the address of the assistant, to open from any computer on your network.</span><span data-l="fr">Elle installe Docker si besoin et affiche l’adresse de l’assistant, à ouvrir depuis n’importe quel ordinateur du réseau.</span></p>
     </div>
     <div>
       <p><span data-l="en">No browser around? Answer in the terminal:</span><span data-l="fr">Pas de navigateur sous la main ? Répondez dans le terminal :</span></p>
       <div class="cmd"><code id="cmd-cli">curl -fsSL https://arimet.github.io/plaid/get | sh -s -- --cli</code>
-        <button class="pill" type="button" data-copy="cmd-cli"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
+        <button class="pill" type="button" data-copy="cmd-cli" data-goatcounter-click="plaid-copy-cmd-cli"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
       <p class="note"><span data-l="en">Synology: install Container Manager from the Package Center first. Raspberry Pi 4 or 5 with Raspberry Pi OS 64-bit works too.</span><span data-l="fr">Synology : installez d’abord Container Manager depuis le centre de paquets. Un Raspberry Pi 4 ou 5 sous Raspberry Pi OS 64 bits marche aussi.</span></p>
     </div>
   </div>
@@ -603,13 +605,13 @@ footer a{color:var(--text-2)}
         <li><span data-l="en">Open <b>Terminal</b> (Applications › Utilities) and paste:</span><span data-l="fr">Ouvrez le <b>Terminal</b> (Applications › Utilitaires) et collez :</span></li>
       </ol>
       <div class="cmd"><code id="cmd-mac">curl -fsSL https://arimet.github.io/plaid/get | sh</code>
-        <button class="pill" type="button" data-copy="cmd-mac"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
+        <button class="pill" type="button" data-copy="cmd-mac" data-goatcounter-click="plaid-copy-cmd-mac"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span class="copy-label"><span data-l="en">Copy</span><span data-l="fr">Copier</span></span></button></div>
       <p class="note"><span data-l="en">The assistant opens in your browser. You can close the Terminal afterwards.</span><span data-l="fr">L’assistant s’ouvre dans votre navigateur. Vous pouvez fermer le Terminal ensuite.</span></p>
     </div>
     <div>
       <p><span data-l="en">Rather not use the Terminal? Download the launcher, unzip it and double-click <b>install.command</b>.</span><span data-l="fr">Vous préférez éviter le Terminal ? Téléchargez le lanceur, dézippez-le et double-cliquez sur <b>install.command</b>.</span></p>
       <p class="note"><span data-l="en">macOS blocks it the first time, because it is not signed with an Apple developer account. Open System Settings › Privacy &amp; Security, click <b>Open Anyway</b> next to install.command, then open it again.</span><span data-l="fr">macOS le bloque la première fois, parce qu’il n’est pas signé avec un compte développeur Apple. Ouvrez Réglages Système › Confidentialité et sécurité, cliquez sur <b>Ouvrir quand même</b> à côté d’install.command, puis rouvrez-le.</span></p>
-      <div class="get"><a class="btn soft" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-mac.zip">
+      <div class="get"><a class="btn soft" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-mac.zip" data-goatcounter-click="plaid-download-mac">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14"/></svg>
         <span data-l="en">Download the Mac launcher</span><span data-l="fr">Télécharger le lanceur Mac</span></a></div>
     </div>
@@ -624,7 +626,7 @@ footer a{color:var(--text-2)}
       </ol>
       <p class="note"><span data-l="en">If SmartScreen warns you: More info, then Run anyway.</span><span data-l="fr">Si SmartScreen vous prévient : Informations complémentaires, puis Exécuter quand même.</span></p>
     </div>
-    <div class="get"><a class="btn primary" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-windows.zip">
+    <div class="get"><a class="btn primary" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-windows.zip" data-goatcounter-click="plaid-download-windows">
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14"/></svg>
       <span data-l="en">Download for Windows</span><span data-l="fr">Télécharger pour Windows</span></a></div>
   </div>
