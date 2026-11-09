@@ -95,7 +95,8 @@ def page(lang: str, body: str, *, cloth: str = "", p: int = 100, foot: str = "",
     links = "".join(f'<a href="?lang={code}"{current if code == lang else ""}>{code.upper()}</a>' for code in T)
     texts = json.dumps({k: v for k, v in T[lang].items()}, ensure_ascii=False).replace("</", "<\\/")
     return f"""<!doctype html>
-<html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="{lang}" data-style="cinema"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{{if(localStorage.getItem("plaid-style")==="soft")document.documentElement.dataset.style="soft"}}catch(e){{}}</script>
 <title>Plaid</title><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/fonts.css">
 <link rel="stylesheet" href="/static/style.css">{head}</head><body{' class="wide"' if wide else ""}>
 <header class="topbar"><a class="brand" href="/"><span class="mark"><img src="/static/favicon.svg" alt="" width="26" height="26"></span><b>Plaid</b></a>
@@ -543,6 +544,10 @@ def settings_page(lang: str, s: Settings, note: str = "", shown: Settings | None
   {group(t(lang, "settings_group_general"), t(lang, "settings_group_general_desc"),
          f'<div class="field"><label class="l" for="lang">{E(t(lang, "settings_lang"))}</label>'
          f'<select class="input" id="lang" name="lang">{langs}</select></div>'
+         f'<div class="field"><label class="l" for="style">{E(t(lang, "settings_style"))}</label>'
+         f'<select class="input" id="style">'
+         + "".join(f'<option value="{v}">{E(t(lang, "style_" + v))}</option>' for v in ("cinema", "soft"))
+         + f'</select><p class="hint">{E(t(lang, "settings_style_help"))}</p></div>'
          + _field(t(lang, "field_timezone"), "timezone", shown.timezone, hint=t(lang, "settings_timezone_help")))}
   {sep}
   {group(t(lang, "media_title"), t(lang, "media_help"), media_fields(lang, shown))}

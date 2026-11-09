@@ -9,6 +9,16 @@
                                          body: JSON.stringify(body), credentials: "same-origin"});
   const fmt = (s, params) => s.replace(/\{(\w+)\}/g, (_, k) => params[k] ?? "");
 
+  // ---------------------------------------------------------------- the look, kept by this browser (settings)
+  const style = $("#style");
+  if (style) {
+    style.value = document.documentElement.dataset.style;
+    style.addEventListener("change", () => {
+      document.documentElement.dataset.style = style.value;
+      try { localStorage.setItem("plaid-style", style.value); } catch (e) { /* private window: this page only */ }
+    });
+  }
+
   // ---------------------------------------------------------------- folder picker (wizard and settings)
   const bytes = (n) => {
     const nf = new Intl.NumberFormat(document.documentElement.lang, {maximumFractionDigits: 1});

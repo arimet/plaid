@@ -58,6 +58,21 @@ class DemoFlow:
     def guard_status(self):
         return self.status
 
+    # nothing ran yet on the demo machine: the real readers, pointed at an empty folder
+    def last_update(self):
+        from installer import update
+        return update.last("/nonexistent")
+
+    def backup_status(self):
+        from installer import backup
+        return backup.status("/nonexistent")
+
+    def finished_torrents(self, *_):
+        return []
+
+    def list_backups(self, *_):
+        return []
+
     def confirm_disk(self, s):
         self.status = dict(self.status, disk="ok")
 

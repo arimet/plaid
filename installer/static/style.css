@@ -327,3 +327,47 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 .vpn[data-vpn="down"] i{background:var(--danger)}
 .vpn[data-vpn="down"] b{color:var(--danger-text)}
 .vpn[data-vpn="off"] i{background:var(--warn)}
+
+/* ================================================================= Cinema style (the default)
+   Flat and dark, like a streaming app: the "soft" look above, re-skinned. Depth tokens no longer cast shadows:
+   a huge inset spread fills the element with a card grey instead, so every raised or inset element becomes a flat
+   block without touching its rule. The few elements that paint their own background (accent buttons, alerts,
+   selected choices) get their own line below. */
+:root[data-style="cinema"]{
+  --surface:#141414; --surface-deep:#2a2a2a; --card:#1f1f1f; --card-2:#2c2c2c; --card-3:#3a3a3a; --line:#3a3a3a;
+  --shadow-light:transparent; --shadow-dark:#2f2f2f;
+  --raised:inset 0 0 0 100vmax var(--card-2); --flat:inset 0 0 0 100vmax var(--card-2);
+  --inset:inset 0 0 0 100vmax var(--card);
+  --raised-lg:inset 0 0 0 100vmax var(--card-2),0 12px 32px rgba(0,0,0,.6);
+  --accent:#1ab3cf; --accent-2:#1ab3cf; --accent-text:#4fd1ec; --accent-soft:rgba(26,179,207,.35); --on-accent:#071418;
+  --danger:#cf353b; --danger-2:#cf353b; --danger-text:#ff8f8f; --warn:#f0b54a;
+  --text:#fff; --text-2:#bcbcbc; --muted:#8c8c8c;
+  --r-sm:4px; --r-md:6px; --r-lg:8px; --r-xl:10px; --pill:6px;
+  color-scheme:dark;
+}
+:root[data-style="cinema"] *:not(.detail){font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif !important}
+:root[data-style="cinema"] h1{letter-spacing:-.03em}
+:root[data-style="cinema"] .btn{font-weight:700}
+:root[data-style="cinema"] :is(.btn.primary,.btn.danger),
+:root[data-style="cinema"] :is(.btn.primary,.btn.danger):active{box-shadow:none}
+:root[data-style="cinema"] :is(.btn.primary,.btn.danger):hover{filter:brightness(1.12)}
+:root[data-style="cinema"] .btn:not(.primary,.danger):hover,
+:root[data-style="cinema"] .app:hover,
+:root[data-style="cinema"] .chip:hover{box-shadow:inset 0 0 0 100vmax var(--card-3)}
+:root[data-style="cinema"] .app:hover{transform:none}
+:root[data-style="cinema"] .app .open{background:#fff;color:#141414;box-shadow:none}
+:root[data-style="cinema"] .app:hover .open{color:#141414}
+:root[data-style="cinema"] .input{box-shadow:inset 0 0 0 1px var(--line),inset 0 0 0 100vmax var(--card)}
+:root[data-style="cinema"] .input:focus{box-shadow:inset 0 0 0 2px var(--accent),inset 0 0 0 100vmax var(--card)}
+:root[data-style="cinema"] .input[aria-invalid="true"]{box-shadow:inset 0 0 0 2px var(--danger),inset 0 0 0 100vmax var(--card)}
+:root[data-style="cinema"] .chip[aria-checked="true"],
+:root[data-style="cinema"] .pill input:checked+span{box-shadow:inset 0 0 0 2px var(--accent),inset 0 0 0 100vmax var(--card)}
+:root[data-style="cinema"] .chip[aria-checked="true"]{transform:none}
+:root[data-style="cinema"] .lang a[aria-current]{box-shadow:inset 0 0 0 100vmax var(--card-2)}
+:root[data-style="cinema"] .menu[open] summary{box-shadow:inset 0 0 0 100vmax var(--card-2)}
+:root[data-style="cinema"] :is(.note.alert,.vpn[data-vpn="down"]){background:color-mix(in srgb,var(--danger) 16%,var(--surface));
+  box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--danger) 60%,transparent)}
+:root[data-style="cinema"] .vpn[data-vpn="ok"] i{box-shadow:0 0 0 4px var(--accent-soft)}
+:root[data-style="cinema"] .st.now{box-shadow:inset 0 0 0 2px var(--accent),inset 0 0 0 100vmax var(--card)}
+:root[data-style="cinema"] .sep{height:1px;box-shadow:none;background:var(--line)}
+:root[data-style="cinema"] .trackers button:disabled{box-shadow:inset 0 0 0 1px var(--line)}
