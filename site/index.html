@@ -706,11 +706,14 @@ footer a{color:var(--text-2)}
   const ua = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent;
   const mobile = /android|iphone|ipad/i.test(navigator.userAgent);
   const os = mobile ? null : /mac/i.test(ua) ? "mac" : /win/i.test(ua) ? "win" : null;
+  // A Mac installs from the Terminal (macOS blocks the unsigned launcher): the button opens the Mac tab instead.
   if (os) {
-    const label = { mac: ["Download for Mac", "Télécharger pour Mac"], win: ["Download for Windows", "Télécharger pour Windows"] }[os];
+    const label = { mac: ["Install on Mac", "Installer sur Mac"], win: ["Download for Windows", "Télécharger pour Windows"] }[os];
+    const get = document.getElementById("get");
     document.getElementById("get-label").innerHTML =
       `<span data-l="en">${label[0]}</span><span data-l="fr">${label[1]}</span>`;
-    document.getElementById("get").href = document.querySelector(`#p-${os} .btn.primary`).href;
+    if (os === "mac") get.addEventListener("click", () => select(document.getElementById("t-mac")));
+    else get.href = document.querySelector("#p-win .btn.primary").href;
   }
 
   // Copy buttons.
