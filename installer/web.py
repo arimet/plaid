@@ -16,7 +16,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from installer import flow as default_flow
-from installer import media
+from installer import media, people
+from installer.apps import HttpError
 from installer.compose import PORTS, SERVICES
 from installer.flow import Progress, WorkerBusy
 from installer.i18n import APP_NAMES, T, t
@@ -79,7 +80,8 @@ def header_menu(lang: str) -> str:
     items = "".join(
         f'<a class="more{" danger" if path == "/remove" else ""}" href="{path}"><b>{E(t(lang, title))}</b>'
         f'<small>{E(t(lang, desc))}</small></a>'
-        for path, title, desc in (("/remote", "remote_done_title", "nav_remote_desc"),
+        for path, title, desc in (("/people", "people_title", "nav_people_desc"),
+                                  ("/remote", "remote_done_title", "nav_remote_desc"),
                                   ("/trackers", "trackers_title", "nav_trackers_desc"),
                                   ("/settings", "nav_settings", "nav_settings_desc"),
                                   ("/remove", "uninstall_title", "nav_remove_desc")))
@@ -759,6 +761,73 @@ def remote_page(lang: str, s: Settings) -> str:
                    side=f'<h1>{E(t(lang, "remote_done_title"))}</h1><p class="lead">{E(t(lang, "nav_remote_desc"))}</p>')
 
 
+def _people_side(lang: str) -> str:
+    return f'<h1>{E(t(lang, "people_title"))}</h1><p class="lead">{E(t(lang, "people_help"))}</p>'
+
+
+def _seen(lang: str, when: str | None) -> str:
+    if not when:
+        return t(lang, "people_never")
+    y, m, d = when[:10].split("-")
+    return t(lang, "people_seen", date=f"{d}/{m}/{y}" if lang == "fr" else f"{y}-{m}-{d}")
+
+
+def _post_button(action: str, label: str, user_id: str = "", danger: bool = False) -> str:
+    hidden = f'<input type="hidden" name="id" value="{E(user_id)}">' if user_id else ""
+    return (f'<form method="post" action="{action}" class="inline">{hidden}'
+            f'<button class="btn small{" danger" if danger else ""}" type="submit">{E(label)}</button></form>')
+
+
+def people_page(lang: str, listing: dict | None, error: str = "", name: str = "") -> str:
+    """`listing` None: Plaid could not reach Jellyfin, `error` says why."""
+    if listing is None:
+        title, text = (t(lang, "people_key_refused"), t(lang, "people_key_refused_help")) if error == "refused" \
+            else ("", t(lang, "people_down"))
+        note = f'<div class="note alert"><div><b>{E(title)}</b><br>{E(text)}</div></div>' if title else \
+            f'<p class="note warn">{E(text)}</p>'
+        return subpage(lang, note, side=_people_side(lang))
+    owner = ""
+    if listing.get("owner_locked"):
+        owner = (f'<div class="note alert"><div><b>{E(t(lang, "people_owner_locked"))}</b><br>'
+                 f'{E(t(lang, "people_owner_locked_help"))}{_post_button("/people/unlock-owner", t(lang, "people_owner_unlock"))}'
+                 f'</div></div>')
+    def row(p: dict) -> str:
+        locked = f' <em class="locked">{E(t(lang, "people_locked"))}</em>' if p["locked"] else ""
+        unlock = _post_button("/people/unlock", t(lang, "people_unlock"), p["id"]) if p["locked"] else ""
+        return (f'<li class="app-row person"><span><b>{E(p["name"])}</b>{locked}<br>'
+                f'<small>{E(_seen(lang, p.get("last_seen")))}</small></span><span class="actions">{unlock}'
+                f'{_post_button("/people/password", t(lang, "people_new_password"), p["id"])}'
+                f'{_post_button("/people/remove", t(lang, "people_remove"), p["id"], danger=True)}</span></li>')
+    rows = "".join(row(p) for p in listing["people"]) or f'<li class="hint">{E(t(lang, "people_none"))}</li>'
+    err = f'<p class="ferr">{E(t(lang, error))}</p>' if error else ""
+    add = (f'<form method="post" action="/people/add" class="field"><label class="l" for="person">{E(t(lang, "people_name"))}</label>'
+           f'<input class="input" id="person" name="name" maxlength="40" autocomplete="off" value="{E(name)}" required>{err}'
+           f'<button class="btn" type="submit">{E(t(lang, "people_add"))}</button></form>')
+    guide = f'<div class="tip"><h2>{E(t(lang, "people_guide_title"))}</h2>{steps_html(lang, "people_guide_steps")}</div>'
+    return subpage(lang, f'{owner}<ul class="manual">{rows}</ul>{add}{guide}', side=_people_side(lang))
+
+
+def people_created_page(lang: str, s: Settings, title: str, message: str) -> str:
+    share = t(lang, "people_share_linux") if s.platform in ("linux", "synology") and s.tailscale_key else \
+        t(lang, "people_share_desktop") if s.platform in ("mac", "windows") else ""
+    body = (f'<p class="lead">{E(t(lang, "people_created_help"))}</p>'
+            f'<textarea class="input invite" id="invite" rows="12" readonly>{E(message)}</textarea>'
+            f'<button class="btn" type="button" data-copy="#invite" data-done="{E(t(lang, "people_copied"))}">'
+            f'{E(t(lang, "people_copy"))}</button>'
+            + (f'<p class="hint">{E(share)}</p>' if share else "")
+            + f'<p><a class="back" href="/people">‹ {E(t(lang, "people_title"))}</a></p>')
+    return subpage(lang, body, side=f'<h1>{E(title)}</h1>')
+
+
+def people_remove_page(lang: str, user_id: str, name: str) -> str:
+    body = (f'<p class="lead">{E(t(lang, "people_remove_confirm", name=name))}</p>'
+            f'<form method="post" action="/people/remove"><input type="hidden" name="id" value="{E(user_id)}">'
+            f'<input type="hidden" name="confirm" value="1"><button class="btn danger" type="submit">'
+            f'{E(t(lang, "people_remove_yes"))}</button></form>'
+            f'<p><a class="back" href="/people">‹ {E(t(lang, "people_title"))}</a></p>')
+    return subpage(lang, body, side=_people_side(lang))
+
+
 def torrents_page(lang: str, found: list[dict] | None, removed: int | None = None) -> str:
     """Finished torrents already in the library. `found` None: an app did not answer."""
     head = f'<h1>{E(t(lang, "torrents_title"))}</h1>'
@@ -875,6 +944,60 @@ def make_handler(state: State):
             except ValueError:
                 return {}
 
+        def lan_host(self) -> str:
+            host = (self.headers.get("Host") or "localhost").rsplit(":", 1)[0]
+            if host in ("localhost", "127.0.0.1", "[::1]") and state.env.get("HOST_ADDR", "localhost") != "localhost":
+                # Opened on the machine itself: the LAN address works here too, and from the TV or the phone.
+                host = state.env["HOST_ADDR"]
+            return host
+
+        def people_listing(self, lang: str, error: str = "", name: str = "") -> str:
+            try:
+                return people_page(lang, state.flow.people_list(), error, name)
+            except PermissionError:
+                return people_page(lang, None, "refused")
+            except (OSError, HttpError):  # Jellyfin starting or stopped
+                return people_page(lang, None, "down")
+
+        def people_post(self, path: str, data: dict, s: Settings, lang: str):
+            user_id = str(data.get("id", ""))
+            invite = lambda name, password: people.invite_text(lang, s, self.lan_host(), name, password,
+                                                               state.flow.funnel_url())
+            try:
+                if path == "/people/add":
+                    name = " ".join(str(data.get("name", "")).split())[:40]
+                    if not name:
+                        return self.send(200, self.people_listing(lang, "err_people_name"))
+                    try:
+                        password = state.flow.people_add(name)
+                    except HttpError as e:
+                        if e.status != 400:
+                            raise
+                        return self.send(200, self.people_listing(lang, "err_people_taken", name))
+                    return self.send(200, people_created_page(lang, s, t(lang, "people_created", name=name),
+                                                              invite(name, password)))
+                if path == "/people/password":
+                    password = state.flow.people_new_password(user_id)  # refuses an administrator first
+                    name = next(p["name"] for p in state.flow.people_list()["people"] if p["id"] == user_id)
+                    return self.send(200, people_created_page(lang, s, t(lang, "people_new_password_done", name=name),
+                                                              invite(name, password)))
+                if path == "/people/remove" and not data.get("confirm"):
+                    found = [p for p in state.flow.people_list()["people"] if p["id"] == user_id]
+                    if not found:  # an administrator, or someone already gone
+                        return self.json(403, {})
+                    return self.send(200, people_remove_page(lang, user_id, found[0]["name"]))
+                action = {"/people/remove": lambda: state.flow.people_remove(user_id),
+                          "/people/unlock": lambda: state.flow.people_unlock(user_id),
+                          "/people/unlock-owner": state.flow.owner_unlock}.get(path)
+                if action is None:
+                    return self.send(404, "Not found", "text/plain")
+                action()
+                return self.send(303, "", headers={"Location": "/people"})
+            except PermissionError:
+                return self.json(403, {})
+            except (OSError, HttpError):
+                return self.send(200, people_page(lang, None, "down"))
+
         def session_cookie(self) -> dict:
             return {"Set-Cookie": f"{COOKIE}={state.new_session()}; HttpOnly; SameSite=Strict; Path=/"}
 
@@ -918,7 +1041,7 @@ def make_handler(state: State):
                     return self.json(401, {})
                 status, detail = state.flow.uninstall_status()
                 return self.json(200, {"state": status, "detail": detail, "text": t(lang, "err_uninstall_failed")})
-            if path not in ("/", "/remote", "/trackers", "/torrents", "/backups", "/backups/confirm", "/remove",
+            if path not in ("/", "/people", "/remote", "/trackers", "/torrents", "/backups", "/backups/confirm", "/remove",
                             "/settings", "/settings/progress"):
                 return self.send(404, "Not found", "text/plain")
             if self.locked():
@@ -927,6 +1050,8 @@ def make_handler(state: State):
                 if path != "/":
                     return self.send(303, "", headers={"Location": "/"})
                 return self.send(200, form_page(lang, state.env, state.running, bool(s and s.vpn_provider)))
+            if path == "/people":
+                return self.send(200, self.people_listing(lang))
             if path == "/remote":
                 return self.send(200, remote_page(lang, s))
             if path == "/settings":
@@ -951,11 +1076,7 @@ def make_handler(state: State):
                 return self.send(200, torrents_page(lang, found))
             if path == "/remove":
                 return self.send(200, remove_page(lang, s, state.flow.media_size(s)))
-            host = (self.headers.get("Host") or "localhost").rsplit(":", 1)[0]
-            if host in ("localhost", "127.0.0.1", "[::1]") and state.env.get("HOST_ADDR", "localhost") != "localhost":
-                # Opened on the machine itself: the LAN address works here too, and from the TV or the phone.
-                host = state.env["HOST_ADDR"]
-            return self.send(200, panel_page(lang, s, host, state.flow.is_complete(), state.flow.guard_status(),
+            return self.send(200, panel_page(lang, s, self.lan_host(), state.flow.is_complete(), state.flow.guard_status(),
                                              state.flow.last_update(), state.flow.backup_status()))
 
         def do_POST(self):
@@ -1041,6 +1162,10 @@ def make_handler(state: State):
                     return self.json(401, {})
                 state.flow.confirm_disk(s)
                 return self.send(303, "", headers={"Location": "/"})
+            if path.startswith("/people/"):
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                return self.people_post(path, data, s, lang)
             if path == "/api/vpn-key-renewed":
                 if self.locked() or s is None:
                     return self.json(401, {})

@@ -1045,3 +1045,127 @@ class VpnStuckTest(unittest.TestCase):
         self.assertEqual(state, "stuck")
         self.assertEqual(web.vpn_texts("fr", s, state)[0], "Le VPN ne se reconnecte pas")
         self.assertEqual(web.guard_notes("fr", s, {"vpn": "stuck"})[0][0], "Le VPN ne se reconnecte pas")
+
+
+class PeopleFlow(FakeFlow):
+    def __init__(self, **kw):
+        super().__init__(installed=settings(), **kw)
+        self.people = [{"id": "m", "name": "Mamie", "last_seen": "2026-11-10T20:00:00Z", "locked": True}]
+        self.owner_is_locked, self.key_refused, self.done = False, False, []
+
+    def people_list(self):
+        if self.key_refused:
+            raise PermissionError("refused")
+        return {"people": self.people, "owner_locked": self.owner_is_locked}
+
+    def people_add(self, name):
+        self.done.append(("add", name))
+        return "Pw-new-123456789"
+
+    def _check(self, user_id):
+        if user_id not in {p["id"] for p in self.people}:
+            raise PermissionError("administrators are left alone")
+
+    def people_new_password(self, user_id):
+        self._check(user_id)
+        self.done.append(("password", user_id))
+        return "Pw-other-1234567"
+
+    def people_unlock(self, user_id):
+        self._check(user_id)
+        self.done.append(("unlock", user_id))
+
+    def people_remove(self, user_id):
+        self._check(user_id)
+        self.done.append(("remove", user_id))
+
+    def owner_unlock(self):
+        self.done.append(("owner",))
+
+    def funnel_url(self):
+        return None
+
+
+class PeopleWebTest(WebTest):
+    FORM = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    def open(self, flow=None):
+        self.flow = flow or PeopleFlow()
+        self.start(self.flow)
+        form = "username=zoe&password=" + "secret-pass%20%27%C3%A9%22"
+        _, headers, _ = self.req("POST", "/login", form, self.FORM)
+        self.cookie = headers["Set-Cookie"].split(";")[0]
+
+    def get(self, path):
+        return self.req("GET", path, headers={"Cookie": self.cookie})
+
+    def post(self, path, body=""):
+        return self.req("POST", path, body, {"Cookie": self.cookie, **self.FORM})
+
+    def test_needs_login(self):
+        self.start(PeopleFlow())
+        self.assertEqual(self.req("GET", "/people")[0], 303)
+        self.assertEqual(self.req("POST", "/people/add", "name=Papi", self.FORM)[0], 401)
+
+    def test_list_with_locked_person(self):
+        self.open()
+        status, _, html = self.get("/people")
+        self.assertEqual(status, 200)
+        self.assertIn("Mamie", html)
+        self.assertIn("Bloqué", html)
+        self.assertIn('action="/people/unlock"', html)
+        self.assertIn("Retoucher un compte dans Jellyfin", html)
+        self.assertIn('href="/people"', self.get("/")[2])  # reachable from the panel's menu
+
+    def test_add_shows_password_and_message_once(self):
+        self.open()
+        status, _, html = self.post("/people/add", "name=Papi")
+        self.assertEqual(status, 200)
+        self.assertEqual(self.flow.done, [("add", "Papi")])
+        self.assertIn("Pw-new-123456789", html)
+        self.assertIn("http://localhost:8096", html.replace("127.0.0.1", "localhost"))
+        self.assertIn("data-copy", html)
+        self.assertNotIn("Pw-new-123456789", self.get("/people")[2])
+
+    def test_empty_name_is_refused(self):
+        self.open()
+        status, _, html = self.post("/people/add", "name=%20")
+        self.assertEqual((status, self.flow.done), (200, []))
+        self.assertIn("Écrivez un nom", html)
+
+    def test_new_password(self):
+        self.open()
+        status, _, html = self.post("/people/password", "id=m")
+        self.assertEqual(status, 200)
+        self.assertIn("Pw-other-1234567", html)
+
+    def test_remove_asks_first(self):
+        self.open()
+        status, _, html = self.post("/people/remove", "id=m")
+        self.assertEqual((status, self.flow.done), (200, []))
+        self.assertIn('name="confirm"', html)
+        status, headers, _ = self.post("/people/remove", "id=m&confirm=1")
+        self.assertEqual((status, headers["Location"], self.flow.done), (303, "/people", [("remove", "m")]))
+
+    def test_forged_administrator_id_is_refused(self):
+        self.open()
+        for path in ("/people/remove", "/people/password", "/people/unlock"):
+            self.assertEqual(self.post(path, "id=o&confirm=1")[0], 403, path)
+        self.assertEqual(self.flow.done, [])
+
+    def test_locked_owner_can_unlock(self):
+        flow = PeopleFlow()
+        flow.owner_is_locked = True
+        self.open(flow)
+        html = self.get("/people")[2]
+        self.assertIn('action="/people/unlock-owner"', html)
+        self.assertEqual(self.post("/people/unlock-owner")[0], 303)
+        self.assertEqual(flow.done, [("owner",)])
+
+    def test_refused_owner_password_is_explained(self):
+        flow = PeopleFlow()
+        flow.key_refused = True
+        self.open(flow)
+        status, _, html = self.get("/people")
+        self.assertEqual(status, 200)
+        self.assertIn("Plaid n’a pas pu se connecter à Jellyfin", html)

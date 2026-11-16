@@ -495,3 +495,18 @@ class SeerrOwnerOnlyTest(unittest.TestCase):
             flow._write_state(settings(), d, "/srv/arr", False)
             open(os.path.join(d, "complete"), "w").close()
             flow.seerr_owner_only(d)
+
+
+class PeopleFlowTest(unittest.TestCase):
+    def test_people_calls_use_plaids_key_and_jellyfin(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d, mock.patch("installer.people.api_key", return_value="key") as key, \
+                mock.patch("installer.people.list_people", return_value=[]) as listing, \
+                mock.patch("installer.people.owner_locked", return_value=False), \
+                mock.patch("installer.people.add_person", return_value="pw") as add:
+            flow._write_state(settings(), d, "/srv/arr", False)
+            self.assertEqual(flow.people_list(d), {"people": [], "owner_locked": False})
+            self.assertEqual(flow.people_add("Papi", d), "pw")
+        self.assertEqual(key.call_args[0][1:], ("jellyfin:8096", d))
+        listing.assert_called_with("jellyfin:8096", "key")
+        self.assertEqual(add.call_args[0][1:], ("jellyfin:8096", "key", "Papi"))

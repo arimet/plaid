@@ -12,7 +12,7 @@ import time
 from dataclasses import asdict, dataclass, field, replace
 from typing import Callable
 
-from installer import apps, docker, media
+from installer import apps, docker, media, people
 from installer.compose import PORTS, render_compose
 from installer.docker import DockerError
 from installer.settings import Settings, validate
@@ -55,6 +55,47 @@ def load_settings(state_dir: str = STATE_DIR) -> Settings | None:
 def _prowlarr(dk, state_dir: str):
     return apps.Arr("prowlarr", f"prowlarr:{PORTS['prowlarr']}", "v1",
                     lambda *args: dk.compose(state_dir, *args).stdout)
+
+
+JELLYFIN = f"jellyfin:{PORTS['jellyfin']}"  # as Plaid's container sees it, on the stack's network
+
+
+def _people(state_dir: str) -> tuple[Settings, str]:
+    """(settings, Plaid's Jellyfin key). PermissionError when Jellyfin refuses the owner's password the first time."""
+    s = load_settings(state_dir)
+    return s, people.api_key(s, JELLYFIN, state_dir)
+
+
+def people_list(state_dir: str = STATE_DIR) -> dict:
+    s, key = _people(state_dir)
+    return {"people": people.list_people(JELLYFIN, key), "owner_locked": people.owner_locked(JELLYFIN, key, s.username)}
+
+
+def people_add(name: str, state_dir: str = STATE_DIR) -> str:
+    s, key = _people(state_dir)
+    return people.add_person(s, JELLYFIN, key, name)
+
+
+def people_new_password(user_id: str, state_dir: str = STATE_DIR) -> str:
+    return people.new_password(JELLYFIN, _people(state_dir)[1], user_id)
+
+
+def people_unlock(user_id: str, state_dir: str = STATE_DIR) -> None:
+    people.unlock(JELLYFIN, _people(state_dir)[1], user_id)
+
+
+def people_remove(user_id: str, state_dir: str = STATE_DIR) -> None:
+    people.remove(JELLYFIN, _people(state_dir)[1], user_id)
+
+
+def owner_unlock(state_dir: str = STATE_DIR) -> None:
+    s, key = _people(state_dir)
+    people.unlock_owner(JELLYFIN, key, s.username)
+
+
+def funnel_url(state_dir: str = STATE_DIR) -> str | None:
+    """The public address of Jellyfin, when the Internet access is on and works (filled by the Funnel task)."""
+    return None
 
 
 def seerr_owner_only(state_dir: str = STATE_DIR) -> None:

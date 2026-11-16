@@ -154,6 +154,12 @@ label.l,legend.l{font:700 14px/1.2 Nunito,sans-serif;color:var(--text)}
 .app-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0}
 .app-row+.app-row{border-top:1px solid var(--shadow-dark)}
 .app-row b{font-weight:600;color:var(--text)}
+.person .actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.person small{color:var(--muted)}
+.person .locked{font-style:normal;font-size:13px;font-weight:600;color:var(--danger-text);margin-left:6px}
+form.inline{display:inline}
+.person .btn.small{font-size:14px;padding:8px 12px}
+textarea.invite{width:100%;font:inherit;line-height:1.5;resize:vertical;margin:12px 0}
 .changes{padding-left:20px;line-height:1.7}
 
 /* ----------------------------------------------------------------- buttons */

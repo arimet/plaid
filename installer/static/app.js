@@ -128,6 +128,17 @@
     if (here) here.addEventListener("click", () => current && choose(join(current, "Plaid")));
   });
 
+  // ---------------------------------------------------------------- people: copy the message to send
+  $$("[data-copy]").forEach((btn) => btn.addEventListener("click", () => {
+    const box = $(btn.dataset.copy), label = btn.textContent;
+    const done = () => { btn.textContent = btn.dataset.done; setTimeout(() => (btn.textContent = label), 2000); };
+    // On the LAN address (plain http) the clipboard API is not there, and a browser may refuse it: select the text
+    // and copy it the old way. Selected, it can still be copied by hand if that fails too.
+    const byHand = () => { box.select(); if (document.execCommand("copy")) done(); };
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(box.value).then(done, byHand);
+    byHand();
+  }));
+
   // ---------------------------------------------------------------- panel: app states and disk room, every 30 s
   if ($("[data-disk]")) {
     setInterval(() => {

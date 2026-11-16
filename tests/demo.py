@@ -99,6 +99,31 @@ class DemoFlow:
             return {"state": "done", "events": events + [{"step": "step_done", "done": True, "detail": "jellyfin"}]}
         return {"state": "running", "events": events}
 
+    people = [{"id": "m", "name": "Mamie", "last_seen": "2026-11-10T20:00:00Z", "locked": True},
+              {"id": "l", "name": "Léo", "last_seen": None, "locked": False}]
+
+    def people_list(self):
+        return {"people": self.people, "owner_locked": False}
+
+    def people_add(self, name):
+        self.people = self.people + [{"id": name, "name": name, "last_seen": None, "locked": False}]
+        return "Kf7mQx2bTn9wRz4p"
+
+    def people_new_password(self, user_id):
+        return "Hq3vNs8kWm2xPd6y"
+
+    def people_unlock(self, user_id):
+        self.people = [dict(p, locked=False) if p["id"] == user_id else p for p in self.people]
+
+    def people_remove(self, user_id):
+        self.people = [p for p in self.people if p["id"] != user_id]
+
+    def owner_unlock(self):
+        pass
+
+    def funnel_url(self):
+        return "https://plaid.tail1234.ts.net"
+
 
 if __name__ == "__main__":
     from installer.settings import Settings  # noqa: E402
