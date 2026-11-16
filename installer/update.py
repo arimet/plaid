@@ -6,7 +6,7 @@ import json
 import os
 import time
 
-from installer import docker, flow
+from installer import docker, extras, flow
 from installer.compose import DISK_APPS
 from installer.docker import DockerError
 from installer.flow import Progress, Report
@@ -26,12 +26,21 @@ def last(state_dir: str = flow.STATE_DIR) -> dict | None:
         return None
 
 
-def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, wait=time.sleep) -> list[str] | None:
-    """The services whose image changed, or None on failure. Nothing is undone: a pulled image only takes room."""
+def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, wait=time.sleep,
+        remove_extras: bool | None = None) -> list[str] | None:
+    """The services whose image changed, or None on failure. Nothing is undone: a pulled image only takes room.
+    With community plugins in Jellyfin, Jellyfin is only updated once they are gone (`remove_extras` and it worked):
+    a plugin made for the old version may stop it from starting."""
     s = flow.load_settings(state_dir)
     with open(os.path.join(state_dir, "compose.json"), encoding="utf-8") as f:
         refs = {svc: spec.get("image", "") for svc, spec in json.load(f)["services"].items()}
-    services = list(refs)
+    held = []
+    if extras.has_plugins(extras.load_state(state_dir)["chosen"]):
+        if remove_extras:
+            report(Progress("step_remove_extras"))
+        if not (remove_extras and extras.remove_for_update(s, state_dir)):
+            held = ["jellyfin"]
+    services = [svc for svc in refs if svc not in held]
     stale = (last(state_dir) or {}).get("stale", [])
     images = lambda: {svc: c.get("image") for svc, c in dk.stack_containers().items()}
     step = "step_pull"
@@ -59,7 +68,7 @@ def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, wait=time.sl
         return None
     flow.write_json(os.path.join(state_dir, UPDATE_FILE),
                     {"at": time.time(), "updated": changed, "stale": [before[svc] for svc in waiting]})
-    report(Progress("step_done", done=True, detail=",".join(changed), skipped=skipped, waiting=waiting))
+    report(Progress("step_done", done=True, detail=",".join(changed), skipped=skipped, waiting=waiting, held=held))
     return changed
 
 

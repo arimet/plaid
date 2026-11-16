@@ -133,3 +133,24 @@ def apply(s, chosen: list[str], report, state_dir: str, host: str = "jellyfin:80
     save_state(state, state_dir)
     report(Progress("step_done", done=True, detail=",".join(failed)))
     return failed
+
+
+def remove_for_update(s, state_dir: str, host: str = "jellyfin:8096") -> bool:
+    """Removes the plugins Plaid installed so Jellyfin can be updated. False when Jellyfin did not let it: then
+    Jellyfin keeps its version. The extras removed are remembered, for the user to tick again."""
+    from installer import apps
+    state = load_state(state_dir)
+    try:
+        jf = _jellyfin(s, state_dir, host)
+        present = {p["Name"]: p for p in jf("GET", "/Plugins")}
+        for name in state["installed"]:
+            if name in present:
+                jf("DELETE", f"/Plugins/{present[name]['Id']}/{present[name]['Version']}")
+    except (OSError, apps.HttpError) as e:
+        print(f"extras: could not remove the plugins: {e}")
+        return False
+    plugins = [x for x in state["chosen"] if BY_ID[x]["packages"]]
+    state.update(chosen=[x for x in state["chosen"] if x not in plugins], installed=[],
+                 removed_for_update=sorted(set(state["removed_for_update"]) | set(plugins)))
+    save_state(state, state_dir)
+    return True

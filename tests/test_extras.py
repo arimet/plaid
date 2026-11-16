@@ -181,3 +181,23 @@ class WorkerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d, mock.patch("installer.flow._start_worker") as start:
             flow.start_extras(["theme", "introdb"], state_dir=d)
         self.assertEqual(start.call_args[0][0], {"kind": "extras", "chosen": ["theme", "introdb"]})
+
+
+class RemoveForUpdateTest(unittest.TestCase):
+    def run_remove(self, jf):
+        with tempfile.TemporaryDirectory() as d, mock.patch("installer.apps.call", jf), mock.patch("builtins.print"):
+            open(os.path.join(d, "jellyfin-key"), "w").write("key")
+            extras.save_state({"chosen": ["theme", "mediabar"], "installed": ["Media Bar"], "removed_for_update": []}, d)
+            return extras.remove_for_update(owner(), d, HOST), extras.load_state(d)
+
+    def test_removes_plaids_plugins_and_remembers_them(self):
+        jf = FakeJellyfin(plugins=["Media Bar", "File Transformation"])
+        ok, state = self.run_remove(jf)
+        self.assertTrue(ok)
+        self.assertEqual(set(jf.plugins), {"File Transformation"})  # there before Plaid: left alone
+        self.assertEqual(state, {"chosen": ["theme"], "installed": [], "removed_for_update": ["mediabar"]})
+
+    def test_jellyfin_down_changes_nothing(self):
+        ok, state = self.run_remove(FakeJellyfin(plugins=["Media Bar"], down=True))
+        self.assertFalse(ok)
+        self.assertEqual(state["chosen"], ["theme", "mediabar"])

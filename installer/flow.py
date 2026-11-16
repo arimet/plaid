@@ -34,6 +34,7 @@ class Progress:
     kept: list[str] = field(default_factory=list)  # quality profiles left in place: films or series still use them
     skipped: list[str] = field(default_factory=list)  # apps an update could not download
     waiting: list[str] = field(default_factory=list)  # disk apps an update left for the guard: the disk is away
+    held: list[str] = field(default_factory=list)  # apps an update left on their version: Jellyfin with its plugins
 
 
 Report = Callable[[Progress], None]
@@ -448,9 +449,10 @@ def list_backups(s: Settings, dk=docker) -> list[dict]:
     return dk.list_backups(dest, sub)
 
 
-def start_update(dk=docker, state_dir: str = STATE_DIR) -> None:
-    """The apps' update runs in the same worker: one operation on the stack at a time."""
-    _start_worker({"kind": "update"}, dk, state_dir)
+def start_update(remove_extras: bool | None = None, dk=docker, state_dir: str = STATE_DIR) -> None:
+    """The apps' update runs in the same worker: one operation on the stack at a time. `remove_extras`: the
+    answer to "remove your plugins to update Jellyfin?" (None: none installed, nothing asked)."""
+    _start_worker({"kind": "update", "remove_extras": remove_extras}, dk, state_dir)
 
 
 def start_extras(chosen: list[str], dk=docker, state_dir: str = STATE_DIR) -> None:

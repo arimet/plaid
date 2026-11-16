@@ -365,7 +365,8 @@ def run_worker(dk=docker, state_dir: str = flow.STATE_DIR) -> int:
     dk.connect_network(dk.self_container_id())
     if request.get("kind") == "update":
         from installer import update
-        return 0 if update.run(report, dk=dk, state_dir=state_dir) is not None else 1
+        return 0 if update.run(report, dk=dk, state_dir=state_dir,
+                               remove_extras=request.get("remove_extras")) is not None else 1
     if request.get("kind") == "extras":
         from installer import extras
         try:

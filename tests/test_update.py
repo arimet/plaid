@@ -136,3 +136,54 @@ class UpdateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExtrasUpdateTest(unittest.TestCase):  # not UpdateTest: its own tests would run with plugins installed
+    def setUp(self):
+        UpdateTest.setUp(self)
+        from installer import extras
+        extras.save_state({"chosen": ["theme", "mediabar"], "installed": ["Media Bar", "File Transformation"],
+                           "removed_for_update": []}, self.dir)
+
+    def run_update(self, dk, remove_extras=None, removal=True):
+        from unittest import mock
+        with mock.patch("installer.extras.remove_for_update", return_value=removal) as remove:
+            result = update.run(lambda p: self.events.append(asdict(p)), dk=dk, state_dir=self.dir,
+                                wait=lambda s: None, remove_extras=remove_extras)
+        self.remove = remove
+        return result
+
+    def jellyfin_touched(self, dk):
+        return any("jellyfin" in c for c in dk.calls)
+
+    def test_yes_removes_the_plugins_first_then_updates_jellyfin(self):
+        dk = FakeDk(new=("jellyfin",))
+        self.assertEqual(self.run_update(dk, remove_extras=True), ["jellyfin"])
+        self.assertEqual(self.events[0]["step"], "step_remove_extras")
+        self.remove.assert_called_once()
+        self.assertEqual(self.events[-1]["held"], [])
+
+    def test_a_failed_removal_keeps_jellyfin_as_it_is(self):
+        dk = FakeDk(new=("jellyfin", "radarr"))
+        self.assertEqual(self.run_update(dk, remove_extras=True, removal=False), ["radarr"])
+        self.assertFalse(self.jellyfin_touched(dk))
+        self.assertEqual(self.events[-1]["held"], ["jellyfin"])
+
+    def test_no_keeps_jellyfin_and_its_plugins(self):
+        dk = FakeDk(new=("jellyfin", "radarr"))
+        self.run_update(dk, remove_extras=False)
+        self.remove.assert_not_called()
+        self.assertFalse(self.jellyfin_touched(dk))
+        self.assertEqual(self.events[-1]["held"], ["jellyfin"])
+
+    def test_theme_alone_asks_nothing(self):
+        from installer import extras
+        extras.save_state({"chosen": ["theme"], "installed": [], "removed_for_update": []}, self.dir)
+        dk = FakeDk(new=("jellyfin",))
+        self.assertEqual(self.run_update(dk), ["jellyfin"])
+        self.remove.assert_not_called()
+
+    def test_the_result_says_jellyfin_was_kept(self):
+        from installer.web import update_lines
+        lines = update_lines("fr", {"detail": "radarr", "held": ["jellyfin"]})
+        self.assertIn("Jellyfin garde sa version", " ".join(text for text, _ in lines))

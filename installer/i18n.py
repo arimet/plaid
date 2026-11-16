@@ -252,6 +252,8 @@ T: dict[str, dict[str, str]] = {
         "update_waiting_one": "{apps} restarts on its new version when the media disk is back.",
         "update_waiting_many": "{apps} restart on their new version when the media disk is back.",
         "update_skipped": "Could not download the new version of: {apps}. Try again later.",
+        "update_held": "Jellyfin keeps its version, with your plugins. To update it, run the update again and remove them.",
+        "step_remove_extras": "Removing Jellyfin's plugins",
         "err_update_failed": "The update did not go through. The apps not restarted yet run their previous version.",
         "step_pull": "Downloading the new versions",
         "step_recreate": "Restarting the apps",
@@ -702,6 +704,8 @@ T: dict[str, dict[str, str]] = {
         "update_waiting_one": "{apps} redémarrera sur sa nouvelle version quand le disque des médias reviendra.",
         "update_waiting_many": "{apps} redémarreront sur leur nouvelle version quand le disque des médias reviendra.",
         "update_skipped": "Pas pu télécharger la nouvelle version de : {apps}. Réessayez plus tard.",
+        "update_held": "Jellyfin garde sa version, avec vos plugins. Pour le mettre à jour, relancez la mise à jour et retirez-les.",
+        "step_remove_extras": "Retrait des plugins de Jellyfin",
         "err_update_failed": "La mise à jour n’a pas abouti. Les applis pas encore redémarrées tournent sur leur "
                              "version précédente.",
         "step_pull": "Téléchargement des nouvelles versions",

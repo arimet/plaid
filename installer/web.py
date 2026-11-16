@@ -702,6 +702,8 @@ def update_lines(lang: str, last: dict) -> list[tuple[str, str]]:
         lines.append((t(lang, key, apps=", ".join(waiting)), "warn"))
     if skipped:
         lines.append((t(lang, "update_skipped", apps=", ".join(skipped)), "warn"))
+    if last.get("held"):
+        lines.append((t(lang, "update_held"), "warn"))
     return lines or [(t(lang, "update_none"), "ok")]
 
 
