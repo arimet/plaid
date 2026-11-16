@@ -474,7 +474,7 @@ def _update_tui(term, flow, lang: str) -> str:
     from installer import extras
     from installer.web import update_lines
     start, steps = flow.start_update, ("step_pull", "step_recreate", "step_cleanup_images")
-    if extras.has_plugins(flow.extras_state()["chosen"]):  # asked each time: Jellyfin with its plugins, or without
+    if extras.needs_question(flow.extras_state()):  # asked each time: Jellyfin with its plugins, or without
         term.page(t(lang, "update_question_title"), t(lang, "update_question_help"))
         remove = term.confirm(t(lang, "update_question_title"), t(lang, "cli_yes_word"), t(lang, "cli_no_word"))
         start = lambda: flow.start_update(remove_extras=remove)

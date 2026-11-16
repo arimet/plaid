@@ -35,7 +35,7 @@ def run(report: Report, dk=docker, state_dir: str = flow.STATE_DIR, wait=time.sl
     with open(os.path.join(state_dir, "compose.json"), encoding="utf-8") as f:
         refs = {svc: spec.get("image", "") for svc, spec in json.load(f)["services"].items()}
     held = []
-    if extras.has_plugins(extras.load_state(state_dir)["chosen"]):
+    if extras.needs_question(extras.load_state(state_dir)):
         if remove_extras:
             report(Progress("step_remove_extras"))
         if not (remove_extras and extras.remove_for_update(s, state_dir)):

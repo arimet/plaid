@@ -187,3 +187,13 @@ class ExtrasUpdateTest(unittest.TestCase):  # not UpdateTest: its own tests woul
         from installer.web import update_lines
         lines = update_lines("fr", {"detail": "radarr", "held": ["jellyfin"]})
         self.assertIn("Jellyfin garde sa version", " ".join(text for text, _ in lines))
+
+
+class LeftoverPluginTest(unittest.TestCase):
+    def test_a_recorded_plugin_holds_jellyfin_without_an_answer(self):
+        from installer import extras
+        UpdateTest.setUp(self)
+        extras.save_state({"chosen": [], "installed": ["File Transformation"], "removed_for_update": []}, self.dir)
+        dk = FakeDk(new=("jellyfin",))
+        update.run(lambda p: self.events.append(asdict(p)), dk=dk, state_dir=self.dir, wait=lambda s: None)
+        self.assertEqual(self.events[-1]["held"], ["jellyfin"])

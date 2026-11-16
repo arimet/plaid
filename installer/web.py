@@ -1219,7 +1219,7 @@ def make_handler(state: State):
             if path == "/api/update":
                 if self.locked() or s is None:
                     return self.json(401, {})
-                plugins = extras.has_plugins(state.flow.extras_state()["chosen"])
+                plugins = extras.needs_question(state.flow.extras_state())
                 if plugins and "remove_extras" not in data:  # asked each time: Jellyfin with them, or without
                     return self.send(200, update_question_page(lang))
                 try:

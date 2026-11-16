@@ -201,3 +201,35 @@ class RemoveForUpdateTest(unittest.TestCase):
         ok, state = self.run_remove(FakeJellyfin(plugins=["Media Bar"], down=True))
         self.assertFalse(ok)
         self.assertEqual(state["chosen"], ["theme", "mediabar"])
+
+
+class PartialApplyTest(unittest.TestCase):
+    def test_dependencies_of_a_refused_extra_are_recorded_then_asked_about(self):
+        jf = FakeJellyfin(missing=["TheIntroDB"])
+        failed, state = ApplyTest.run_apply(self, jf, ["introdb"])
+        self.assertEqual(failed, ["introdb"])
+        self.assertEqual(state["installed"], ["File Transformation"])
+        self.assertTrue(extras.needs_question(state))  # the update must still ask before recreating Jellyfin
+        _, state = ApplyTest.run_apply(self, jf, [], state)
+        self.assertNotIn("File Transformation", jf.plugins)
+
+    def test_a_restart_that_never_ends_keeps_the_record(self):
+        jf = FakeJellyfin()
+        real = jf.__call__
+
+        def gone(method, url, body=None, headers=None, form=False):
+            if "/System/Restart" in url:
+                jf.restarted = True
+            elif getattr(jf, "restarted", False) and url.endswith("/Plugins"):
+                raise ConnectionRefusedError("still restarting")
+            return real(method, url, body, headers, form)
+        with tempfile.TemporaryDirectory() as d, mock.patch("installer.apps.call", gone), mock.patch("time.sleep"):
+            open(os.path.join(d, "jellyfin-key"), "w").write("key")
+            with self.assertRaises(RuntimeError):
+                extras.apply(owner(), ["genremapper"], lambda p: None, d, host=HOST, wait=0)
+            self.assertEqual(extras.load_state(d)["installed"], ["Genre Mapper"])
+
+    def test_the_question_follows_what_is_installed(self):
+        self.assertFalse(extras.needs_question({"chosen": ["theme"], "installed": []}))
+        self.assertTrue(extras.needs_question({"chosen": ["mediabar"], "installed": []}))
+        self.assertTrue(extras.needs_question({"chosen": [], "installed": ["File Transformation"]}))

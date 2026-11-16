@@ -47,6 +47,11 @@ def has_plugins(chosen: list[str]) -> bool:
     return bool(packages_for(chosen))
 
 
+def needs_question(state: dict) -> bool:
+    """Before an update: plugins ticked, or packages Plaid put in Jellyfin (a refused extra leaves its dependencies)."""
+    return has_plugins(state.get("chosen") or []) or bool(state.get("installed"))
+
+
 def with_theme(css: str, on: bool) -> str:
     """The user's own CSS kept as it is; Plaid's one line first (an @import must come before any rule)."""
     rest = "\n".join(line for line in (css or "").split("\n") if line.strip() != THEME_LINE).strip("\n")
@@ -96,17 +101,23 @@ def apply(s, chosen: list[str], report, state_dir: str, host: str = "jellyfin:80
                if u not in {r.get("Url") for r in repos}]
     if missing:
         jf("POST", "/Repositories", repos + missing)
-    tried, refused = [], set()
-    for name in sorted(wanted - set(present)):
-        try:
-            jf("POST", "/Packages/Installed/" + urllib.parse.quote(name))
-            tried.append(name)
-        except apps.HttpError:  # not in its repository, or no version for this Jellyfin
-            refused.add(name)
-    gone = []
-    for name in sorted((mine - wanted) & set(present)):
-        jf("DELETE", f"/Plugins/{present[name]['Id']}/{present[name]['Version']}")
-        gone.append(name)
+    tried, gone = [], []
+
+    def record() -> None:  # Plaid must know every package it put there, even if this run stops half way
+        state["installed"] = sorted((mine - set(gone)) | set(tried))
+        save_state(state, state_dir)
+    try:
+        for name in sorted(wanted - set(present)):
+            try:
+                jf("POST", "/Packages/Installed/" + urllib.parse.quote(name))
+                tried.append(name)
+            except apps.HttpError:  # not in its repository, or no version for this Jellyfin
+                pass
+        for name in sorted((mine - wanted) & set(present)):
+            jf("DELETE", f"/Plugins/{present[name]['Id']}/{present[name]['Version']}")
+            gone.append(name)
+    finally:
+        record()
     active = {n for n, p in present.items() if p.get("Status") == "Active"}
     if tried or gone:
         report(Progress("step_extras_restart"))
@@ -127,7 +138,6 @@ def apply(s, chosen: list[str], report, state_dir: str, host: str = "jellyfin:80
     if themed != (css.get("CustomCss") or ""):
         jf("POST", "/System/Configuration/branding", {**css, "CustomCss": themed})
     failed = [x for x in chosen if not {n for n, _ in BY_ID[x]["packages"]} <= active]
-    state["installed"] = sorted((mine - set(gone)) | (set(tried) & active))
     state["chosen"] = [x for x in chosen if x not in failed]
     state["removed_for_update"] = [x for x in state["removed_for_update"] if x not in state["chosen"]]
     save_state(state, state_dir)
