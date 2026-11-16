@@ -344,7 +344,8 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     size = lambda: human_size(flow.media_size(s), lang)
     code, notes = 0, []
     actions = [("apps", t(lang, "menu_apps")), ("trackers", t(lang, "menu_trackers")),
-               ("remote", t(lang, "menu_remote")), ("settings", t(lang, "menu_settings")),
+               ("remote", t(lang, "menu_remote")), ("people", t(lang, "menu_people")),
+               ("settings", t(lang, "menu_settings")),
                ("update", t(lang, "update_btn")), ("torrents", t(lang, "torrents_link")),
                ("backup", t(lang, "menu_backup")), ("restore", t(lang, "menu_restore")),
                ("remove", t(lang, "menu_remove")), ("quit", t(lang, "menu_quit"))]
@@ -407,6 +408,8 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     for n, line in enumerate(t(lang, key).split("|"), 1):
                         term.note(f"{n}. {line}")
                     term.pause(t(lang, "cli_back"))
+                elif choice == "people":
+                    flash = _people_tui(term, flow, lang, s, host)
                 elif choice == "settings":
                     result = _settings_tui(term, flow, env, s)
                     if result is not None:  # applied (or failed): the panel closes on its outcome
@@ -498,6 +501,85 @@ def _restore_tui(term, flow, lang: str, s) -> str:
     return _follow(term, flow, lang, lambda: flow.start_restore(name),
                    ("step_restore_stop", "step_restore_copy", "step_restore_start"), "err_restore_failed",
                    lambda last: t(lang, "restore_back", date=backup_date(lang, last.get("detail") or name)))
+
+
+def _people_tui(term, flow, lang: str, s, host: str) -> str:
+    """The family and friends page: list, add, new password, unlock, remove. Loops until Back."""
+    from installer import people
+    from installer.apps import HttpError
+    from installer.web import _seen
+    flash = ""
+    while True:
+        term.page(t(lang, "people_title"), t(lang, "people_help"))
+        if flash:
+            term.note(flash, "warn")
+            flash = ""
+        try:
+            listing = flow.people_list()
+        except PermissionError:
+            term.note(f'{t(lang, "people_key_refused")}. {t(lang, "people_key_refused_help")}', "error")
+            term.pause(t(lang, "cli_back"))
+            return ""
+        except (OSError, HttpError):
+            term.note(t(lang, "people_down"), "warn")
+            term.pause(t(lang, "cli_back"))
+            return ""
+        found = listing["people"]
+        if listing.get("owner_locked"):
+            term.note(f'{t(lang, "people_owner_locked")}. {t(lang, "people_owner_locked_help")}', "error")
+        for p in found:
+            term.note(f'{p["name"]} · {_seen(lang, p.get("last_seen"))}' +
+                      (f' · {t(lang, "people_locked")}' if p["locked"] else ""))
+        if not found:
+            term.note(t(lang, "people_none"))
+        options = ([("owner", t(lang, "people_owner_unlock"))] if listing.get("owner_locked") else []) + \
+            [("add", t(lang, "people_add"))]
+        if any(p["locked"] for p in found):
+            options.append(("unlock", t(lang, "people_unlock")))
+        if found:
+            options += [("password", t(lang, "people_new_password")), ("remove", t(lang, "people_remove"))]
+        choice = term.select(t(lang, "menu_title"), options + [("back", t(lang, "people_back"))],
+                             hint=t(lang, "cli_select_hint"))
+        if choice == "back":
+            return ""
+        try:
+            if choice == "owner":
+                flow.owner_unlock()
+            elif choice == "add":
+                name = term.text(t(lang, "people_name"), validate=lambda v: None if " ".join(v.split())
+                                 else t(lang, "err_people_name"))
+                name = " ".join(name.split())[:40]
+                try:
+                    password = flow.people_add(name)
+                except HttpError as e:
+                    if e.status != 400:
+                        raise
+                    flash = t(lang, "err_people_taken")
+                    continue
+                _show_invite(term, lang, t(lang, "people_created", name=name),
+                             people.invite_text(lang, s, host, name, password, flow.funnel_url()))
+            else:
+                pool = [p for p in found if p["locked"]] if choice == "unlock" else found
+                who = term.select(t(lang, "people_pick"), [(p["id"], p["name"]) for p in pool],
+                                  hint=t(lang, "cli_select_hint"))
+                name = next(p["name"] for p in pool if p["id"] == who)
+                if choice == "unlock":
+                    flow.people_unlock(who)
+                elif choice == "password":
+                    _show_invite(term, lang, t(lang, "people_new_password_done", name=name),
+                                 people.invite_text(lang, s, host, name, flow.people_new_password(who), flow.funnel_url()))
+                elif term.confirm(t(lang, "people_remove_confirm", name=name), t(lang, "cli_yes_word"),
+                                  t(lang, "cli_no_word"), default=False):
+                    flow.people_remove(who)
+        except (OSError, HttpError):  # PermissionError (an administrator) cannot come from this list
+            flash = t(lang, "people_down")
+
+
+def _show_invite(term, lang: str, title: str, message: str) -> None:
+    term.page(title, t(lang, "people_created_help"))
+    for line in message.split("\n"):
+        term.line("  " + line)
+    term.pause(t(lang, "cli_back"))
 
 
 def _torrents_tui(term, flow, lang: str, s) -> str:

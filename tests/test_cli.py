@@ -221,7 +221,7 @@ class PanelCliTest(TuiCliTest):
     def test_remove_from_the_menu(self):
         flow = installed_flow()
         # remove · confirm (left = yes) · keep the media folder (Enter = no)
-        t, out = self.term("\x1b[B" * 8 + "\r", "\x1b[D\r", "\r")
+        t, out = self.term("\x1b[B" * 9 + "\r", "\x1b[D\r", "\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIs(flow.removed, False)
 
@@ -257,7 +257,7 @@ class SettingsCliTest(TuiCliTest):
     # Settings menu: language, time zone, folder, account, VPN, Tailscale (Linux), [apply], back.
     def test_change_timezone_from_the_menu(self):
         flow = installed_flow()
-        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertEqual(flow.started.timezone, "America/Montreal")
         self.assertIn("Vos changements sont appliqués", out.getvalue())
@@ -265,7 +265,7 @@ class SettingsCliTest(TuiCliTest):
     def test_blank_password_keeps_it(self):
         flow = installed_flow()
         # settings · account · username unchanged · empty password · back · quit
-        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\x1b[B\x1b[B\r", "\r", "\r", "\x1b[A\r", "\x1b[A\r")
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\x1b[B\r", "\x1b[B\x1b[B\x1b[B\r", "\r", "\r", "\x1b[A\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIsNone(flow.started)
 
@@ -273,7 +273,7 @@ class SettingsCliTest(TuiCliTest):
         flow = installed_flow()
         flow.settings_check = lambda old, new: ["err_folder_missing"]
         # settings · folder · new path · apply · (error shown, Enter to go back) · back · quit
-        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\x1b[B\r", "/media/usb/plaid\r", "\x1b[A\x1b[A\r", "\r",
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\x1b[B\r", "\x1b[B\x1b[B\r", "/media/usb/plaid\r", "\x1b[A\x1b[A\r", "\r",
                            "\x1b[A\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIsNone(flow.started)
@@ -285,7 +285,7 @@ class ManualPasswordCliTest(TuiCliTest):
         flow = installed_flow()
         flow.apply_status = lambda: {"state": "done", "events": [{"step": "step_account"},
                                                                   {"step": "step_done", "done": True, "detail": "jellyfin"}]}
-        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
         cli.run_panel_tui(t, flow, dict(ENV, HOST_ADDR="192.168.1.20"), flow.settings)
         cli._print_notes(t, [])
         self.assertIn("Jellyfin  http://192.168.1.20:8096", out.getvalue())
@@ -319,7 +319,7 @@ class MediaCliTest(TuiCliTest):
         flow = installed_flow()
         # settings · films (up x3 from lang: back, apply? no change yet: back, then films) · keep audio ·
         # tick mine-4k · default stays (Enter) · subtitles Enter · fiches Enter · apply (up x2) · confirm
-        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", UP + UP + "\r", "\r", DOWN * 2 + SPACE + "\r", "\r", "\r", "\r",
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\x1b[B\r", UP + UP + "\r", "\r", DOWN * 2 + SPACE + "\r", "\r", "\r", "\r",
                            UP + UP + "\r", "\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertEqual(flow.started.profiles, ["mine-1080p", "mine-4k"])
@@ -328,7 +328,7 @@ class MediaCliTest(TuiCliTest):
         flow = installed_flow()
         flow.apply_status = lambda: {"state": "done", "events": [
             {"step": "step_profiles"}, {"step": "step_done", "done": True, "detail": "", "kept": ["VO sous-titrée · 4K"]}]}
-        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
         cli.run_panel_tui(t, flow, ENV, flow.settings)
         cli._print_notes(t, [])
         self.assertIn("VO sous-titrée · 4K", out.getvalue())
@@ -376,7 +376,7 @@ class MaintenanceCliTest(TuiCliTest):
         flow.start_update = lambda: flow.updates.append(True)
         flow.apply_status = lambda: {"state": "done" if flow.updates else "idle", "events": [
             {"step": "step_pull"}, {"step": "step_done", "done": True, "detail": "radarr", "skipped": ["sonarr"]}]}
-        t, out = self.term("\x1b[B" * 4 + "\r", "\x1b[A\r")
+        t, out = self.term("\x1b[B" * 5 + "\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertEqual(flow.updates, [True])
         self.assertIn("Mises à jour : Radarr.", out.getvalue())
@@ -387,7 +387,7 @@ class MaintenanceCliTest(TuiCliTest):
         flow.cleaned = []
         flow.finished_torrents = lambda s: [{"hash": "a", "name": "Dune.2024.1080p", "size": 9 * 1024 ** 3}]
         flow.clean_torrents = lambda s, hashes: flow.cleaned.append(hashes) or 1
-        t, out = self.term("\x1b[B" * 5 + "\r", "\x1b[D\r", "\x1b[A\r")  # torrents · yes · quit
+        t, out = self.term("\x1b[B" * 6 + "\r", "\x1b[D\r", "\x1b[A\r")  # torrents · yes · quit
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIn("Dune.2024.1080p", out.getvalue())
         self.assertEqual(flow.cleaned, [["a"]])
@@ -403,7 +403,7 @@ class WorkerGoneCliTest(TuiCliTest):
             raise WorkerBusy()
         flow.start_update = start_update
         flow.apply_status = lambda: {"state": "running", "events": [{"step": "step_compose"}]}
-        t, out = self.term("\x1b[B" * 4 + "\r", "\r", "\x1b[A\r")  # update · back · quit
+        t, out = self.term("\x1b[B" * 5 + "\r", "\r", "\x1b[A\r")  # update · back · quit
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertEqual(flow.updates, [])
         self.assertIn("Un autre changement est en cours", out.getvalue())
@@ -412,14 +412,14 @@ class WorkerGoneCliTest(TuiCliTest):
         flow = installed_flow()
         flow.start_update = lambda: None
         flow.apply_status = lambda: {"state": "idle", "events": []}  # read and removed elsewhere
-        t, out = self.term("\x1b[B" * 4 + "\r", "\r", "\x1b[A\r")
+        t, out = self.term("\x1b[B" * 5 + "\r", "\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIn("La mise à jour n’a pas abouti", out.getvalue())
 
     def test_settings_change_whose_worker_vanished_ends(self):
         flow = installed_flow()
         flow.apply_status = lambda: {"state": "idle", "events": []}
-        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 1)
         self.assertIn("Le changement n’est pas passé", out.getvalue())
 
@@ -430,7 +430,7 @@ class WorkerGoneCliTest(TuiCliTest):
             raise WorkerBusy()
         flow.start_apply = busy
         # time zone change · apply → busy note · back from settings · quit
-        t, out = self.term("\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r", "\r",
+        t, out = self.term("\x1b[B\x1b[B\x1b[B\x1b[B\r", "\x1b[B\r", "America/Montreal\r", "\x1b[A\x1b[A\r", "\r", "\r",
                            "\x1b[A\r", "\x1b[A\r")
         cli.run_panel_tui(t, flow, ENV, flow.settings)
         self.assertIn("Un autre changement est en cours", out.getvalue())
@@ -442,7 +442,7 @@ class WorkerGoneCliTest(TuiCliTest):
         def busy():
             raise WorkerBusy()
         flow.start_update = busy
-        t, out = self.term("\x1b[B" * 4 + "\r", "\r", "\x1b[A\r")
+        t, out = self.term("\x1b[B" * 5 + "\r", "\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIn("Un autre changement est en cours", out.getvalue())
 
@@ -465,7 +465,7 @@ class BackupCliTest(TuiCliTest):
     # Menu: apps, trackers, remote, settings, update, torrents, backup, restore, remove, quit.
     def test_backup_now(self):
         flow = self.flow()
-        t, out = self.term("\x1b[B" * 6 + "\r", "\x1b[A\r")
+        t, out = self.term("\x1b[B" * 7 + "\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertEqual(flow.started, ["backup"])
         self.assertIn("Enregistrée : plaid-backup-2026-11-08-0300.tar.gz.", out.getvalue())
@@ -473,7 +473,7 @@ class BackupCliTest(TuiCliTest):
     def test_restore(self):
         flow = self.flow("restored")
         # restore · pick the only backup · yes · quit
-        t, out = self.term("\x1b[B" * 7 + "\r", "\r", "\x1b[D\r", "\x1b[A\r")
+        t, out = self.term("\x1b[B" * 8 + "\r", "\r", "\x1b[D\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertEqual(flow.started, [self.NAME])
         self.assertIn("8 novembre 2026", out.getvalue())
@@ -483,7 +483,7 @@ class BackupCliTest(TuiCliTest):
         flow = self.flow("restored")
         flow.load_settings = lambda: replace(flow.settings, username="restored")  # that night's account
         # restore · pick · yes · apps · back · quit
-        t, out = self.term("\x1b[B" * 7 + "\r", "\r", "\x1b[D\r", "\r", "\r", "\x1b[A\r")
+        t, out = self.term("\x1b[B" * 8 + "\r", "\r", "\x1b[D\r", "\r", "\r", "\x1b[A\r")
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIn("restored", out.getvalue())
 
@@ -563,3 +563,54 @@ class RetryCliTest(TuiCliTest):
         self.assertEqual(cli.run_install_tui(t, flow, ENV, "fr"), 0)
         self.assertEqual(len(tries), 2)
         self.assertIn("Impossible de télécharger Radarr", out.getvalue())
+
+
+class PeopleCliTest(TuiCliTest):
+    PEOPLE = "\x1b[B" * 3 + "\r"  # the panel menu's fourth entry
+
+    def flow(self, locked_owner=False):
+        flow = installed_flow()
+        flow.people = [{"id": "m", "name": "Mamie", "last_seen": None, "locked": True}]
+        flow.done = []
+        flow.people_list = lambda: {"people": flow.people, "owner_locked": locked_owner}
+        flow.people_add = lambda name: flow.done.append(("add", name)) or "Pw-new-123456789"
+        flow.people_new_password = lambda i: flow.done.append(("password", i)) or "Pw-other-1234567"
+        flow.people_unlock = lambda i: flow.done.append(("unlock", i))
+        flow.people_remove = lambda i: flow.done.append(("remove", i))
+        flow.owner_unlock = lambda: flow.done.append(("owner",))
+        flow.funnel_url = lambda: None
+        return flow
+
+    def test_add_shows_the_message(self):
+        flow = self.flow()
+        # people · add (first) · name · back to the menu · back · quit
+        t, out = self.term(self.PEOPLE, "\r", "Papi\r", "\r", "\x1b[A\r", "\x1b[A\r")
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertEqual(flow.done, [("add", "Papi")])
+        self.assertIn("Pw-new-123456789", out.getvalue())
+        self.assertIn("Bonjour Papi", out.getvalue())
+        self.assertIn("Mamie", out.getvalue())
+
+    def test_remove_asks_first(self):
+        flow = self.flow()
+        # people · remove (last before back) · Mamie · yes · back · quit
+        t, out = self.term(self.PEOPLE, "\x1b[A\x1b[A\r", "\r", "\x1b[D\r", "\x1b[A\r", "\x1b[A\r")
+        cli.run_panel_tui(t, flow, ENV, flow.settings)
+        self.assertEqual(flow.done, [("remove", "m")])
+
+    def test_locked_owner_is_offered_first(self):
+        flow = self.flow(locked_owner=True)
+        t, out = self.term(self.PEOPLE, "\r", "\x1b[A\r", "\x1b[A\r")  # people · unlock my account · back · quit
+        cli.run_panel_tui(t, flow, ENV, flow.settings)
+        self.assertEqual(flow.done, [("owner",)])
+        self.assertIn("Votre compte Jellyfin est bloqué", out.getvalue())
+
+    def test_refused_owner_password_is_explained(self):
+        flow = self.flow()
+
+        def refused():
+            raise PermissionError("refused")
+        flow.people_list = refused
+        t, out = self.term(self.PEOPLE, "\r", "\x1b[A\r")  # people · Enter to go back · quit
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertIn("Plaid n’a pas pu se connecter à Jellyfin", out.getvalue())
