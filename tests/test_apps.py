@@ -2,6 +2,7 @@ import json
 import threading
 import time
 import unittest
+import urllib.parse
 from types import SimpleNamespace
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -623,3 +624,58 @@ class DecodingTest(unittest.TestCase):
         encoding = self.jellyfin_with_gpu(broken)["/System/Configuration/encoding"]
         self.assertEqual(encoding["HardwareAccelerationType"], "vaapi")
         self.assertNotIn("HardwareDecodingCodecs", encoding)
+
+
+class JellyfinPluginsTest(unittest.TestCase):
+    def run_plugins(self, installed=(), packages_fail=False):
+        state = {"installed": {n: "Active" for n in installed}, "calls": []}
+
+        def fake_call(method, url, body=None, headers=None, form=False):
+            path = url.split("8096", 1)[1]
+            state["calls"].append((method, path))
+            if path == "/Plugins":  # a plugin just downloaded waits for a restart, as in Jellyfin 12
+                return [{"Name": n, "Status": status} for n, status in state["installed"].items()]
+            if path.startswith("/Packages/Installed/"):
+                if packages_fail:
+                    raise apps.HttpError(500, url, "repository down")
+                state["installed"][urllib.parse.unquote(path.rsplit("/", 1)[1])] = "Restart"
+            elif path == "/System/Restart":
+                state["installed"] = dict.fromkeys(state["installed"], "Active")
+            elif method == "GET":
+                raise apps.HttpError(404, url, "Not Found")
+            return None
+        with mock.patch("installer.apps.call", fake_call), mock.patch("time.sleep"), mock.patch("sys.stderr"):
+            result = apps._bonus("plugins", lambda: apps.jellyfin_plugins("http://jellyfin:8096", {}))
+        return result, state["calls"]
+
+    def test_missing_plugins_are_installed_then_jellyfin_restarts(self):
+        tvdb, calls = self.run_plugins()
+        self.assertTrue(tvdb)
+        self.assertIn(("POST", "/Packages/Installed/TheTVDB"), calls)
+        self.assertIn(("POST", "/Packages/Installed/Chapter%20Segments%20Provider"), calls)
+        self.assertIn(("POST", "/System/Restart"), calls)
+
+    def test_installed_plugins_mean_no_restart(self):
+        tvdb, calls = self.run_plugins(installed=("TheTVDB", "Chapter Segments Provider"))
+        self.assertTrue(tvdb)
+        self.assertNotIn(("POST", "/System/Restart"), calls)
+
+    def test_unreachable_repository_is_skipped(self):
+        tvdb, calls = self.run_plugins(packages_fail=True)
+        self.assertFalse(tvdb)
+        self.assertNotIn(("POST", "/System/Restart"), calls)
+
+    def test_series_options_put_thetvdb_first(self):
+        available = {"TypeOptions": [
+            {"Type": "Series", "MetadataFetchers": [{"Name": "TheMovieDb", "DefaultEnabled": True},
+                                                   {"Name": "TheTVDB", "DefaultEnabled": True}],
+             "ImageFetchers": [{"Name": "TheMovieDb", "DefaultEnabled": True}, {"Name": "TheTVDB", "DefaultEnabled": True}]},
+            {"Type": "Episode", "MetadataFetchers": [{"Name": "TheMovieDb", "DefaultEnabled": True},
+                                                    {"Name": "Off", "DefaultEnabled": False},
+                                                    {"Name": "TheTVDB", "DefaultEnabled": True}],
+             "ImageFetchers": [{"Name": "Screen Grabber", "DefaultEnabled": True}]}]}
+        options = {o["Type"]: o for o in apps.tvdb_first(available)}
+        self.assertEqual(options["Series"]["MetadataFetcherOrder"], ["TheTVDB", "TheMovieDb"])
+        self.assertEqual(options["Series"]["ImageFetchers"], ["TheTVDB", "TheMovieDb"])
+        self.assertEqual(options["Episode"]["MetadataFetchers"], ["TheTVDB", "TheMovieDb"])
+        self.assertEqual(options["Episode"]["ImageFetcherOrder"], ["Screen Grabber"])

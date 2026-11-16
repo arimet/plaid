@@ -216,6 +216,47 @@ def decoding_options(vainfo: str) -> dict:
             "EnableTonemapping": True, "EnableThrottling": True, "EnableSegmentDeletion": True}
 
 
+# Official plugins: TheTVDB numbers episodes as Sonarr does; Chapter Segments Provider shows "Skip intro" from
+# chapter names.
+JELLYFIN_PLUGINS = ("TheTVDB", "Chapter Segments Provider")
+
+
+def jellyfin_plugins(base: str, auth: dict) -> bool:
+    """Installs the missing official plugins and restarts Jellyfin for them. True once TheTVDB is active."""
+    plugins = lambda: {p["Name"]: p.get("Status") for p in call("GET", base + "/Plugins", headers=auth)}
+    active = lambda: {name for name, status in plugins().items() if status == "Active"}
+    missing = [name for name in JELLYFIN_PLUGINS if name not in active()]
+    for name in missing:
+        call("POST", f"{base}/Packages/Installed/{urllib.parse.quote(name)}", headers=auth)
+    if missing:
+        deadline = time.time() + WAIT
+        while not set(JELLYFIN_PLUGINS) <= set(plugins()) and time.time() < deadline:  # downloaded: "Restart"
+            time.sleep(3)
+        call("POST", base + "/System/Restart", headers=auth)
+        time.sleep(10)  # it still answers for a moment before it stops
+        while time.time() < deadline:
+            try:
+                if set(JELLYFIN_PLUGINS) <= active():
+                    break
+            except (OSError, HttpError):
+                pass
+            time.sleep(3)
+    return "TheTVDB" in active()
+
+
+def tvdb_first(available: dict) -> list[dict]:
+    """Library TypeOptions of a shows library: the default fetchers, TheTVDB on top."""
+    def order(fetchers):
+        names = [f["Name"] for f in fetchers if f.get("DefaultEnabled")]
+        return sorted(names, key=lambda n: n != "TheTVDB")
+    options = []
+    for kind in available.get("TypeOptions", []):
+        meta, images = order(kind.get("MetadataFetchers", [])), order(kind.get("ImageFetchers", []))
+        options.append({"Type": kind["Type"], "MetadataFetchers": meta, "MetadataFetcherOrder": meta,
+                        "ImageFetchers": images, "ImageFetcherOrder": images})
+    return options
+
+
 def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log,
                        compose_out: ComposeOut) -> tuple[str, list[str]]:
     """Returns (API key for Radarr/Sonarr, library names)."""
@@ -249,10 +290,16 @@ def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log,
 
     existing = {lib["Name"] for lib in call("GET", base + "/Library/VirtualFolders", headers=auth)}
     names = LIBRARY_NAMES[s.lang]
+    shows = None
+    if names[1] not in existing and _bonus("jellyfin plugins", lambda: jellyfin_plugins(base, auth)):
+        shows = _bonus("jellyfin thetvdb", lambda: tvdb_first(
+            call("GET", base + "/Libraries/AvailableOptions?libraryContentType=tvshows", headers=auth)))
     for name, kind, path in ((names[0], "movies", MOVIES), (names[1], "tvshows", TV)):
         if name not in existing:
             query = urllib.parse.urlencode({"name": name, "collectionType": kind, "refreshLibrary": "false"})
             options = {"PathInfos": [{"Path": path}], "PreferredMetadataLanguage": lang, "MetadataCountryCode": country}
+            if kind == "tvshows" and shows:
+                options["TypeOptions"] = shows
             call("POST", f"{base}/Library/VirtualFolders?{query}", {"LibraryOptions": options}, auth)
 
     if has_dri:
