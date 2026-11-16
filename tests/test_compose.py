@@ -32,6 +32,13 @@ class ComposeTest(unittest.TestCase):
         self.assertIn("8080:8080", c["services"]["qbittorrent"]["ports"])
         self.assertNotIn("network_mode", c["services"]["qbittorrent"])
 
+    def test_every_service_rotates_logs(self):
+        from dataclasses import replace
+        c = render_compose(replace(make(), tailscale_key="tskey-x"), "/srv/arr", has_dri=False)
+        self.assertEqual({"gluetun", "tailscale"} - set(c["services"]), set())
+        for svc, conf in c["services"].items():
+            self.assertEqual(conf.get("logging"), {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}, svc)
+
     def test_all_apps_and_ports(self):
         c = render_compose(make(vpn=False), "/srv/arr", has_dri=False)
         for svc in SERVICES:

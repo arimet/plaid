@@ -24,6 +24,8 @@ IMAGES = {
     "tailscale": "tailscale/tailscale:latest",
 }
 CONFIG_DIR = {"seerr": "/app/config"}  # linuxserver images all use /config
+# Docker keeps every log line forever by default: on a NAS, the system disk fills up.
+LOGGING = {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}
 
 
 def _port(svc: str) -> list[str]:
@@ -74,6 +76,8 @@ def render_compose(s: Settings, data_source: str, has_dri: bool) -> dict:
             "restart": "unless-stopped", "labels": dict(LABELS),
         }
         volumes["tailscale-state"] = {"labels": dict(LABELS)}
+    for conf in services.values():
+        conf["logging"] = LOGGING
     return {"services": services, "volumes": volumes, "networks": {"default": {"labels": dict(LABELS)}}}
 
 
