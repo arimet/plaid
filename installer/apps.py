@@ -430,7 +430,7 @@ def configure_bazarr(s: Settings, host: str, radarr: Arr, sonarr: Arr, compose_o
         **_bazarr_languages(s),
         "settings-general-serie_default_enabled": "true", "settings-general-serie_default_profile": "1",
         "settings-general-movie_default_enabled": "true", "settings-general-movie_default_profile": "1",
-        "settings-general-enabled_providers": ["podnapisi", "addic7ed"],
+        **bazarr_extras(),
         # Align every downloaded subtitle on the audio track (ffsubsync), whatever its score.
         "settings-subsync-use_subsync": "true",
         "settings-subsync-use_subsync_threshold": "false",
@@ -439,6 +439,15 @@ def configure_bazarr(s: Settings, host: str, radarr: Arr, sonarr: Arr, compose_o
     call("POST", base + "/system/settings", settings, {"X-API-KEY": key}, form=True)
     log("bazarr")
     return key
+
+
+def bazarr_extras() -> dict:
+    """Sources that need no account (Sous-Titres.eu and SubSynchro for French), OCR and common fixes, and no
+    picture subtitles from inside the files (Bazarr cannot sync or fix them)."""
+    return {"settings-general-enabled_providers": ["podnapisi", "addic7ed", "gestdown", "soustitreseu", "subsynchro",
+                                                   "tvsubtitles", "embeddedsubtitles"],
+            "settings-general-subzero_mods": ["OCR_fixes", "common"],
+            "settings-general-ignore_pgs_subs": "true", "settings-general-ignore_vobsub_subs": "true"}
 
 
 def _bazarr_languages(s: Settings) -> dict:

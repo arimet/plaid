@@ -546,3 +546,12 @@ class TuningTest(unittest.TestCase):
         with mock.patch("sys.stderr"):
             self.assertIsNone(apps._bonus("broken", broken))
         self.assertEqual(apps._bonus("fine", lambda: 7), 7)
+
+    def test_bazarr_extra_providers(self):
+        extras = apps.bazarr_extras()
+        self.assertEqual(extras["settings-general-enabled_providers"],
+                         ["podnapisi", "addic7ed", "gestdown", "soustitreseu", "subsynchro", "tvsubtitles",
+                          "embeddedsubtitles"])
+        self.assertEqual(extras["settings-general-subzero_mods"], ["OCR_fixes", "common"])
+        self.assertEqual(extras["settings-general-ignore_pgs_subs"], "true")
+        self.assertEqual(extras["settings-general-ignore_vobsub_subs"], "true")
