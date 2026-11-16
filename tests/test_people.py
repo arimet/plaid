@@ -148,3 +148,24 @@ class AccountsTest(unittest.TestCase):
         self.assertTrue(people.owner_locked(HOST, "key-plaid", "zoe"))
         people.unlock_owner(HOST, "key-plaid", "zoe")
         self.assertFalse(self.jf.users["o"]["Policy"]["IsDisabled"])
+
+
+class InviteTest(unittest.TestCase):
+    def test_home_address_account_and_apps(self):
+        text = people.invite_text("fr", owner(), "192.168.1.10", "Mamie", "pw-123", None)
+        for part in ("Mamie", "pw-123", "http://192.168.1.10:8096", "Jellyfin", "Android TV", "Apple TV", "Samsung", "LG"):
+            self.assertIn(part, text)
+        self.assertNotIn("plaid:8096", text)
+        self.assertNotIn("https://", text)
+
+    def test_tailscale_on_linux(self):
+        text = people.invite_text("fr", owner(tailscale_key="tskey-x"), "192.168.1.10", "Mamie", "pw", None)
+        self.assertIn("http://plaid:8096", text)
+
+    def test_tailscale_on_a_desktop(self):
+        text = people.invite_text("en", owner(platform="mac", lang="en"), "localhost", "Gran", "pw", None)
+        self.assertIn("http://COMPUTER-NAME:8096", text)
+
+    def test_internet_address(self):
+        text = people.invite_text("en", owner(lang="en"), "192.168.1.10", "Gran", "pw", "https://plaid.tail1.ts.net")
+        self.assertIn("https://plaid.tail1.ts.net", text)

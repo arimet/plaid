@@ -6,6 +6,7 @@ import os
 import secrets
 
 from installer import apps, media
+from installer.i18n import t
 from installer.settings import Settings
 
 KEY_FILE = "jellyfin-key"
@@ -123,3 +124,17 @@ def unlock_owner(host: str, key: str, username: str) -> None:
     user = _owner(host, key, username)
     if user:
         _set_policy(host, key, user, IsDisabled=False)
+
+
+def invite_text(lang: str, s: Settings, host: str, name: str, password: str, funnel_url: str | None) -> str:
+    """The message the owner sends: the account, every address that works for them, and which app to install."""
+    lines = [t(lang, "invite_hello", name=name), "", t(lang, "invite_account", name=name, password=password), "",
+             t(lang, "invite_home", url=f"http://{host}:8096")]
+    if s.platform in ("linux", "synology"):
+        if s.tailscale_key:
+            lines.append(t(lang, "invite_tailscale", url="http://plaid:8096"))
+    else:  # the desktop's own Tailscale app, if any: the owner writes the computer's name in
+        lines.append(t(lang, "invite_tailscale_desktop", url=f"http://{t(lang, 'invite_computer')}:8096"))
+    if funnel_url:
+        lines.append(t(lang, "invite_internet", url=funnel_url))
+    return "\n".join(lines + ["", t(lang, "invite_apps"), t(lang, "invite_locked")])
