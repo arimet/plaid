@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.parse
 
 STATE_FILE = "extras.json"
 THEME_URL = "https://cdn.jsdelivr.net/gh/mihaif7/elegantfin-jf12@main/Theme/ElegantFin-jf12-modern-latest.css"
@@ -66,3 +67,69 @@ def load_state(state_dir: str) -> dict:
 def save_state(state: dict, state_dir: str) -> None:
     from installer.flow import write_json  # flow imports this module's users: no import at load time
     write_json(os.path.join(state_dir, STATE_FILE), state)
+
+
+WAIT = 300  # seconds for Jellyfin to come back with its new plugins
+
+
+def _jellyfin(s, state_dir: str, host: str):
+    """A call to Jellyfin with Plaid's own key."""
+    from installer import apps, people
+    key = people.api_key(s, host, state_dir)
+    return lambda method, path, body=None: apps.call(method, f"http://{host}{path}", body, people._auth(key))
+
+
+def apply(s, chosen: list[str], report, state_dir: str, host: str = "jellyfin:8096", wait: int = WAIT) -> list[str]:
+    """Installs what is ticked and removes what was unticked. Returns the ticked extras that could not be installed;
+    the others are done. Plaid only ever removes the packages it installed itself."""
+    import time
+    from installer import apps
+    from installer.flow import Progress
+    jf = _jellyfin(s, state_dir, host)
+    state = load_state(state_dir)
+    chosen = [x for x in chosen if x in BY_ID]
+    report(Progress("step_extras"))
+    present = {p["Name"]: p for p in jf("GET", "/Plugins")}
+    wanted, mine = packages_for(chosen), set(state["installed"])
+    repos = jf("GET", "/Repositories")
+    missing = [{"Name": REPOS[u], "Url": u, "Enabled": True} for u in sorted(repos_for(chosen))
+               if u not in {r.get("Url") for r in repos}]
+    if missing:
+        jf("POST", "/Repositories", repos + missing)
+    tried, refused = [], set()
+    for name in sorted(wanted - set(present)):
+        try:
+            jf("POST", "/Packages/Installed/" + urllib.parse.quote(name))
+            tried.append(name)
+        except apps.HttpError:  # not in its repository, or no version for this Jellyfin
+            refused.add(name)
+    gone = []
+    for name in sorted((mine - wanted) & set(present)):
+        jf("DELETE", f"/Plugins/{present[name]['Id']}/{present[name]['Version']}")
+        gone.append(name)
+    active = {n for n, p in present.items() if p.get("Status") == "Active"}
+    if tried or gone:
+        report(Progress("step_extras_restart"))
+        jf("POST", "/System/Restart")
+        deadline = time.time() + wait
+        time.sleep(10)  # it still answers for a moment before it stops
+        while True:
+            try:
+                active = {p["Name"] for p in jf("GET", "/Plugins") if p.get("Status") == "Active"}
+                if set(tried) <= active or time.time() >= deadline:
+                    break
+            except (OSError, apps.HttpError):
+                if time.time() >= deadline:
+                    raise RuntimeError("Jellyfin did not come back after its restart") from None
+            time.sleep(3)
+    css = jf("GET", "/System/Configuration/branding")
+    themed = with_theme(css.get("CustomCss") or "", "theme" in chosen)
+    if themed != (css.get("CustomCss") or ""):
+        jf("POST", "/System/Configuration/branding", {**css, "CustomCss": themed})
+    failed = [x for x in chosen if not {n for n, _ in BY_ID[x]["packages"]} <= active]
+    state["installed"] = sorted((mine - set(gone)) | (set(tried) & active))
+    state["chosen"] = [x for x in chosen if x not in failed]
+    state["removed_for_update"] = [x for x in state["removed_for_update"] if x not in state["chosen"]]
+    save_state(state, state_dir)
+    report(Progress("step_done", done=True, detail=",".join(failed)))
+    return failed

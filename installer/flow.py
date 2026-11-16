@@ -453,6 +453,11 @@ def start_update(dk=docker, state_dir: str = STATE_DIR) -> None:
     _start_worker({"kind": "update"}, dk, state_dir)
 
 
+def start_extras(chosen: list[str], dk=docker, state_dir: str = STATE_DIR) -> None:
+    """Jellyfin's extras: downloads and a restart, in the worker like an update."""
+    _start_worker({"kind": "extras", "chosen": list(chosen)}, dk, state_dir)
+
+
 class WorkerBusy(Exception):
     """A settings change or an update already runs: one operation on the stack at a time."""
 

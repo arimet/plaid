@@ -366,6 +366,14 @@ def run_worker(dk=docker, state_dir: str = flow.STATE_DIR) -> int:
     if request.get("kind") == "update":
         from installer import update
         return 0 if update.run(report, dk=dk, state_dir=state_dir) is not None else 1
+    if request.get("kind") == "extras":
+        from installer import extras
+        try:
+            extras.apply(flow.load_settings(state_dir), request.get("chosen") or [], report, state_dir)
+            return 0
+        except Exception as e:  # noqa: BLE001 - Jellyfin down or not back after its restart: said with its detail
+            report(Progress("step_extras", error="err_extras_failed", detail=str(e)))
+            return 1
     if request.get("kind") in ("backup", "restore"):
         from installer import backup
         if request["kind"] == "backup":
