@@ -1008,17 +1008,18 @@ class RetryWebTest(unittest.TestCase):
 
 
 class StyleTest(unittest.TestCase):
-    def test_every_page_starts_in_the_cinema_style(self):
+    def test_every_page_starts_in_the_plaid_style(self):
         page = web.form_page("fr", ENV)
-        self.assertIn('<html lang="fr" data-style="cinema">', page)
+        self.assertIn('<html lang="fr" data-style="plaid">', page)
         self.assertIn("plaid-style", page)  # the browser's own choice, read before the page is drawn
 
     def test_settings_offer_both_styles_without_sending_them(self):
         page = web.settings_page("fr", settings())
         field = page[page.index('id="style"'):]
         field = field[:field.index("</select>")]
+        self.assertIn('value="plaid"', field)
         self.assertIn('value="cinema"', field)
-        self.assertIn('value="soft"', field)
+        self.assertNotIn('value="soft"', field)  # gone: a browser that kept it gets the default
         self.assertNotIn("name=", field)  # a look for this browser, not a change for the review page
         self.assertIn("Style de l’assistant", page)
 

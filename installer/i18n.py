@@ -70,7 +70,7 @@ T: dict[str, dict[str, str]] = {
         "settings_style": "Assistant style",
         "settings_style_help": "Only changes how Plaid looks, in this browser.",
         "style_cinema": "Cinema: dark and flat",
-        "style_soft": "Soft: rounded, in relief",
+        "style_plaid": "Plaid: light and colourful",
         "settings_timezone_help": "Written as Continent/City, for example Europe/Paris.",
         "settings_folder_help": "Plaid uses this folder as it is and copies or moves nothing. Put your library there before you change it.",
         "settings_lead": "Change only what needs to change. Before anything is applied, Plaid shows you what will happen. "
@@ -551,7 +551,7 @@ T: dict[str, dict[str, str]] = {
         "settings_style": "Style de l’assistant",
         "settings_style_help": "Change seulement l’apparence de Plaid, sur ce navigateur.",
         "style_cinema": "Cinéma : sombre et à plat",
-        "style_soft": "Doux : arrondi, en relief",
+        "style_plaid": "Plaid : clair et coloré",
         "settings_timezone_help": "Au format Continent/Ville, par exemple Europe/Paris.",
         "settings_folder_help": "Plaid utilise ce dossier tel quel, sans rien copier ni déplacer. Mettez-y votre bibliothèque avant de le changer.",
         "settings_lead": "Changez seulement ce qui doit changer. Avant d’appliquer quoi que ce soit, Plaid vous montre ce qui va se passer. "

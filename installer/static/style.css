@@ -1,65 +1,70 @@
-/* Plaid assistant: neumorphism, like the landing page (site/index.html).
-   Every element shares the page surface; depth comes only from two shadows, light toward the top-left,
-   dark toward the bottom-right. Teal is rationed: the primary action, what is selected, progress.
-   The tartan lives in the logo mark only. */
+/* Plaid assistant, same look as the landing page (site/index.html) and the debrief landing: a lavender page,
+   white cards ringed in ink with a hard offset shadow, coral for the main action, yellow to highlight.
+   Teal is Plaid's own colour: what is selected, progress, links. The tartan lives in the logo mark only.
+   The depth tokens below (--raised, --flat, --inset) are the whole look: the Cinema style at the end swaps them. */
 
 /* ----------------------------------------------------------------- tokens */
-:root{--page:560px;
-  --surface:#e0e5ec; --surface-deep:#d1d9e6;
-  --shadow-light:rgba(255,255,255,.8); --shadow-dark:rgba(163,177,198,.6);
-  --raised:-6px -6px 14px var(--shadow-light),6px 6px 14px var(--shadow-dark);
-  --raised-lg:-10px -10px 22px var(--shadow-light),10px 10px 22px var(--shadow-dark);
-  --flat:-2px -2px 5px var(--shadow-light),2px 2px 5px var(--shadow-dark);
-  --inset:inset -4px -4px 10px var(--shadow-light),inset 4px 4px 10px var(--shadow-dark);
-  --accent:#0089a8; --accent-2:#00a8c9; --accent-text:#00748f; --accent-soft:rgba(0,137,168,.22);
-  --on-accent:#fff; --danger:#c8463f; --danger-2:#e0625a; --danger-text:#b03a33; --warn:#9a6a00;
-  --text:#3d4757; --text-2:#56627a; --muted:#8b97ab;
-  --r-sm:10px; --r-md:14px; --r-lg:20px; --r-xl:28px; --pill:999px;
+:root{--page-w:560px;
+  --page:#eef0fa; --surface:#fff; --subtle:#f4f5fb; --line:#d9dcea; --edge:#1b1e26; --shade:#1b1e26;
+  --surface-deep:var(--line); --shadow-dark:var(--line);
+  --raised:inset 0 0 0 2px var(--edge),4px 4px 0 var(--shade);
+  --raised-lg:inset 0 0 0 2px var(--edge),6px 6px 0 var(--shade);
+  --flat:inset 0 0 0 2px var(--edge),2px 2px 0 var(--shade);
+  --inset:inset 0 0 0 2px var(--edge);
+  --accent:#0089a8; --accent-2:#00a8c9; --accent-text:#00748f; --accent-soft:rgba(0,137,168,.25); --accent-50:#dcf3f8;
+  --coral:#ff7a5c; --yellow:#ffd23f; --on-fill:#1b1e26;
+  --blob-1:#fff3c4; --blob-2:#ffe4dc; --blob-3:#d9f6fa;
+  --on-accent:#fff; --danger:#c8463f; --danger-2:#c8463f; --danger-text:#b03a33; --warn:#9a5a00;
+  --text:#1b1e26; --text-2:#3a3f4f; --muted:#5d6377;
+  --round:ui-rounded,"SF Pro Rounded",Nunito,system-ui,sans-serif;
+  --body:ui-rounded,"SF Pro Rounded",Inter,system-ui,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r-sm:10px; --r-md:16px; --r-lg:22px; --r-xl:28px; --pill:999px;
   --press:.12s cubic-bezier(.4,0,.2,1); --smooth:.25s ease;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --surface:#1e2228; --surface-deep:#181c22;
-  --shadow-light:rgba(50,60,75,.7); --shadow-dark:rgba(0,0,0,.5);
-  --accent:#0aa3c2; --accent-2:#2cc6e6; --accent-text:#4fd1ec; --accent-soft:rgba(44,198,230,.25);
-  --on-accent:#08161b; --danger:#d9574f; --danger-2:#ef7a72; --danger-text:#ff8f87; --warn:#f0b54a;
-  --text:#d5dbeb; --text-2:#a3adc2; --muted:#6c7790;
+  --page:#1b1e26; --surface:#262a35; --subtle:#2e3340; --line:#3c4253; --edge:#aab2c8; --shade:#5d6580;
+  --accent:#2cc6e6; --accent-2:#4fd6e3; --accent-text:#4fd1ec; --accent-soft:rgba(44,198,230,.3); --accent-50:#193a3f;
+  --blob-1:#2a2a2b; --blob-2:#2a2429; --blob-3:#1f2a30;
+  --on-accent:#08161b; --danger:#d9574f; --danger-2:#d9574f; --danger-text:#ff8f87; --warn:#f2b456;
+  --text:#f2f3f6; --text-2:#dfe2ea; --muted:#a6acbe;
   color-scheme:dark;
 }}
 :root[data-theme="dark"]{
-  --surface:#1e2228; --surface-deep:#181c22;
-  --shadow-light:rgba(50,60,75,.7); --shadow-dark:rgba(0,0,0,.5);
-  --accent:#0aa3c2; --accent-2:#2cc6e6; --accent-text:#4fd1ec; --accent-soft:rgba(44,198,230,.25);
-  --on-accent:#08161b; --danger:#d9574f; --danger-2:#ef7a72; --danger-text:#ff8f87; --warn:#f0b54a;
-  --text:#d5dbeb; --text-2:#a3adc2; --muted:#6c7790;
+  --page:#1b1e26; --surface:#262a35; --subtle:#2e3340; --line:#3c4253; --edge:#aab2c8; --shade:#5d6580;
+  --accent:#2cc6e6; --accent-2:#4fd6e3; --accent-text:#4fd1ec; --accent-soft:rgba(44,198,230,.3); --accent-50:#193a3f;
+  --blob-1:#2a2a2b; --blob-2:#2a2429; --blob-3:#1f2a30;
+  --on-accent:#08161b; --danger:#d9574f; --danger-2:#d9574f; --danger-text:#ff8f87; --warn:#f2b456;
+  --text:#f2f3f6; --text-2:#dfe2ea; --muted:#a6acbe;
   color-scheme:dark;
 }
 
 /* ----------------------------------------------------------------- base */
 *{box-sizing:border-box;margin:0}
-html{background:var(--surface)}
-body{background:var(--surface);color:var(--text-2);font:400 16px/1.6 Inter,system-ui,sans-serif;min-height:100vh;
+html{background:var(--page)}
+body{background:var(--page);color:var(--text-2);font:400 16px/1.6 var(--body);min-height:100vh;
   display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
 ::selection{background:var(--accent-soft);color:var(--text)}
 a{color:var(--accent-text);text-underline-offset:3px}
 :focus-visible{outline:3px solid var(--accent-soft);outline-offset:3px}
 [hidden]{display:none !important}
-h1,h2{font-family:Nunito,Inter,sans-serif;color:var(--text);letter-spacing:-.02em;text-wrap:balance}
+h1,h2{font-family:var(--round);color:var(--text);letter-spacing:-.02em;text-wrap:balance}
 h1{font-size:clamp(28px,6vw,38px);line-height:1.05;font-weight:800}
 h2{font-size:19px;line-height:1.25;font-weight:800}
 .lead{max-width:65ch}
 .lead b{color:var(--text);font-weight:600}
 
 /* ----------------------------------------------------------------- top bar */
-.topbar{width:100%;max-width:var(--page);margin:0 auto;padding:24px 16px 8px;display:flex;align-items:center;justify-content:space-between;
+.topbar{width:100%;max-width:var(--page-w);margin:0 auto;padding:24px 16px 8px;display:flex;align-items:center;justify-content:space-between;
   gap:12px;position:relative}
 .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text)}
 .mark{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:var(--surface);box-shadow:var(--raised)}
 .mark img{display:block}
-.brand b{font:800 22px/1 Nunito,sans-serif;letter-spacing:-.02em}
+.brand b{font:800 22px/1 var(--round);letter-spacing:-.02em}
 .top{display:flex;gap:10px;align-items:center}
 .lang{display:flex;gap:2px;padding:4px;border-radius:var(--pill);box-shadow:var(--inset)}
-.lang a{font:700 12px/1 Inter,sans-serif;letter-spacing:.08em;color:var(--muted);text-decoration:none;padding:7px 10px;border-radius:var(--pill)}
+.lang a{font:700 12px/1 var(--body);letter-spacing:.08em;color:var(--muted);text-decoration:none;padding:7px 10px;border-radius:var(--pill)}
 .lang a[aria-current]{background:var(--surface);box-shadow:var(--flat);color:var(--accent-text)}
 .menu{position:static}  /* the list aligns on .topbar, so it stays on screen on a phone */
 .menu summary{list-style:none;cursor:pointer;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;
@@ -72,7 +77,7 @@ h2{font-size:19px;line-height:1.25;font-weight:800}
 .mores{display:flex;flex-direction:column}
 .more{display:flex;flex-direction:column;gap:2px;padding:14px 0;text-decoration:none;color:var(--text);box-shadow:0 1px 0 var(--surface-deep)}
 .more:last-child{box-shadow:none}
-.more b{font:700 16px/1.25 Nunito,sans-serif}
+.more b{font:700 16px/1.25 var(--round)}
 .more small{font-size:13px;color:var(--text-2)}
 .more:hover b{color:var(--accent-text)}
 .more.danger b{color:var(--danger-text)}
@@ -81,14 +86,14 @@ h2{font-size:19px;line-height:1.25;font-weight:800}
 .track{height:8px;border-radius:var(--pill);box-shadow:var(--inset);overflow:hidden;background:var(--surface)}
 .fill{height:100%;width:var(--w,0%);border-radius:var(--pill);background:linear-gradient(90deg,var(--accent),var(--accent-2));
   transition:width .9s cubic-bezier(.34,1.56,.64,1)}
-.topline{width:calc(100% - 32px);max-width:calc(var(--page) - 32px);margin:8px auto 0}
+.topline{width:calc(100% - 32px);max-width:calc(var(--page-w) - 32px);margin:8px auto 0}
 
 /* ----------------------------------------------------------------- layout */
-main{width:100%;max-width:var(--page);margin:0 auto;padding:24px 16px 0;display:flex;flex-direction:column;gap:20px;flex:1}
+main{width:100%;max-width:var(--page-w);margin:0 auto;padding:24px 16px 0;display:flex;flex-direction:column;gap:20px;flex:1}
 #wizard,#wizard section,#progress,#done,#uninstall,.split,.step-head,.step-body{display:flex;flex-direction:column;gap:18px}
 #wizard section[hidden],#progress[hidden],#wizard[hidden],#uninstall[hidden]{display:none}
 #done > h2{margin-top:10px}
-.back{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font:600 14px/1 Inter,sans-serif;color:var(--text-2);
+.back{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font:600 14px/1 var(--body);color:var(--text-2);
   text-decoration:none;padding:10px 16px;border-radius:var(--pill);background:var(--surface);box-shadow:var(--flat)}
 .back:hover{color:var(--text)}
 .back:active{box-shadow:var(--inset)}
@@ -101,8 +106,8 @@ main{width:100%;max-width:var(--page);margin:0 auto;padding:24px 16px 0;display:
 
 /* ----------------------------------------------------------------- fields */
 .field{display:flex;flex-direction:column;gap:8px}
-label.l,legend.l{font:700 14px/1.2 Nunito,sans-serif;color:var(--text)}
-.input{width:100%;font:500 16px Inter,sans-serif;padding:14px 18px;border:0;border-radius:var(--r-md);background:var(--surface);
+label.l,legend.l{font:700 14px/1.2 var(--round);color:var(--text)}
+.input{width:100%;font:500 16px var(--body);padding:14px 18px;border:0;border-radius:var(--r-md);background:var(--surface);
   box-shadow:var(--inset);color:var(--text);transition:box-shadow var(--smooth)}
 .input::placeholder{color:var(--muted)}
 .input:focus{outline:none;box-shadow:var(--inset),0 0 0 3px var(--accent-soft)}
@@ -114,7 +119,7 @@ label.l,legend.l{font:700 14px/1.2 Nunito,sans-serif;color:var(--text)}
 /* VPN choice: raised when idle, pressed in with a teal label when chosen */
 .prov{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .chip{display:flex;align-items:center;gap:10px;padding:14px;border:0;border-radius:var(--r-md);background:var(--surface);
-  box-shadow:var(--raised);font:600 15px Inter,sans-serif;color:var(--text-2);cursor:pointer;text-align:left;
+  box-shadow:var(--raised);font:600 15px var(--body);color:var(--text-2);cursor:pointer;text-align:left;
   transition:box-shadow var(--press),transform var(--press),color var(--smooth)}
 .chip:hover{color:var(--text)}
 .chip[aria-checked="true"]{box-shadow:var(--inset);color:var(--accent-text);transform:scale(.99)}
@@ -140,7 +145,7 @@ label.l,legend.l{font:700 14px/1.2 Nunito,sans-serif;color:var(--text)}
 .diff{list-style:none;padding:6px 20px;border-radius:var(--r-lg);box-shadow:var(--inset)}
 .diff li{display:flex;flex-direction:column;gap:4px;padding:14px 0}
 .diff li+li{border-top:1px solid var(--shadow-dark)}
-.diff .k{font:700 13px/1.2 Nunito,sans-serif;color:var(--text-2)}
+.diff .k{font:700 13px/1.2 var(--round);color:var(--text-2)}
 .diff .v{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;overflow-wrap:anywhere}
 .diff del{color:var(--muted);text-decoration-thickness:1px}
 .diff b{font-weight:600;color:var(--text)}
@@ -160,14 +165,14 @@ label.l,legend.l{font:700 14px/1.2 Nunito,sans-serif;color:var(--text)}
 form.inline{display:inline}
 .person .btn.small{font-size:14px;padding:8px 12px}
 textarea.invite{width:100%;font:inherit;line-height:1.5;resize:vertical;margin:12px 0}
-pre.cmd{font:14px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--surface);padding:10px 12px;border-radius:8px;
+pre.cmd{font:14px/1.4 var(--mono);background:var(--surface);padding:10px 12px;border-radius:8px;
   overflow-x:auto;white-space:pre-wrap;word-break:break-all}
 .changes{padding-left:20px;line-height:1.7}
 
 /* ----------------------------------------------------------------- buttons */
-.foot{width:100%;max-width:var(--page);margin:0 auto;padding:22px 16px 26px}
+.foot{width:100%;max-width:var(--page-w);margin:0 auto;padding:22px 16px 26px}
 .foot-btns{display:flex;gap:14px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:800 17px/1 Nunito,Inter,sans-serif;padding:17px 24px;
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:800 17px/1 var(--round);padding:17px 24px;
   border:0;border-radius:var(--pill);background:var(--surface);box-shadow:var(--raised);color:var(--text-2);cursor:pointer;
   text-decoration:none;text-align:center;transition:box-shadow var(--press),transform var(--press),color var(--smooth)}
 .btn:hover{color:var(--text)}
@@ -190,7 +195,7 @@ pre.cmd{font:14px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--sur
 .knot.bad{background:var(--danger)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .steps .sub{display:block;font-size:13px;color:var(--text-2)}
-.detail{font:13px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;padding:14px;border-radius:var(--r-md);box-shadow:var(--inset);
+.detail{font:13px/1.45 var(--mono);white-space:pre-wrap;padding:14px;border-radius:var(--r-md);box-shadow:var(--inset);
   color:var(--text-2);max-height:180px;overflow:auto}
 #to-panel{align-self:flex-start}
 
@@ -202,10 +207,10 @@ pre.cmd{font:14px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--sur
 .app:active{box-shadow:var(--inset);transform:none}
 .app .ic{width:44px;height:44px;display:grid;place-items:center}
 .app .ic img{width:34px;height:34px;object-fit:contain}
-.app b{font:800 17px/1.15 Nunito,sans-serif}
+.app b{font:800 17px/1.15 var(--round)}
 .app .role{font-size:13px;font-weight:600;color:var(--accent-text)}
 .app small{display:block;font-size:13px;line-height:1.4;color:var(--text-2);margin-top:3px}
-.app .open{font:700 13px/1 Inter,sans-serif;padding:10px 14px;border-radius:var(--pill);box-shadow:var(--flat);color:var(--text-2)}
+.app .open{font:700 13px/1 var(--body);padding:10px 14px;border-radius:var(--pill);box-shadow:var(--flat);color:var(--text-2)}
 .app:hover .open,.app:focus-visible .open{color:var(--accent-text)}
 .apps .app.daily{grid-template-columns:56px 1fr auto;padding:18px}
 .app.daily .ic{width:56px;height:56px}
@@ -224,6 +229,9 @@ pre.cmd{font:14px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--sur
 .check input{width:22px;height:22px;accent-color:var(--danger);flex:none;margin-top:1px}
 .check b{display:block;font-weight:600;color:var(--text)}
 .check span{font-size:13px;color:var(--text-2)}
+.field-group{display:flex;flex-direction:column;gap:14px;align-items:stretch}
+.field-group .btn{align-self:flex-start}
+form[action="/extras"] .check input{accent-color:var(--accent)}  /* a choice, not a removal */
 .sep{border:0;height:2px;border-radius:2px;box-shadow:var(--inset);margin:8px 0}
 
 /* tracker catalogue */
@@ -233,7 +241,7 @@ pre.cmd{font:14px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--sur
 .trackers b{font-weight:600;color:var(--text)}
 .trackers .lang-tag{font-size:12px;color:var(--muted);margin-left:6px}
 .trackers small{grid-column:1;font-size:13px;color:var(--text-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.trackers button{grid-column:2;grid-row:1 / span 2;font:700 13px/1 Inter,sans-serif;padding:10px 16px;border:0;border-radius:var(--pill);
+.trackers button{grid-column:2;grid-row:1 / span 2;font:700 13px/1 var(--body);padding:10px 16px;border:0;border-radius:var(--pill);
   background:var(--surface);box-shadow:var(--raised);color:var(--text-2);cursor:pointer;transition:box-shadow var(--press),color var(--smooth)}
 .trackers button:hover{color:var(--accent-text)}
 .trackers button:disabled{box-shadow:var(--inset);color:var(--accent-text);cursor:default}
@@ -266,7 +274,7 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 
 /* ----------------------------------------------------------------- folder picker */
 .picker{display:flex;flex-direction:column;gap:10px}
-.linkish{align-self:flex-start;border:0;background:none;padding:2px 0;font:700 14px/1.4 Inter,sans-serif;color:var(--accent-text);
+.linkish{align-self:flex-start;border:0;background:none;padding:2px 0;font:700 14px/1.4 var(--body);color:var(--accent-text);
   cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .linkish[aria-expanded="true"]{text-decoration:none}
 .picker-panel{display:flex;flex-direction:column;gap:10px;padding:12px 16px;border-radius:var(--r-lg);box-shadow:var(--inset)}
@@ -277,7 +285,7 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 .picker-list li.hint{padding:10px 0}
 .picker-list button{width:100%;display:flex;flex-direction:column;gap:6px;padding:12px 2px;border:0;background:none;text-align:left;
   cursor:pointer;color:var(--text);font:inherit}
-.picker-list b{font:700 15px/1.3 Nunito,Inter,sans-serif;overflow-wrap:anywhere}
+.picker-list b{font:700 15px/1.3 var(--round);overflow-wrap:anywhere}
 .picker-list button:hover b{color:var(--accent-text)}
 .picker-list small{font-size:13px;color:var(--text-2);overflow-wrap:anywhere}
 .meter{display:block;height:6px;border-radius:var(--pill);box-shadow:var(--inset);overflow:hidden}
@@ -301,7 +309,7 @@ fieldset.field legend{padding:0;margin-bottom:8px}
    The wizard and the settings read as explanation | fields; the panel lays its apps on a grid. A phone keeps the
    single column above. */
 @media (min-width:960px){
-  body.wide{--page:1120px;--cols:minmax(0,.8fr) minmax(0,1.2fr);--colgap:72px}
+  body.wide{--page-w:1120px;--cols:minmax(0,.8fr) minmax(0,1.2fr);--colgap:72px}
   body.wide main{padding-top:40px;gap:28px;flex:0 0 auto}  /* the buttons follow the fields, not the bottom of the screen */
   body.wide #wizard section:not([hidden]),body.wide #progress:not([hidden]),body.wide .split{display:grid;grid-template-columns:var(--cols);
     column-gap:var(--colgap);align-items:start}
@@ -326,7 +334,7 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 .vpn{display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--r-lg);box-shadow:var(--inset);
   font-size:14px;color:var(--text-2)}
 .vpn i{flex:none;width:12px;height:12px;margin-top:4px;border-radius:50%;background:var(--muted)}
-.vpn b{font:800 16px/1.3 Nunito,Inter,sans-serif;color:var(--text)}
+.vpn b{font:800 16px/1.3 var(--round);color:var(--text)}
 .vpn .vpn-name{font-weight:600;color:var(--text)}
 .vpn[data-vpn="ok"] i{background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
 .vpn[data-vpn="ok"] b{color:var(--accent-text)}
@@ -336,13 +344,66 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 .vpn:is([data-vpn="down"],[data-vpn="stuck"]) b{color:var(--danger-text)}
 .vpn[data-vpn="off"] i{background:var(--warn)}
 
-/* ================================================================= Cinema style (the default)
-   Flat and dark, like a streaming app: the "soft" look above, re-skinned. Depth tokens no longer cast shadows:
+/* ================================================================= Plaid style (the default)
+   What the tokens alone cannot say: white cards that pop, coral action buttons, a yellow highlighter, pressed
+   buttons that sink into their shadow. Scoped, so the Cinema style below starts from the plain rules. */
+:root[data-style="plaid"] body{background:
+    radial-gradient(circle at 100% 90px,var(--blob-1) 0 150px,transparent 151px),
+    radial-gradient(circle at -50px 620px,var(--blob-2) 0 190px,transparent 191px),
+    radial-gradient(circle at 104% 1300px,var(--blob-3) 0 200px,transparent 201px) no-repeat var(--page)}
+:root[data-style="plaid"] h1{font-weight:900;letter-spacing:-.035em;text-decoration:underline var(--yellow);
+  text-decoration-thickness:.2em;text-underline-offset:-.06em;text-decoration-skip-ink:none}
+:root[data-style="plaid"] h2{font-weight:900}
+/* every well becomes a white card; the large ones pop like debrief's panels */
+:where(.note,.diff,.manual,.steps,.detail,.tip,.check,.trackers,.grid-wrap,.picker-panel,.vpn,.pcard,.lang,.st,.meter,.knot.wait){
+  background:var(--surface)}
+:root[data-style="plaid"] :is(.steps,.tip,.diff,.manual,.trackers,.grid-wrap,.check,.vpn,.picker-panel){box-shadow:var(--raised)}
+:root[data-style="plaid"] body.wide .pcard{box-shadow:var(--raised)}
+:root[data-style="plaid"] .note{background:var(--subtle);box-shadow:inset 0 0 0 2px var(--line)}
+:root[data-style="plaid"] .sep{height:0;box-shadow:none;border-top:2px dashed var(--line)}
+:root[data-style="plaid"] .track{height:12px}
+:root[data-style="plaid"] .st{height:10px}
+:root[data-style="plaid"] .st.on{box-shadow:inset 0 0 0 2px var(--edge)}
+:root[data-style="plaid"] .knot.ok{box-shadow:inset 0 0 0 2px var(--edge)}
+/* buttons: white, ink ring, offset shadow; coral for the main action; pressing sinks them into the shadow */
+:root[data-style="plaid"] .btn{color:var(--text);font-weight:900}
+:root[data-style="plaid"] :is(.btn,.chip,.app,.back,.menu summary,.trackers button){
+  transition:transform var(--press),box-shadow var(--press),background var(--smooth),color var(--smooth)}
+:root[data-style="plaid"] :is(.btn,.app,.trackers button:not(:disabled)):hover{transform:translate(-1px,-1px);
+  box-shadow:inset 0 0 0 2px var(--edge),5px 5px 0 var(--shade)}
+:root[data-style="plaid"] :is(.btn,.app,.back,.chip,.trackers button,.menu summary):active{transform:translate(3px,3px);
+  box-shadow:inset 0 0 0 2px var(--edge),1px 1px 0 var(--shade)}
+:root[data-style="plaid"] .btn.primary{background:var(--coral);color:var(--on-fill)}
+:root[data-style="plaid"] .btn.danger{background:var(--danger);color:#fff}
+:root[data-style="plaid"] :is(.btn.primary,.btn.danger){box-shadow:var(--raised)}
+:root[data-style="plaid"] .btn:disabled{transform:none;box-shadow:var(--flat)}
+:root[data-style="plaid"] .app:hover .open{background:var(--yellow);color:var(--on-fill)}
+/* what is chosen: teal tint, teal shadow */
+:root[data-style="plaid"] :is(.chip[aria-checked="true"],.pill input:checked+span){transform:none;background:var(--accent-50);
+  color:var(--text);box-shadow:inset 0 0 0 2px var(--edge),3px 3px 0 var(--accent)}
+:root[data-style="plaid"] .pill span{background:var(--surface)}
+:root[data-style="plaid"] .chip .sw{box-shadow:inset 0 0 0 2px var(--edge);width:14px;height:14px}
+:root[data-style="plaid"] .lang a[aria-current]{background:var(--yellow);color:var(--on-fill)}
+:root[data-style="plaid"] .menu[open] summary{background:var(--yellow);color:var(--on-fill)}
+:root[data-style="plaid"] .trackers button:disabled{background:var(--accent-50);box-shadow:inset 0 0 0 2px var(--line)}
+:root[data-style="plaid"] .input{box-shadow:inset 0 0 0 2px var(--edge)}
+:root[data-style="plaid"] .input:focus{box-shadow:inset 0 0 0 2px var(--edge),0 0 0 4px var(--accent-soft)}
+:root[data-style="plaid"] .input[aria-invalid="true"]{box-shadow:inset 0 0 0 2px var(--danger),3px 3px 0 var(--danger)}
+/* something stopped working: a card ringed and shadowed in red */
+:root[data-style="plaid"] :is(.note.alert,.vpn[data-vpn="down"],.vpn[data-vpn="stuck"]){
+  background:color-mix(in srgb,var(--danger) 9%,var(--surface));box-shadow:inset 0 0 0 2px var(--danger),4px 4px 0 var(--danger)}
+:root[data-style="plaid"] .vpn i{box-shadow:inset 0 0 0 2px var(--edge);width:14px;height:14px}
+:root[data-style="plaid"] .vpn[data-vpn="ok"] i{box-shadow:inset 0 0 0 2px var(--edge),0 0 0 4px var(--accent-soft)}
+:root[data-style="plaid"] pre.cmd{background:var(--edge);color:var(--page);border-radius:var(--r-md);padding:12px 14px}
+:root[data-style="plaid"] textarea.invite{border-radius:var(--r-md)}
+
+/* ================================================================= Cinema style (an option in the settings)
+   Flat and dark, like a streaming app: the plain rules above, re-skinned. Depth tokens no longer cast shadows:
    a huge inset spread fills the element with a card grey instead, so every raised or inset element becomes a flat
    block without touching its rule. The few elements that paint their own background (accent buttons, alerts,
    selected choices) get their own line below. */
 :root[data-style="cinema"]{
-  --surface:#141414; --surface-deep:#2a2a2a; --card:#1f1f1f; --card-2:#2c2c2c; --card-3:#3a3a3a; --line:#3a3a3a;
+  --page:#141414; --surface:#141414; --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; --surface-deep:#2a2a2a; --card:#1f1f1f; --card-2:#2c2c2c; --card-3:#3a3a3a; --line:#3a3a3a;
   --shadow-light:transparent; --shadow-dark:#2f2f2f;
   --raised:inset 0 0 0 100vmax var(--card-2); --flat:inset 0 0 0 100vmax var(--card-2);
   --inset:inset 0 0 0 100vmax var(--card);
