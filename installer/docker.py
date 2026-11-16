@@ -304,7 +304,7 @@ _BACKUP_NAME = re.compile(r"^plaid-backup-\d{4}-\d{2}-\d{2}-\d{4}\.tar\.gz$")
 BACKUP_EXCLUDES = ("*/logs", "*/log", "*/logs.db*", "*/cache", "*/transcodes", "*/MediaCover", "*/metadata",
                    "*/Backups", "*/Definitions", "*/GeoDB", "*/Sentry", "plaid-state/guard.json",
                    "plaid-state/apply.json", "plaid-state/apply-request.json", "plaid-state/backup.json")
-RESTORED_STATE = ("settings.json", "compose.json", "update.json", "tailscale-serve.json")
+RESTORED_STATE = ("settings.json", "compose.json", "update.json", "tailscale-serve.json", "extras.json")
 
 
 def backup_archive(volumes: list[str], dest: str, sub: str, name: str, run: Run = default_run) -> int:
