@@ -345,7 +345,7 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
     code, notes = 0, []
     actions = [("apps", t(lang, "menu_apps")), ("trackers", t(lang, "menu_trackers")),
                ("remote", t(lang, "menu_remote")), ("people", t(lang, "menu_people")),
-               ("settings", t(lang, "menu_settings")),
+               ("extras", t(lang, "menu_extras")), ("settings", t(lang, "menu_settings")),
                ("update", t(lang, "update_btn")), ("torrents", t(lang, "torrents_link")),
                ("backup", t(lang, "menu_backup")), ("restore", t(lang, "menu_restore")),
                ("remove", t(lang, "menu_remove")), ("quit", t(lang, "menu_quit"))]
@@ -407,6 +407,8 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     if result is not None:  # the Internet access changed: the panel closes on its outcome
                         code, notes = result
                         break
+                elif choice == "extras":
+                    flash = _extras_tui(term, flow, lang)
                 elif choice == "people":
                     flash = _people_tui(term, flow, lang, s, host)
                 elif choice == "settings":
@@ -469,10 +471,43 @@ def _follow(term, flow, lang: str, start, step_keys: tuple, failed_key: str, don
 
 
 def _update_tui(term, flow, lang: str) -> str:
+    from installer import extras
     from installer.web import update_lines
+    start, steps = flow.start_update, ("step_pull", "step_recreate", "step_cleanup_images")
+    if extras.has_plugins(flow.extras_state()["chosen"]):  # asked each time: Jellyfin with its plugins, or without
+        term.page(t(lang, "update_question_title"), t(lang, "update_question_help"))
+        remove = term.confirm(t(lang, "update_question_title"), t(lang, "cli_yes_word"), t(lang, "cli_no_word"))
+        start = lambda: flow.start_update(remove_extras=remove)
+        steps = (("step_remove_extras",) if remove else ()) + steps
     term.page(t(lang, "update_running"), t(lang, "update_help"))
-    return _follow(term, flow, lang, flow.start_update, ("step_pull", "step_recreate", "step_cleanup_images"),
+    return _follow(term, flow, lang, start, steps,
                    "err_update_failed", lambda last: " ".join(text for text, _ in update_lines(lang, last)))
+
+
+def _extras_tui(term, flow, lang: str) -> str:
+    """Tick the extras, a warning before the first plugin, then the worker's progress."""
+    from installer import extras
+    from installer.web import extra_names
+    state = flow.extras_state()
+    term.page(t(lang, "extras_title"), t(lang, "extras_help"))
+    if state["removed_for_update"]:
+        term.note(t(lang, "extras_removed", names=extra_names(lang, state["removed_for_update"])), "warn")
+    options = [(x["id"], f'{t(lang, "extra_" + x["id"])} · {t(lang, "extra_" + x["id"] + "_desc")}')
+               for x in extras.CATALOG]
+    chosen = term.checklist(t(lang, "extras_title"), options, default=state["chosen"], hint=t(lang, "cli_check_hint"))
+    if sorted(chosen) == sorted(state["chosen"]):
+        return ""
+    if extras.has_plugins(chosen) and not extras.has_plugins(state["chosen"]):
+        term.note(f'{t(lang, "extras_warn_title")}. {t(lang, "extras_warn")}', "warn")
+        if not term.confirm(t(lang, "extras_warn_yes") + " ?", t(lang, "cli_yes_word"), t(lang, "cli_no_word")):
+            return ""
+    term.page(t(lang, "extras_running"))
+
+    def done(last: dict) -> str:
+        failed = [x for x in (last.get("detail") or "").split(",") if x]
+        return t(lang, "extras_not_installed", names=extra_names(lang, failed)) if failed else t(lang, "extras_done")
+    return _follow(term, flow, lang, lambda: flow.start_extras(chosen), ("step_extras", "step_extras_restart"),
+                   "err_extras_failed", done)
 
 
 def _backup_tui(term, flow, lang: str) -> str:

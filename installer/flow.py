@@ -455,6 +455,11 @@ def start_update(remove_extras: bool | None = None, dk=docker, state_dir: str = 
     _start_worker({"kind": "update", "remove_extras": remove_extras}, dk, state_dir)
 
 
+def extras_state(state_dir: str = STATE_DIR) -> dict:
+    from installer import extras
+    return extras.load_state(state_dir)
+
+
 def start_extras(chosen: list[str], dk=docker, state_dir: str = STATE_DIR) -> None:
     """Jellyfin's extras: downloads and a restart, in the worker like an update."""
     _start_worker({"kind": "extras", "chosen": list(chosen)}, dk, state_dir)

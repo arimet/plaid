@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from installer import flow as default_flow
-from installer import media, people
+from installer import extras, media, people
 from installer.apps import HttpError
 from installer.compose import PORTS, SERVICES
 from installer.flow import Progress, WorkerBusy
@@ -81,6 +81,7 @@ def header_menu(lang: str) -> str:
         f'<a class="more{" danger" if path == "/remove" else ""}" href="{path}"><b>{E(t(lang, title))}</b>'
         f'<small>{E(t(lang, desc))}</small></a>'
         for path, title, desc in (("/people", "people_title", "nav_people_desc"),
+                                  ("/extras", "extras_title", "nav_extras_desc"),
                                   ("/remote", "remote_done_title", "nav_remote_desc"),
                                   ("/trackers", "trackers_title", "nav_trackers_desc"),
                                   ("/settings", "nav_settings", "nav_settings_desc"),
@@ -717,7 +718,8 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
             return f'<span class="knot ok">{CHECK}</span>'
         return '<span class="knot bad"></span>' if state_ == "failed" else '<span class="knot now"></span>'
     steps = "".join(f'<li>{knot(i)}<span>{E(t(lang, e["step"]))}</span></li>' for i, e in enumerate(shown))
-    kind = {"step_pull": "update", "step_backup_stop": "backup", "step_restore_stop": "restore"}.get(
+    kind = {"step_pull": "update", "step_remove_extras": "update", "step_backup_stop": "backup",
+            "step_restore_stop": "restore", "step_extras": "extras"}.get(
         events[0].get("step") if events else "")
     updating = kind == "update"
     if state_ == "running" or (state_ == "idle" and not events):
@@ -729,6 +731,11 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
         text = (t(lang, "backup_saved", name=name) if kind == "backup"
                 else t(lang, "restore_back", date=backup_date(lang, name)))
         extra = f'<p class="lead">{E(text)}</p>'
+    elif state_ == "done" and kind == "extras":
+        title, head = t(lang, "extras_done"), ""
+        failed = [x for x in (last.get("detail") or "").split(",") if x]
+        extra = (f'<p class="note warn">{E(t(lang, "extras_not_installed", names=extra_names(lang, failed)))}</p>'
+                 if failed else "") + f'<p><a class="back" href="/extras">‹ {E(t(lang, "extras_title"))}</a></p>'
     elif state_ == "done" and updating:
         title, head = t(lang, "update_done"), ""
         extra = "".join(f'<p class="{"lead" if kind == "ok" else "note warn"}">{E(text)}</p>'
@@ -750,7 +757,7 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
     else:
         error = last.get("error") or ""
         # A crashed worker gets the settings' generic error: a backup or a restore says its own.
-        own = kind in ("backup", "restore") and error.startswith("err_") and error != "err_apply_failed"
+        own = kind in ("backup", "restore", "extras") and error.startswith("err_") and error != "err_apply_failed"
         title = t(lang, error if own else f"err_{kind}_failed" if kind else "err_apply_failed")
         head = ""
         extra = f'<pre class="detail">{E(last.get("detail") or "")}</pre>'
@@ -850,6 +857,40 @@ def people_remove_page(lang: str, user_id: str, name: str) -> str:
             f'{E(t(lang, "people_remove_yes"))}</button></form>'
             f'<p><a class="back" href="/people">‹ {E(t(lang, "people_title"))}</a></p>')
     return subpage(lang, body, side=_people_side(lang))
+
+
+def extra_names(lang: str, ids) -> str:
+    return ", ".join(t(lang, f"extra_{x}") for x in ids if x in extras.BY_ID)
+
+
+def extras_page(lang: str, state: dict) -> str:
+    removed = state.get("removed_for_update") or []
+    note = f'<p class="note warn">{E(t(lang, "extras_removed", names=extra_names(lang, removed)))}</p>' if removed else ""
+    rows = "".join(
+        f'<label class="check"><input type="checkbox" name="x_{x["id"]}"{" checked" if x["id"] in state["chosen"] else ""}>'
+        f'<div><b>{E(t(lang, "extra_" + x["id"]))}</b><span>{E(t(lang, "extra_" + x["id"] + "_desc"))}</span></div></label>'
+        for x in extras.CATALOG)
+    body = (f'{note}<form method="post" action="/extras" class="field-group">{rows}'
+            f'<button class="btn" type="submit">{E(t(lang, "extras_apply"))}</button></form>')
+    return subpage(lang, body, side=f'<h1>{E(t(lang, "extras_title"))}</h1><p class="lead">{E(t(lang, "extras_help"))}</p>')
+
+
+def extras_warning_page(lang: str, chosen: list[str]) -> str:
+    hidden = "".join(f'<input type="hidden" name="x_{x}" value="on">' for x in chosen)
+    body = (f'<p class="note warn">{E(t(lang, "extras_warn"))}</p><form method="post" action="/extras">{hidden}'
+            f'<input type="hidden" name="confirm" value="1"><button class="btn" type="submit">'
+            f'{E(t(lang, "extras_warn_yes"))}</button></form>'
+            f'<p><a class="back" href="/extras">‹ {E(t(lang, "extras_title"))}</a></p>')
+    return subpage(lang, body, side=f'<h1>{E(t(lang, "extras_warn_title"))}</h1>')
+
+
+def update_question_page(lang: str) -> str:
+    answer = lambda value, key, cls: (f'<form method="post" action="/api/update"><input type="hidden" '
+                                      f'name="remove_extras" value="{value}"><button class="btn{cls}" type="submit">'
+                                      f'{E(t(lang, key))}</button></form>')
+    body = (f'<p class="lead">{E(t(lang, "update_question_help"))}</p>'
+            + answer("1", "update_remove_yes", " primary") + answer("0", "update_remove_no", ""))
+    return subpage(lang, body, side=f'<h1>{E(t(lang, "update_question_title"))}</h1>')
 
 
 def torrents_page(lang: str, found: list[dict] | None, removed: int | None = None) -> str:
@@ -1065,7 +1106,7 @@ def make_handler(state: State):
                     return self.json(401, {})
                 status, detail = state.flow.uninstall_status()
                 return self.json(200, {"state": status, "detail": detail, "text": t(lang, "err_uninstall_failed")})
-            if path not in ("/", "/people", "/remote", "/trackers", "/torrents", "/backups", "/backups/confirm", "/remove",
+            if path not in ("/", "/people", "/extras", "/remote", "/trackers", "/torrents", "/backups", "/backups/confirm", "/remove",
                             "/settings", "/settings/progress"):
                 return self.send(404, "Not found", "text/plain")
             if self.locked():
@@ -1076,6 +1117,8 @@ def make_handler(state: State):
                 return self.send(200, form_page(lang, state.env, state.running, bool(s and s.vpn_provider)))
             if path == "/people":
                 return self.send(200, self.people_listing(lang))
+            if path == "/extras":
+                return self.send(200, extras_page(lang, state.flow.extras_state()))
             if path == "/remote":
                 return self.send(200, remote_page(lang, s, state.flow.funnel_url() if s.internet_access else None))
             if path == "/settings":
@@ -1176,8 +1219,14 @@ def make_handler(state: State):
             if path == "/api/update":
                 if self.locked() or s is None:
                     return self.json(401, {})
+                plugins = extras.has_plugins(state.flow.extras_state()["chosen"])
+                if plugins and "remove_extras" not in data:  # asked each time: Jellyfin with them, or without
+                    return self.send(200, update_question_page(lang))
                 try:
-                    state.flow.start_update()
+                    if plugins:
+                        state.flow.start_update(remove_extras=data["remove_extras"] == "1")
+                    else:
+                        state.flow.start_update()
                 except WorkerBusy:  # one operation at a time: show the running one
                     pass
                 return self.send(303, "", headers={"Location": "/settings/progress"})
@@ -1186,6 +1235,20 @@ def make_handler(state: State):
                     return self.json(401, {})
                 state.flow.confirm_disk(s)
                 return self.send(303, "", headers={"Location": "/"})
+            if path == "/extras":
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                current = state.flow.extras_state()["chosen"]
+                chosen = [x["id"] for x in extras.CATALOG if data.get("x_" + x["id"])]
+                if sorted(chosen) == sorted(current):
+                    return self.send(303, "", headers={"Location": "/extras"})
+                if extras.has_plugins(chosen) and not extras.has_plugins(current) and not data.get("confirm"):
+                    return self.send(200, extras_warning_page(lang, chosen))
+                try:
+                    state.flow.start_extras(chosen)
+                except WorkerBusy:
+                    pass
+                return self.send(303, "", headers={"Location": "/settings/progress"})
             if path == "/remote/internet":
                 if self.locked() or s is None:
                     return self.json(401, {})

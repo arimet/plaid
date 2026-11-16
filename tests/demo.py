@@ -124,6 +124,15 @@ class DemoFlow:
     def funnel_url(self):
         return "https://plaid.tail1234.ts.net"
 
+    extras = {"chosen": ["theme"], "installed": [], "removed_for_update": ["mediabar"]}
+
+    def extras_state(self):
+        return self.extras
+
+    def start_extras(self, chosen):
+        self.extras = dict(self.extras, chosen=chosen)
+        self.applied, self.apply_started = None, time.time()
+
 
 if __name__ == "__main__":
     from installer.settings import Settings  # noqa: E402

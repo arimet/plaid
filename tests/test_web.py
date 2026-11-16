@@ -88,11 +88,19 @@ class FakeFlow:
     def last_update(self):
         return self.updated
 
-    def start_update(self):  # as flow.start_update: refused while a worker runs
+    extras = {"chosen": [], "installed": [], "removed_for_update": []}
+
+    def extras_state(self):
+        return self.extras
+
+    def start_extras(self, chosen):
+        self.extras_started = chosen
+
+    def start_update(self, remove_extras=None):  # as flow.start_update: refused while a worker runs
         from installer.flow import WorkerBusy
         if self.apply_state["state"] == "running":
             raise WorkerBusy()
-        self.update_started = True
+        self.update_started, self.remove_extras = True, remove_extras
 
 
 def settings():
@@ -1204,3 +1212,62 @@ class InternetWebTest(PeopleWebTest):
         html = self.get("/remote")[2]
         self.assertIn("tailscale funnel --bg 8096", html)
         self.assertNotIn('action="/remote/internet"', html)
+
+
+class ExtrasWebTest(PeopleWebTest):
+    def flow_with(self, chosen=(), removed=()):
+        flow = PeopleFlow()
+        flow.apply_state = {"state": "idle", "events": []}
+        flow.extras = {"chosen": list(chosen), "installed": [], "removed_for_update": list(removed)}
+        flow.extras_started = None
+        return flow
+
+    def test_page_lists_the_catalogue(self):
+        self.open(self.flow_with(chosen=["theme"], removed=["mediabar"]))
+        status, _, html = self.get("/extras")
+        self.assertEqual(status, 200)
+        self.assertIn('name="x_theme" checked', html)
+        self.assertIn('name="x_introdb"', html)
+        self.assertIn("Retirés pour la mise à jour de Jellyfin : Media Bar", html)
+        self.assertIn('href="/extras"', self.get("/")[2])
+
+    def test_first_plugin_asks_first(self):
+        flow = self.flow_with()
+        self.open(flow)
+        status, _, html = self.post("/extras", "x_introdb=on")
+        self.assertEqual((status, flow.extras_started), (200, None))
+        self.assertIn("Plugins non officiels", html)
+        status, headers, _ = self.post("/extras", "x_introdb=on&confirm=1")
+        self.assertEqual((status, headers["Location"], flow.extras_started), (303, "/settings/progress", ["introdb"]))
+
+    def test_theme_alone_does_not_warn(self):
+        flow = self.flow_with()
+        self.open(flow)
+        self.assertEqual(self.post("/extras", "x_theme=on")[0], 303)
+        self.assertEqual(flow.extras_started, ["theme"])
+
+    def test_progress_says_what_was_not_installed(self):
+        flow = self.flow_with()
+        flow.apply_state = {"state": "done", "events": [{"step": "step_extras"}, {"step": "step_done", "done": True,
+                                                                                    "detail": "introdb"}]}
+        self.open(flow)
+        html = self.get("/settings/progress")[2]
+        self.assertIn("Extras appliqués", html)
+        self.assertIn("Pas installé : TheIntroDB", html)
+
+    def test_update_with_plugins_asks(self):
+        flow = self.flow_with(chosen=["mediabar"])
+        self.open(flow)
+        status, _, html = self.post("/api/update")
+        self.assertEqual(status, 200)
+        self.assertIn("Retirer vos plugins pour mettre Jellyfin à jour ?", html)
+        self.assertEqual(self.post("/api/update", "remove_extras=1")[0], 303)
+        self.assertIs(flow.remove_extras, True)
+        self.post("/api/update", "remove_extras=0")
+        self.assertIs(flow.remove_extras, False)
+
+    def test_update_without_plugins_asks_nothing(self):
+        flow = self.flow_with(chosen=["theme"])
+        self.open(flow)
+        self.assertEqual(self.post("/api/update")[0], 303)
+        self.assertIsNone(flow.remove_extras)
