@@ -157,6 +157,8 @@ def default_ops(new: Settings, dk, state_dir: str) -> SimpleNamespace:
         change_account=lambda old, new_, current: apps.change_account(old, new_, host_of, compose_out, current,
                                                                       lambda app: None),
         rescan=lambda s: apps.rescan_all(s, host_of, compose_out),
+        protect_owner=lambda s: people.protect_owner(host_of("jellyfin"), people.api_key(s, host_of("jellyfin"), state_dir),
+                                                     s.username),
         profiles=lambda login, target: _profiles(target, login, host_of, compose_out),
         subtitles=lambda target: apps.set_subtitles(target, host_of("bazarr"), compose_out),
         # Jellyfin's descriptions, then Seerr's: one language for both.
@@ -229,6 +231,7 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
                 dk.remove("volume", f"{docker.PROJECT}_tailscale-state")
                 dk.compose(state_dir, "up", "-d", "tailscale")
             elif step == "step_funnel":
+                ops.protect_owner(old)  # before the sign-in page goes public; the account changes last
                 _funnel_up(dk, state_dir)
             elif step == "step_rescan":
                 # Best effort: a scan that fails (Jellyfin still starting, password changed by hand) must not

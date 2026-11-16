@@ -117,6 +117,11 @@ class Ops:
     def subtitles(self, new):
         self.calls.append(("subtitles", tuple(new.subtitle_langs or ())))  # unset: the real one takes the defaults
 
+    def protect_owner(self, s):
+        self.calls.append(("protect_owner", s.username))
+        if getattr(self, "fail_protect", False):
+            raise RuntimeError("Jellyfin down")
+
     def metadata(self, login, new):
         self.calls.append(("metadata", login.password, new.metadata_lang))
         if getattr(self, "fail_metadata", False):
@@ -545,6 +550,15 @@ class InternetAccessTest(ApplyTest):
                                         dk=TailscaleDocker(TS_READY)), [])
         self.assertTrue(self.saved().internet_access)
         self.assertIn("TS_SERVE_CONFIG", self.compose_json()["services"]["tailscale"]["environment"])
+        self.assertIn(("protect_owner", "admin"), self.ops.calls)  # an administrator never locks by default
+
+    def test_unprotected_owner_keeps_it_closed(self):
+        ops = Ops()
+        ops.fail_protect = True
+        old = settings(tailscale_key="tskey-a")
+        self.assertIsNone(self.run_apply(old, settings(tailscale_key="tskey-a", internet_access=True), ops=ops,
+                                         dk=TailscaleDocker(TS_READY)))
+        self.assertFalse(self.saved().internet_access)
 
     def test_refused_by_the_tailnet_goes_back(self):
         old = settings(tailscale_key="tskey-a")

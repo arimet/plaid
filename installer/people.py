@@ -116,6 +116,16 @@ def _owner(host: str, key: str, username: str) -> dict | None:
     return next((u for u in users if u["Name"] == username), None)
 
 
+def protect_owner(host: str, key: str, username: str) -> None:
+    """Jellyfin never locks an administrator by default: once its sign-in page is on the Internet, the owner gets
+    the same 5 tries as everyone. Plaid's API key unlocks them from the people page."""
+    user = _owner(host, key, username)
+    if user is None:
+        raise LookupError(f"no Jellyfin account named {username}")
+    if user["Policy"].get("LoginAttemptsBeforeLockout") != POLICY["LoginAttemptsBeforeLockout"]:
+        _set_policy(host, key, user, LoginAttemptsBeforeLockout=POLICY["LoginAttemptsBeforeLockout"])
+
+
 def owner_locked(host: str, key: str, username: str) -> bool:
     user = _owner(host, key, username)
     return bool(user and user["Policy"].get("IsDisabled"))

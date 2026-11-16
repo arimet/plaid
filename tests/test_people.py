@@ -142,6 +142,11 @@ class AccountsTest(unittest.TestCase):
                 action()
         self.assertEqual(self.jf.writes, [])
 
+    def test_protect_owner_sets_the_lockout(self):
+        people.protect_owner(HOST, "key-plaid", "zoe")
+        self.assertEqual(self.jf.users["o"]["Policy"]["LoginAttemptsBeforeLockout"], 5)
+        self.assertTrue(self.jf.users["o"]["Policy"]["IsAdministrator"])
+
     def test_owner_lock(self):
         self.assertFalse(people.owner_locked(HOST, "key-plaid", "zoe"))
         self.jf.users["o"]["Policy"]["IsDisabled"] = True
