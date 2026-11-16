@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from installer import guard
 from installer.compose import DISK_APPS
@@ -112,6 +113,13 @@ class FakeFlow:
         self.settings = Settings(data_dir="/srv/arr", username="a", password="longenough", vpn_provider=vpn,
                                  home="/home/z", platform="linux")
         self.saved = []
+        self.key_days = None
+
+    def guard_status(self, state_dir):
+        return self.saved[-1] if self.saved else {}
+
+    def vpn_key_days(self, s, state_dir):
+        return self.key_days
 
     def is_complete(self, state_dir):
         return self.complete
@@ -137,7 +145,8 @@ class CycleTest(unittest.TestCase):
     def test_cycle_saves_status(self):
         dk, fl = FakeDk(disk="missing", containers={"radarr": Q()}), FakeFlow()
         # No room shown for an absent disk: df would read the empty mount point, so the system disk.
-        want = {"disk": "missing", "vpn": "off", "apps": {"radarr": "running"}, "free": None, "total": None}
+        want = {"disk": "missing", "vpn": "off", "apps": {"radarr": "running"}, "free": None, "total": None,
+                "vpn_down_since": None, "vpn_key_days": None}
         self.assertEqual(guard.cycle(dk, fl, "/state"), want)
         self.assertEqual(dk.calls, [("stop", *DISK_APPS)])
         self.assertEqual(fl.saved, [want])
@@ -254,3 +263,34 @@ class StartOthersTest(unittest.TestCase):
         dk = FakeDk(containers={"seerr": Q(running=False)})
         guard.cycle(dk, FakeFlow(), "/state")
         self.assertIn(("up", "-d", "seerr"), dk.calls)
+
+
+class VpnDownTimeTest(unittest.TestCase):
+    def down(self):
+        return FakeDk(containers={"gluetun": G(health="unhealthy"), "qbittorrent": Q()}), FakeFlow(vpn="protonvpn")
+
+    def test_down_time_is_kept_between_rounds(self):
+        dk, fl = self.down()
+        with mock.patch("time.time", return_value=1000):
+            self.assertEqual(guard.cycle(dk, fl, "/state")["vpn_down_since"], 1000)
+        with mock.patch("time.time", return_value=1030):
+            status = guard.cycle(dk, fl, "/state")
+        self.assertEqual((status["vpn"], status["vpn_down_since"]), ("down", 1000))
+
+    def test_down_for_two_hours_is_stuck(self):
+        dk, fl = self.down()
+        with mock.patch("time.time", return_value=1000):
+            guard.cycle(dk, fl, "/state")
+        with mock.patch("time.time", return_value=1000 + 7200):
+            self.assertEqual(guard.cycle(dk, fl, "/state")["vpn"], "stuck")
+
+    def test_back_up_forgets_the_down_time(self):
+        dk, fl = self.down()
+        guard.cycle(dk, fl, "/state")
+        dk.containers["gluetun"] = G()
+        self.assertIsNone(guard.cycle(dk, fl, "/state")["vpn_down_since"])
+
+    def test_key_age_is_in_the_status(self):
+        dk, fl = self.down()
+        fl.key_days = 340
+        self.assertEqual(guard.cycle(dk, fl, "/state")["vpn_key_days"], 340)

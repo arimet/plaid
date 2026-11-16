@@ -285,10 +285,10 @@ def form_page(lang: str, env: dict, running: bool = False, with_vpn: bool = True
 
 
 def vpn_state(s: Settings, status: dict) -> str:
-    """"ok", "down", "checking" (a VPN, the guard has not looked yet) or "off" (none)."""
+    """"ok", "down", "stuck" (down for hours), "checking" (a VPN, the guard has not looked yet) or "off" (none)."""
     if not s.vpn_provider:
         return "off"
-    return status.get("vpn") if status.get("vpn") in ("ok", "down") else "checking"
+    return status.get("vpn") if status.get("vpn") in ("ok", "down", "stuck") else "checking"
 
 
 def vpn_texts(lang: str, s: Settings, state: str) -> tuple[str, str]:
@@ -296,6 +296,7 @@ def vpn_texts(lang: str, s: Settings, state: str) -> tuple[str, str]:
     provider = PROVIDERS[s.vpn_provider].label if s.vpn_provider in PROVIDERS else ""
     return {"ok": (t(lang, "vpn_on"), t(lang, "vpn_on_help", provider=provider)),
             "down": (t(lang, "guard_vpn_down"), t(lang, "guard_vpn_down_help")),
+            "stuck": (t(lang, "guard_vpn_stuck"), t(lang, "guard_vpn_stuck_help")),
             "checking": (t(lang, "vpn_checking"), t(lang, "vpn_checking_help")),
             "off": (t(lang, "vpn_none"), t(lang, "warn_no_vpn"))}[state]
 
@@ -312,23 +313,37 @@ def vpn_html(lang: str, s: Settings, status: dict) -> str:
             f'</div></div>')
 
 
-def guard_notes(lang: str, s: Settings, status: dict, vpn: bool = True) -> list[tuple[str, str, bool]]:
-    """(title, help, show the confirm button) for each alert the guard raised, the disk first. `vpn=False`: the
-    page shows the VPN's state on its own."""
+KEY_WARN_DAYS = 335  # Proton's WireGuard keys last a year: a month to extend it
+
+
+def guard_notes(lang: str, s: Settings, status: dict, vpn: bool = True) -> list[tuple[str, str, str | None]]:
+    """(title, help, button: None, "disk" or "vpn_key") for each alert the guard raised, the disk first.
+    `vpn=False`: the page shows the VPN's state on its own."""
     notes = []
     if status.get("disk") in ("missing", "unconfirmed"):
         key = "guard_disk_" + status["disk"]
-        notes.append((t(lang, key), t(lang, key + "_help", path=s.data_dir), status["disk"] == "unconfirmed"))
-    if vpn and status.get("vpn") == "down":
-        notes.append((t(lang, "guard_vpn_down"), t(lang, "guard_vpn_down_help"), False))
+        notes.append((t(lang, key), t(lang, key + "_help", path=s.data_dir),
+                      "disk" if status["disk"] == "unconfirmed" else None))
+    if vpn and status.get("vpn") in ("down", "stuck"):
+        key = "guard_vpn_" + status["vpn"]
+        notes.append((t(lang, key), t(lang, key + "_help"), None))
+    if (status.get("vpn_key_days") or 0) >= KEY_WARN_DAYS:
+        notes.append((t(lang, "vpn_key_expiring"), t(lang, "vpn_key_expiring_help"), "vpn_key"))
     return notes
 
 
+GUARD_BUTTONS = {"disk": ("/api/confirm-disk", "guard_disk_confirm"), "vpn_key": ("/api/vpn-key-renewed", "vpn_key_renewed")}
+
+
 def guard_html(lang: str, s: Settings, status: dict) -> str:
-    button = (f'<form method="post" action="/api/confirm-disk"><button class="btn" type="submit">'
-              f'{E(t(lang, "guard_disk_confirm"))}</button></form>')
-    return "".join(f'<div class="note alert"><div><b>{E(title)}</b><br>{E(text)}{button if confirm else ""}</div></div>'
-                   for title, text, confirm in guard_notes(lang, s, status, vpn=False))
+    def button(kind):
+        if not kind:
+            return ""
+        action, label = GUARD_BUTTONS[kind]
+        return (f'<form method="post" action="{action}"><button class="btn" type="submit">'
+                f'{E(t(lang, label))}</button></form>')
+    return "".join(f'<div class="note alert"><div><b>{E(title)}</b><br>{E(text)}{button(kind)}</div></div>'
+                   for title, text, kind in guard_notes(lang, s, status, vpn=False))
 
 
 FULL_DISK = 20 * 10 ** 9  # under this, downloads soon stop
@@ -1025,6 +1040,11 @@ def make_handler(state: State):
                 if self.locked() or s is None:
                     return self.json(401, {})
                 state.flow.confirm_disk(s)
+                return self.send(303, "", headers={"Location": "/"})
+            if path == "/api/vpn-key-renewed":
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                state.flow.vpn_key_renewed(s)
                 return self.send(303, "", headers={"Location": "/"})
             if path in ("/settings", "/settings/apply", "/settings/edit"):
                 if self.locked() or s is None:

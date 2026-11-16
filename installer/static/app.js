@@ -139,10 +139,10 @@
         });
         const vpn = $("[data-vpn]");
         if (vpn && vpn.dataset.provider) {  // with a VPN: on, down, or not looked at yet
-          const state = st.vpn === "ok" || st.vpn === "down" ? st.vpn : "checking";
-          const title = {ok: T.vpn_on, down: T.guard_vpn_down, checking: T.vpn_checking}[state];
+          const state = ["ok", "down", "stuck"].includes(st.vpn) ? st.vpn : "checking";
+          const title = {ok: T.vpn_on, down: T.guard_vpn_down, stuck: T.guard_vpn_stuck, checking: T.vpn_checking}[state];
           const help = {ok: fmt(T.vpn_on_help, {provider: vpn.dataset.provider}), down: T.guard_vpn_down_help,
-                        checking: T.vpn_checking_help}[state];
+                        stuck: T.guard_vpn_stuck_help, checking: T.vpn_checking_help}[state];
           vpn.dataset.vpn = state;
           $("b", vpn).textContent = title;
           $(".vpn-help", vpn).textContent = help;

@@ -364,15 +364,15 @@ class CancelTest(unittest.TestCase):
 class GuardStatusTest(unittest.TestCase):
     def test_guard_status_defaults(self):
         with tempfile.TemporaryDirectory() as d:
-            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None})
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None, "vpn_down_since": None, "vpn_key_days": None})
             with open(os.path.join(d, "guard.json"), "w") as f:
                 f.write("{broken")
-            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None})
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None, "vpn_down_since": None, "vpn_key_days": None})
 
     def test_guard_status_round_trip(self):
         with tempfile.TemporaryDirectory() as d:
             flow.save_guard_status({"disk": "missing", "vpn": "down"}, d)
-            self.assertEqual(flow.guard_status(d), {"disk": "missing", "vpn": "down", "apps": {}, "free": None, "total": None})
+            self.assertEqual(flow.guard_status(d), {"disk": "missing", "vpn": "down", "apps": {}, "free": None, "total": None, "vpn_down_since": None, "vpn_key_days": None})
 
     def test_confirm_disk_writes_marker_and_status(self):
         dk = FakeDocker()
@@ -380,7 +380,7 @@ class GuardStatusTest(unittest.TestCase):
             flow.save_guard_status({"disk": "unconfirmed", "vpn": "ok"}, d)
             self.assertTrue(flow.confirm_disk(settings(), dk=dk, state_dir=d))
             self.assertIn(("marker", "/srv/arr"), dk.calls)
-            self.assertEqual(flow.guard_status(d), {"disk": "ok", "vpn": "ok", "apps": {}, "free": None, "total": None})
+            self.assertEqual(flow.guard_status(d), {"disk": "ok", "vpn": "ok", "apps": {}, "free": None, "total": None, "vpn_down_since": None, "vpn_key_days": None})
 
 
 class ConfirmDiskSafetyTest(unittest.TestCase):
@@ -411,10 +411,10 @@ class StaleGuardStatusTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             with open(os.path.join(d, "guard.json"), "w") as f:
                 json.dump({"disk": "missing", "vpn": "down", "at": time.time() - 600}, f)
-            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None})
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None, "vpn_down_since": None, "vpn_key_days": None})
             with open(os.path.join(d, "guard.json"), "w") as f:
                 json.dump({"disk": "missing", "vpn": "down"}, f)  # no time: unknown age
-            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None})
+            self.assertEqual(flow.guard_status(d), {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None, "vpn_down_since": None, "vpn_key_days": None})
 
 
 class RemovalTakesApplyWorkerTest(unittest.TestCase):
@@ -446,3 +446,31 @@ class CleanShownTest(unittest.TestCase):
                 mock.patch("installer.apps.delete_torrents", lambda s, host, hashes: deleted.append(hashes)):
             self.assertEqual(flow.clean_torrents(settings(), ["aaa", "gone"], dk=FakeDocker()), 1)
         self.assertEqual(deleted, [["aaa"]])
+
+
+class VpnKeyAgeTest(unittest.TestCase):
+    DAY = 86400
+
+    def test_only_proton_keys_age(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(flow.vpn_key_days(settings(vpn_provider="mullvad"), d, now=0))
+            self.assertIsNone(flow.vpn_key_days(settings(vpn_provider=None, vpn_fields={}), d, now=0))
+
+    def test_age_counts_from_first_sight(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(flow.vpn_key_days(settings(), d, now=1000), 0)
+            self.assertEqual(flow.vpn_key_days(settings(), d, now=1000 + 340 * self.DAY), 340)
+            self.assertNotIn("k", open(os.path.join(d, flow.VPN_KEY_FILE)).read().replace('"key"', ""))
+
+    def test_new_key_starts_again(self):
+        with tempfile.TemporaryDirectory() as d:
+            flow.vpn_key_days(settings(), d, now=0)
+            other = settings(vpn_fields={"WIREGUARD_PRIVATE_KEY": "other"})
+            self.assertEqual(flow.vpn_key_days(other, d, now=400 * self.DAY), 0)
+
+    def test_renewed_key_starts_again(self):
+        with tempfile.TemporaryDirectory() as d:
+            flow.vpn_key_days(settings(), d, now=0)
+            flow.vpn_key_renewed(settings(), d)
+            self.assertEqual(flow.vpn_key_days(settings(), d), 0)
+            self.assertEqual(flow.guard_status(d)["vpn_key_days"], 0)

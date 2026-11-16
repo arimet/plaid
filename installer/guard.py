@@ -12,6 +12,7 @@ from installer.compose import DISK_APPS, SERVICES
 from installer.docker import DockerError
 
 INTERVAL = 30
+STUCK = 2 * 3600  # seconds down before the VPN is said not to come back (an expired key, most often)
 
 
 def _instant(started: str) -> str:
@@ -89,7 +90,13 @@ def _cycle(dk, fl, state_dir: str) -> dict | None:
             dk.compose(state_dir, *args, timeout=docker.HELPER_TIMEOUT)
         except DockerError as e:  # the next action, and the next round, may still fix things
             print(f"guard: {action[0]} failed: {e}", file=sys.stderr)
-    status = {"disk": disk, "vpn": vpn, "apps": app_states(containers), "free": free, "total": total}
+    since = None
+    if vpn == "down":
+        since = fl.guard_status(state_dir).get("vpn_down_since") or time.time()
+        if time.time() - since >= STUCK:
+            vpn = "stuck"
+    status = {"disk": disk, "vpn": vpn, "apps": app_states(containers), "free": free, "total": total,
+              "vpn_down_since": since, "vpn_key_days": fl.vpn_key_days(s, state_dir)}
     fl.save_guard_status(status, state_dir)
     return status
 

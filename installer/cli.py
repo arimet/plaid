@@ -373,15 +373,20 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                 state = vpn_state(s, status)
                 title, text = vpn_texts(lang, s, state)
                 name = f" · {PROVIDERS[s.vpn_provider].label}" if s.vpn_provider in PROVIDERS else ""
-                term.note(f"{title}{name}. {text}", {"ok": "ok", "down": "error", "off": "warn"}.get(state, "info"))
-                for title, text, _ in guard_notes(lang, s, status, vpn=False):
+                term.note(f"{title}{name}. {text}", {"ok": "ok", "down": "error", "stuck": "error", "off": "warn"}.get(state, "info"))
+                alerts = guard_notes(lang, s, status, vpn=False)
+                for title, text, _ in alerts:
                     term.note(f"{title}{' ' if title.endswith('?') else '. '}{text}", "warn")
-                confirm = [("confirm_disk", t(lang, "guard_disk_confirm"))] if status.get("disk") == "unconfirmed" else []
+                buttons = {"disk": ("confirm_disk", t(lang, "guard_disk_confirm")),
+                           "vpn_key": ("vpn_key_renewed", t(lang, "vpn_key_renewed"))}
+                confirm = [buttons[kind] for _, _, kind in alerts if kind]
                 choice = term.select(t(lang, "menu_title"), confirm + actions, hint=t(lang, "cli_select_hint"))
                 if choice == "quit":
                     break
                 if choice == "confirm_disk" and flow.confirm_disk(s):  # False: the menu shows the fresh state again
                     flash = t(lang, "guard_disk_confirmed")
+                if choice == "vpn_key_renewed":
+                    flow.vpn_key_renewed(s)
                 if choice == "apps":
                     term.page(t(lang, "menu_apps"), t(lang, "apps_open_anywhere"))
                     print_apps(term, lang, host, status.get("apps"))

@@ -514,6 +514,32 @@ class VpnLineCliTest(TuiCliTest):
         self.assertIn("Pas de VPN", out.getvalue())
 
 
+class VpnKeyCliTest(TuiCliTest):
+    def test_menu_offers_to_say_the_key_was_extended(self):
+        from dataclasses import replace
+        flow = installed_flow()
+        flow.settings = replace(flow.settings, vpn_provider="protonvpn", vpn_fields={"WIREGUARD_PRIVATE_KEY": "k"})
+        flow.status = {"disk": "ok", "vpn": "ok", "vpn_key_days": 340}
+        flow.renewed = False
+
+        def renewed(s):
+            flow.renewed, flow.status = True, dict(flow.status, vpn_key_days=0)
+        flow.vpn_key_renewed = renewed
+        t, out = self.term("\r", "\x1b[A\r")  # the first choice, then quit
+        cli.run_panel_tui(t, flow, ENV, flow.settings)
+        self.assertIn("Votre clé Proton VPN expire bientôt", out.getvalue())
+        self.assertTrue(flow.renewed)
+
+    def test_menu_says_the_vpn_is_stuck(self):
+        from dataclasses import replace
+        flow = installed_flow()
+        flow.settings = replace(flow.settings, vpn_provider="protonvpn", vpn_fields={"WIREGUARD_PRIVATE_KEY": "k"})
+        flow.status = {"disk": "ok", "vpn": "stuck"}
+        t, out = self.term("\x1b[A\r")
+        cli.run_panel_tui(t, flow, ENV, flow.settings)
+        self.assertIn("Le VPN ne se reconnecte pas · Proton VPN.", out.getvalue())
+
+
 class RetryCliTest(TuiCliTest):
     def test_failed_install_can_be_tried_again_from_the_menu(self):
         flow = installed_flow()

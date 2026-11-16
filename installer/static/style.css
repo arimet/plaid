@@ -322,10 +322,10 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 .vpn .vpn-name{font-weight:600;color:var(--text)}
 .vpn[data-vpn="ok"] i{background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
 .vpn[data-vpn="ok"] b{color:var(--accent-text)}
-.vpn[data-vpn="down"]{background:color-mix(in srgb,var(--danger) 7%,var(--surface));
+.vpn:is([data-vpn="down"],[data-vpn="stuck"]){background:color-mix(in srgb,var(--danger) 7%,var(--surface));
   box-shadow:var(--inset),0 0 0 1.5px color-mix(in srgb,var(--danger) 40%,transparent)}
-.vpn[data-vpn="down"] i{background:var(--danger)}
-.vpn[data-vpn="down"] b{color:var(--danger-text)}
+.vpn:is([data-vpn="down"],[data-vpn="stuck"]) i{background:var(--danger)}
+.vpn:is([data-vpn="down"],[data-vpn="stuck"]) b{color:var(--danger-text)}
 .vpn[data-vpn="off"] i{background:var(--warn)}
 
 /* ================================================================= Cinema style (the default)
@@ -365,7 +365,7 @@ fieldset.field legend{padding:0;margin-bottom:8px}
 :root[data-style="cinema"] .chip[aria-checked="true"]{transform:none}
 :root[data-style="cinema"] .lang a[aria-current]{box-shadow:inset 0 0 0 100vmax var(--card-2)}
 :root[data-style="cinema"] .menu[open] summary{box-shadow:inset 0 0 0 100vmax var(--card-2)}
-:root[data-style="cinema"] :is(.note.alert,.vpn[data-vpn="down"]){background:color-mix(in srgb,var(--danger) 16%,var(--surface));
+:root[data-style="cinema"] :is(.note.alert,.vpn[data-vpn="down"],.vpn[data-vpn="stuck"]){background:color-mix(in srgb,var(--danger) 16%,var(--surface));
   box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--danger) 60%,transparent)}
 :root[data-style="cinema"] .vpn[data-vpn="ok"] i{box-shadow:0 0 0 4px var(--accent-soft)}
 :root[data-style="cinema"] .st.now{box-shadow:inset 0 0 0 2px var(--accent),inset 0 0 0 100vmax var(--card)}

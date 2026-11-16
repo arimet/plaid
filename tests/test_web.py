@@ -49,6 +49,9 @@ class FakeFlow:
     def confirm_disk(self, s):
         self.confirmed = True
 
+    def vpn_key_renewed(self, s):
+        self.renewed = True
+
     def is_complete(self):
         return self.installed is not None and self.complete
 
@@ -1010,3 +1013,35 @@ class StyleTest(unittest.TestCase):
         self.assertIn('value="soft"', field)
         self.assertNotIn("name=", field)  # a look for this browser, not a change for the review page
         self.assertIn("Style de l’assistant", page)
+
+
+class VpnKeyWebTest(GuardWebTest):
+    def test_old_key_gets_a_reminder_with_a_button(self):
+        html = self.open_panel(vpn_key_days=335)
+        self.assertIn("<b>Votre clé Proton VPN expire bientôt</b>", html)
+        self.assertIn('action="/api/vpn-key-renewed"', html)
+
+    def test_younger_key_gets_none(self):
+        self.assertNotIn('action="/api/vpn-key-renewed"', self.open_panel(vpn_key_days=334))
+
+    def test_renewed_route(self):
+        self.open_panel(vpn_key_days=340)
+        status, headers, _ = self.req("POST", "/api/vpn-key-renewed", "",
+                                      {"Cookie": self.cookie, "Content-Type": "application/x-www-form-urlencoded"})
+        self.assertEqual((status, headers["Location"]), (303, "/"))
+        self.assertTrue(self.flow.renewed)
+
+    def test_renewed_needs_login(self):
+        self.open_panel(vpn_key_days=340)
+        self.assertEqual(self.req("POST", "/api/vpn-key-renewed", "")[0], 401)
+
+
+class VpnStuckTest(unittest.TestCase):
+    def test_stuck_vpn_says_the_key_may_have_expired(self):
+        from dataclasses import replace
+        from installer import web
+        s = replace(settings(), vpn_provider="protonvpn", vpn_fields={"WIREGUARD_PRIVATE_KEY": "k"})
+        state = web.vpn_state(s, {"vpn": "stuck"})
+        self.assertEqual(state, "stuck")
+        self.assertEqual(web.vpn_texts("fr", s, state)[0], "Le VPN ne se reconnecte pas")
+        self.assertEqual(web.guard_notes("fr", s, {"vpn": "stuck"})[0][0], "Le VPN ne se reconnecte pas")

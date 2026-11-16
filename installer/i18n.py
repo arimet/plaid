@@ -56,6 +56,13 @@ T: dict[str, dict[str, str]] = {
         "vpn_checking_help": "Plaid looks at it every 30 seconds.",
         "vpn_add": "Add a VPN",
         "guard_vpn_down_help": "Downloads resume once it reconnects.",
+        "guard_vpn_stuck": "The VPN does not reconnect",
+        "guard_vpn_stuck_help": "Down for more than 2 hours. With Proton, the key may have expired: check it in your "
+                                "Proton account, or enter a new one in Settings.",
+        "vpn_key_expiring": "Your Proton VPN key expires soon",
+        "vpn_key_expiring_help": "In your Proton account (account.proton.me), open VPN › WireGuard and click Extend "
+                                 "next to Plaid's key. Without it, downloads stop when the key expires.",
+        "vpn_key_renewed": "I extended the key",
         "uninstall_title": "Remove the stack",
         "nav_settings": "Settings",
         "nav_settings_desc": "Change the folder, password, VPN, Tailscale, time zone or language.",
@@ -436,6 +443,14 @@ T: dict[str, dict[str, str]] = {
         "vpn_checking_help": "Plaid le regarde toutes les 30 secondes.",
         "vpn_add": "Ajouter un VPN",
         "guard_vpn_down_help": "Les téléchargements reprendront quand il se reconnectera.",
+        "guard_vpn_stuck": "Le VPN ne se reconnecte pas",
+        "guard_vpn_stuck_help": "Coupé depuis plus de 2 heures. Si vous utilisez Proton, la clé a peut-être expiré : "
+                                "vérifiez-la dans votre compte, ou saisissez-en une nouvelle dans Réglages.",
+        "vpn_key_expiring": "Votre clé Proton VPN expire bientôt",
+        "vpn_key_expiring_help": "Dans votre compte Proton (account.proton.me), ouvrez VPN › WireGuard et cliquez sur "
+                                 "Prolonger à côté de la clé de Plaid. Sans cela, les téléchargements s’arrêteront "
+                                 "quand elle expirera.",
+        "vpn_key_renewed": "J’ai prolongé la clé",
         "uninstall_title": "Supprimer la stack",
         "nav_settings": "Réglages",
         "nav_settings_desc": "Changer le dossier, le mot de passe, le VPN, Tailscale, le fuseau ou la langue.",

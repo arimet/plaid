@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import platform
@@ -245,7 +246,8 @@ def install(s: Settings, report: Report, dk=docker, configure=apps.configure_all
 
 
 GUARD_FILE = "guard.json"
-GUARD_DEFAULT = {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None}  # no alert until it looked
+GUARD_DEFAULT = {"disk": "unknown", "vpn": "off", "apps": {}, "free": None, "total": None, "vpn_down_since": None,
+                 "vpn_key_days": None}  # no alert until it looked
 GUARD_STALE = 150  # seconds: rounds come every 30 s, so an older status means the guard is stuck or gone
 
 
@@ -280,6 +282,42 @@ def confirm_disk(s: Settings, dk=docker, state_dir: str = STATE_DIR) -> bool:
         return False
     save_guard_status({**guard_status(state_dir), "disk": "ok"}, state_dir)
     return True
+
+
+VPN_KEY_FILE = "vpn_key.json"
+DAY = 86400
+
+
+def _proton_key(s: Settings) -> str | None:
+    """A print of the Proton WireGuard key: Proton's keys expire after a year; the other providers' do not."""
+    key = (s.vpn_fields or {}).get("WIREGUARD_PRIVATE_KEY", "").strip() if s.vpn_provider == "protonvpn" else ""
+    return hashlib.sha256(key.encode()).hexdigest()[:16] if key else None
+
+
+def vpn_key_days(s: Settings, state_dir: str = STATE_DIR, now: float | None = None) -> int | None:
+    """Days since Plaid first saw this Proton key (or since the user said they extended it); None without one."""
+    key = _proton_key(s)
+    if key is None:
+        return None
+    now = time.time() if now is None else now
+    path = os.path.join(state_dir, VPN_KEY_FILE)
+    try:
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+        if saved.get("key") == key:
+            return max(0, int((now - float(saved["since"])) // DAY))
+    except (OSError, ValueError, TypeError, KeyError):
+        pass
+    write_json(path, {"key": key, "since": now})  # a new key, or a stack installed before this existed
+    return 0
+
+
+def vpn_key_renewed(s: Settings, state_dir: str = STATE_DIR) -> None:
+    """The user extended the key in their Proton account: the count starts again."""
+    key = _proton_key(s)
+    if key:
+        write_json(os.path.join(state_dir, VPN_KEY_FILE), {"key": key, "since": time.time()})
+        save_guard_status({**guard_status(state_dir), "vpn_key_days": 0}, state_dir)
 
 
 APPLY_REQUEST, APPLY_FILE = "apply-request.json", "apply.json"
