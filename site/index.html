@@ -39,7 +39,7 @@
   --page:#eef0fa; --surface:#fff; --subtle:#f4f5fb; --line:#d9dcea; --edge:#1b1e26; --shade:#1b1e26;
   --ink:#1b1e26; --text:#2b2f3c; --muted:#575d70; --on-fill:#1b1e26;
   --accent:#0089a8; --accent-2:#00a8c9; --accent-text:#00748f; --accent-50:#dcf3f8;
-  --coral:#ff7a5c; --coral-50:#ffe9e3; --yellow:#ffd23f; --yellow-50:#fff5d1; --cyan:#4fd6e3; --green:#3ccf7e;
+  --prompt:#4fd6e3; --on-accent:#fff; --coral:#ff7a5c; --coral-50:#ffe9e3; --yellow:#ffd23f; --yellow-50:#fff5d1; --cyan:#4fd6e3; --green:#3ccf7e;
   --blob-1:#fff3c4; --blob-2:#ffe4dc; --blob-3:#d9f6fa;
   --sans:ui-rounded,"SF Pro Rounded",Nunito,system-ui,-apple-system,"Segoe UI",sans-serif;
   --body:ui-rounded,"SF Pro Rounded",Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -53,7 +53,7 @@
   --page:#1b1e26; --surface:#262a35; --subtle:#2e3340; --line:#3c4253; --edge:#aab2c8; --shade:#5d6580;
   --ink:#f2f3f6; --text:#dfe2ea; --muted:#a6acbe;
   --accent:#2cc6e6; --accent-2:#4fd6e3; --accent-text:#4fd1ec; --accent-50:#193a3f;
-  --coral-50:#3d2622; --yellow-50:#393119;
+  --coral-50:#3d2622; --yellow-50:#393119; --prompt:#00748f; --on-accent:#1b1e26;
   --blob-1:#2a2a2b; --blob-2:#2a2429; --blob-3:#1f2a30;
   color-scheme:dark;
 }}
@@ -61,7 +61,7 @@
   --page:#1b1e26; --surface:#262a35; --subtle:#2e3340; --line:#3c4253; --edge:#aab2c8; --shade:#5d6580;
   --ink:#f2f3f6; --text:#dfe2ea; --muted:#a6acbe;
   --accent:#2cc6e6; --accent-2:#4fd6e3; --accent-text:#4fd1ec; --accent-50:#193a3f;
-  --coral-50:#3d2622; --yellow-50:#393119;
+  --coral-50:#3d2622; --yellow-50:#393119; --prompt:#00748f; --on-accent:#1b1e26;
   --blob-1:#2a2a2b; --blob-2:#2a2429; --blob-3:#1f2a30;
   color-scheme:dark;
 }
@@ -144,7 +144,7 @@ html[data-lang="fr"] [data-l="en"],html:not([data-lang="fr"]) [data-l="fr"]{disp
 .fill{height:100%;background:var(--accent);box-shadow:inset -2px 0 0 var(--edge);width:var(--w,0%);transition:width 1.2s cubic-bezier(.34,1.56,.64,1)}
 .steps{list-style:none;padding:0;margin-top:14px;display:flex;flex-direction:column;gap:10px;font-size:15px;font-weight:600;color:var(--ink)}
 .steps li{display:flex;align-items:center;gap:10px}
-.steps .ok .dot{background:var(--accent);color:#fff;border-radius:50%;padding:3px;stroke-width:3}
+.steps .ok .dot{background:var(--accent);color:var(--on-accent);border-radius:50%;padding:3px;stroke-width:3}
 .steps .now{color:var(--muted)}
 .dot{width:22px;height:22px;flex:none}
 .spin{animation:spin 1.1s linear infinite;transform-origin:50% 50%}
@@ -196,7 +196,7 @@ button.chip[aria-pressed="true"]{box-shadow:3px 3px 0 var(--accent)}
 .why li{display:grid;grid-template-columns:22px 1fr;gap:10px}
 .by-hand li::before{content:"";width:10px;height:10px;margin:7px 0 0 5px;border:2px solid var(--muted);border-radius:50%}
 .with-plaid li::before{content:"✓";display:grid;place-items:center;width:22px;height:22px;margin-top:1px;border:2px solid var(--edge);border-radius:50%;
-  background:var(--accent);color:#fff;font-size:12px;font-weight:900}
+  background:var(--accent);color:var(--on-accent);font-size:12px;font-weight:900}
 @media (max-width:900px){.why{grid-template-columns:minmax(0,1fr)}}
 .how{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;counter-reset:n;padding:0}
 .how li{list-style:none;padding:28px;border:2px solid var(--edge);border-radius:var(--r-lg);background:var(--surface);box-shadow:var(--pop)}
@@ -221,7 +221,7 @@ button.chip[aria-pressed="true"]{box-shadow:3px 3px 0 var(--accent)}
 .cmd{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 18px;border:2px solid var(--edge);border-radius:18px;background:var(--ink);
   box-shadow:5px 5px 0 var(--accent);margin-top:12px;min-width:0}
 .cmd code{flex:1;min-width:0;font:500 14px/1.5 var(--mono);color:var(--page);overflow-x:auto;white-space:nowrap;scrollbar-width:none}
-.cmd code::before{content:"$ ";color:var(--cyan)}
+.cmd code::before{content:"$ ";color:var(--prompt)}
 .cmd code::-webkit-scrollbar{display:none}
 .cmd .pill{flex:none;border:0;box-shadow:none;background:transparent;color:var(--page);min-height:40px;border-radius:12px}
 .cmd .pill:hover{background:color-mix(in srgb,var(--page) 16%,transparent)}
@@ -365,7 +365,7 @@ footer a{color:var(--text)}
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14"/></svg>
         <span data-l="en">Install on a mini PC or a NAS</span><span data-l="fr">Installer sur un mini PC ou un NAS</span>
       </a>
-      <a class="btn soft" id="get" href="#install"><span id="get-label"><span data-l="en">Mac and Windows</span><span data-l="fr">Mac et Windows</span></span></a>
+      <a class="btn" id="get" href="#install"><span id="get-label"><span data-l="en">Mac and Windows</span><span data-l="fr">Mac et Windows</span></span></a>
     </div>
     <p class="small">
       Linux, Synology, Raspberry&nbsp;Pi, Mac, Windows
@@ -654,7 +654,7 @@ footer a{color:var(--text)}
     <div>
       <p><span data-l="en">Rather not use the Terminal? Download the launcher, unzip it and double-click <b>install.command</b>.</span><span data-l="fr">Vous préférez éviter le Terminal ? Téléchargez le lanceur, dézippez-le et double-cliquez sur <b>install.command</b>.</span></p>
       <p class="note"><span data-l="en">macOS blocks it the first time, because it is not signed with an Apple developer account. Open System Settings › Privacy &amp; Security, click <b>Open Anyway</b> next to install.command, then open it again.</span><span data-l="fr">macOS le bloque la première fois, parce qu’il n’est pas signé avec un compte développeur Apple. Ouvrez Réglages Système › Confidentialité et sécurité, cliquez sur <b>Ouvrir quand même</b> à côté d’install.command, puis rouvrez-le.</span></p>
-      <div class="get"><a class="btn soft" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-mac.zip" data-goatcounter-click="plaid-download-mac">
+      <div class="get"><a class="btn" href="https://github.com/arimet/plaid/releases/latest/download/Plaid-mac.zip" data-goatcounter-click="plaid-download-mac">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 19h14"/></svg>
         <span data-l="en">Download the Mac launcher</span><span data-l="fr">Télécharger le lanceur Mac</span></a></div>
     </div>

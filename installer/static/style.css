@@ -27,7 +27,7 @@
   --page:#1b1e26; --surface:#262a35; --subtle:#2e3340; --line:#3c4253; --edge:#aab2c8; --shade:#5d6580;
   --accent:#2cc6e6; --accent-2:#4fd6e3; --accent-text:#4fd1ec; --accent-soft:rgba(44,198,230,.3); --accent-50:#193a3f;
   --blob-1:#2a2a2b; --blob-2:#2a2429; --blob-3:#1f2a30;
-  --on-accent:#08161b; --danger:#d9574f; --danger-2:#d9574f; --danger-text:#ff8f87; --warn:#f2b456;
+  --on-accent:#08161b; --danger:#c8463f; --danger-2:#c8463f; --danger-text:#ff8f87; --warn:#f2b456;
   --text:#f2f3f6; --text-2:#dfe2ea; --muted:#a6acbe;
   color-scheme:dark;
 }}
@@ -35,7 +35,7 @@
   --page:#1b1e26; --surface:#262a35; --subtle:#2e3340; --line:#3c4253; --edge:#aab2c8; --shade:#5d6580;
   --accent:#2cc6e6; --accent-2:#4fd6e3; --accent-text:#4fd1ec; --accent-soft:rgba(44,198,230,.3); --accent-50:#193a3f;
   --blob-1:#2a2a2b; --blob-2:#2a2429; --blob-3:#1f2a30;
-  --on-accent:#08161b; --danger:#d9574f; --danger-2:#d9574f; --danger-text:#ff8f87; --warn:#f2b456;
+  --on-accent:#08161b; --danger:#c8463f; --danger-2:#c8463f; --danger-text:#ff8f87; --warn:#f2b456;
   --text:#f2f3f6; --text-2:#dfe2ea; --muted:#a6acbe;
   color-scheme:dark;
 }
@@ -229,9 +229,6 @@ pre.cmd{font:14px/1.4 var(--mono);background:var(--surface);padding:10px 12px;bo
 .check input{width:22px;height:22px;accent-color:var(--danger);flex:none;margin-top:1px}
 .check b{display:block;font-weight:600;color:var(--text)}
 .check span{font-size:13px;color:var(--text-2)}
-.field-group{display:flex;flex-direction:column;gap:14px;align-items:stretch}
-.field-group .btn{align-self:flex-start}
-form[action="/extras"] .check input{accent-color:var(--accent)}  /* a choice, not a removal */
 .sep{border:0;height:2px;border-radius:2px;box-shadow:var(--inset);margin:8px 0}
 
 /* tracker catalogue */
@@ -355,23 +352,28 @@ fieldset.field legend{padding:0;margin-bottom:8px}
   text-decoration-thickness:.2em;text-underline-offset:-.06em;text-decoration-skip-ink:none}
 :root[data-style="plaid"] h2{font-weight:900}
 /* every well becomes a white card; the large ones pop like debrief's panels */
-:where(.note,.diff,.manual,.steps,.detail,.tip,.check,.trackers,.grid-wrap,.picker-panel,.vpn,.pcard,.lang,.st,.meter,.knot.wait){
+:where(.note,.diff,.manual,.steps,.detail,.tip,.check,.trackers,.grid-wrap,.picker-panel,.vpn,.lang,.st,.meter,.knot.wait){
   background:var(--surface)}
 :root[data-style="plaid"] :is(.steps,.tip,.diff,.manual,.trackers,.grid-wrap,.check,.vpn,.picker-panel){box-shadow:var(--raised)}
-:root[data-style="plaid"] body.wide .pcard{box-shadow:var(--raised)}
+@media (min-width:960px){ :root[data-style="plaid"] body.wide .pcard{background:var(--surface);box-shadow:var(--raised)} }
+:root[data-style="plaid"] :focus-visible{outline-color:var(--accent)}
+:root[data-style="plaid"] form[action="/extras"]{display:flex;flex-direction:column;gap:14px}
+:root[data-style="plaid"] form[action="/extras"] .btn{align-self:flex-start}
+:root[data-style="plaid"] form[action="/extras"] .check input{accent-color:var(--accent)}  /* a choice, not a removal */
 :root[data-style="plaid"] .note{background:var(--subtle);box-shadow:inset 0 0 0 2px var(--line)}
 :root[data-style="plaid"] .sep{height:0;box-shadow:none;border-top:2px dashed var(--line)}
 :root[data-style="plaid"] .track{height:12px}
 :root[data-style="plaid"] .st{height:10px}
 :root[data-style="plaid"] .st.on{box-shadow:inset 0 0 0 2px var(--edge)}
+:root[data-style="plaid"] .st.now{background:var(--accent-50);box-shadow:inset 0 0 0 2px var(--accent)}
 :root[data-style="plaid"] .knot.ok{box-shadow:inset 0 0 0 2px var(--edge)}
 /* buttons: white, ink ring, offset shadow; coral for the main action; pressing sinks them into the shadow */
 :root[data-style="plaid"] .btn{color:var(--text);font-weight:900}
 :root[data-style="plaid"] :is(.btn,.chip,.app,.back,.menu summary,.trackers button){
   transition:transform var(--press),box-shadow var(--press),background var(--smooth),color var(--smooth)}
-:root[data-style="plaid"] :is(.btn,.app,.trackers button:not(:disabled)):hover{transform:translate(-1px,-1px);
+:root[data-style="plaid"] :is(.btn,.app,.trackers button):not(:disabled):hover{transform:translate(-1px,-1px);
   box-shadow:inset 0 0 0 2px var(--edge),5px 5px 0 var(--shade)}
-:root[data-style="plaid"] :is(.btn,.app,.back,.chip,.trackers button,.menu summary):active{transform:translate(3px,3px);
+:root[data-style="plaid"] :is(.btn,.app,.back,.chip,.trackers button,.menu summary):not(:disabled):active{transform:translate(3px,3px);
   box-shadow:inset 0 0 0 2px var(--edge),1px 1px 0 var(--shade)}
 :root[data-style="plaid"] .btn.primary{background:var(--coral);color:var(--on-fill)}
 :root[data-style="plaid"] .btn.danger{background:var(--danger);color:#fff}
