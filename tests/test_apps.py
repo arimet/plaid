@@ -530,3 +530,19 @@ class TorrentCleanupTest(unittest.TestCase):
         with mock.patch("installer.apps.call", self.fake_call(login_ok=False)):
             with self.assertRaises(RuntimeError):
                 apps.finished_torrents(acct(), "qbittorrent:8080", [])
+
+
+class TuningTest(unittest.TestCase):
+    def test_qbittorrent_tuning(self):
+        self.assertEqual(apps.qbit_tuning(), {
+            "queueing_enabled": True, "max_active_downloads": 10, "max_active_uploads": -1,
+            "max_active_torrents": -1, "dont_count_slow_torrents": True, "lsd": False, "disk_io_type": 2,
+            "add_trackers_from_url_enabled": True,
+            "add_trackers_url": "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt"})
+
+    def test_bonus_failure_does_not_raise(self):
+        def broken():
+            raise apps.HttpError(500, "http://x", "no")
+        with mock.patch("sys.stderr"):
+            self.assertIsNone(apps._bonus("broken", broken))
+        self.assertEqual(apps._bonus("fine", lambda: 7), 7)

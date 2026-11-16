@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.cookiejar
 import json
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -93,7 +94,26 @@ def read_when(compose_out: ComposeOut, svc: str, path: str, pattern: str, second
         time.sleep(3)
 
 
+def _bonus(name: str, action: Callable[[], object]):
+    """Runs a setting that makes the stack better but not working: its failure never stops an install."""
+    try:
+        return action()
+    except Exception as e:  # noqa: BLE001 - any error of a bonus setting is only logged
+        print(f"bonus: {name} failed: {e}", file=sys.stderr)
+        return None
+
+
 # ---------------------------------------------------------------- qBittorrent
+
+TRACKERS_URL = "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt"
+
+
+def qbit_tuning() -> dict:
+    """Public trackers: more peers from a maintained list, 10 downloads at a time (slow ones do not count), no
+    local peer discovery, and pread/pwrite disk access (sturdier than mmap on a NAS; applies at the next restart)."""
+    return {"queueing_enabled": True, "max_active_downloads": 10, "max_active_uploads": -1,
+            "max_active_torrents": -1, "dont_count_slow_torrents": True, "lsd": False, "disk_io_type": 2,
+            "add_trackers_from_url_enabled": True, "add_trackers_url": TRACKERS_URL}
 
 def _qbit_login(host: str, name: str, pw: str) -> bool:
     """False on a wrong password; an unreachable qBittorrent raises OSError. qBittorrent bans the address after
@@ -127,6 +147,8 @@ def configure_qbittorrent(s: Settings, host: str, compose_out: ComposeOut, log: 
     prefs = {"web_ui_username": s.username, "web_ui_password": s.password, "bypass_local_auth": True,
              "save_path": "/data/torrents", "auto_tmm_enabled": True}
     call("POST", base + "/app/setPreferences", {"json": json.dumps(prefs)}, headers, form=True)
+    _bonus("qbittorrent tuning", lambda: call("POST", base + "/app/setPreferences",
+                                               {"json": json.dumps(qbit_tuning())}, headers, form=True))
     key = call("GET", base + "/app/preferences", headers=headers).get("web_ui_api_key")
     if not key:
         key = call("POST", base + "/app/rotateAPIKey", headers=headers)["apiKey"]
