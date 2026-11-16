@@ -194,7 +194,30 @@ def _jellyfin_auth(host: str, name: str, pw: str) -> tuple[dict, str]:
     return {"Authorization": f'{JELLYFIN_CLIENT}, Token="{reply["AccessToken"]}"'}, reply["User"]["Id"]
 
 
-def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log) -> tuple[str, list[str]]:
+# vainfo profile with a decoder (VAEntrypointVLD) -> Jellyfin codec, in the order of Jellyfin's own list.
+DECODERS = {"VAProfileH264Main": "h264", "VAProfileH264High": "h264", "VAProfileHEVCMain": "hevc",
+            "VAProfileMPEG2Main": "mpeg2video", "VAProfileVC1Advanced": "vc1", "VAProfileVP8Version0_3": "vp8",
+            "VAProfileVP9Profile0": "vp9", "VAProfileAV1Profile0": "av1"}
+DEPTHS = {"VAProfileHEVCMain10": "EnableDecodingColorDepth10Hevc", "VAProfileVP9Profile2": "EnableDecodingColorDepth10Vp9",
+          "VAProfileHEVCMain422_10": "EnableDecodingColorDepth10HevcRext",
+          "VAProfileHEVCMain12": "EnableDecodingColorDepth12HevcRext"}
+VAINFO = ("exec", "-T", "jellyfin", "/usr/lib/jellyfin-ffmpeg/vainfo", "--display", "drm",
+          "--device", "/dev/dri/renderD128")
+
+
+def decoding_options(vainfo: str) -> dict:
+    """Jellyfin's encoding settings for what the GPU decodes, read from vainfo; {} when it decodes nothing.
+    Without this, Jellyfin decodes only H264 and VC1 on the GPU: HEVC and 10-bit films go to the processor."""
+    found = set(re.findall(r"^\s*(VAProfile\w+)\s*:\s*VAEntrypointVLD\s*$", vainfo, re.M))
+    codecs = list(dict.fromkeys(codec for profile, codec in DECODERS.items() if profile in found))
+    if not codecs:
+        return {}
+    return {"HardwareDecodingCodecs": codecs, **{key: profile in found for profile, key in DEPTHS.items()},
+            "EnableTonemapping": True, "EnableThrottling": True, "EnableSegmentDeletion": True}
+
+
+def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log,
+                       compose_out: ComposeOut) -> tuple[str, list[str]]:
     """Returns (API key for Radarr/Sonarr, library names)."""
     base = f"http://{host}"
     wait_for(base + "/System/Info/Public")
@@ -235,7 +258,14 @@ def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log) -> tuple
     if has_dri:
         encoding = call("GET", base + "/System/Configuration/encoding", headers=auth)
         encoding.update(HardwareAccelerationType="vaapi", VaapiDevice="/dev/dri/renderD128")
+        encoding.update(_bonus("jellyfin decoders", lambda: decoding_options(compose_out(*VAINFO))) or {})
         call("POST", base + "/System/Configuration/encoding", encoding, auth)
+
+        def trickplay():
+            config = call("GET", base + "/System/Configuration", headers=auth)
+            config.setdefault("TrickplayOptions", {}).update(EnableHwAcceleration=True, EnableKeyFrameOnlyExtraction=True)
+            call("POST", base + "/System/Configuration", config, auth)
+        _bonus("jellyfin trickplay", trickplay)
 
     def arr_key():
         return next((k["AccessToken"] for k in call("GET", base + "/Auth/Keys", headers=auth)["Items"]
@@ -569,7 +599,7 @@ def configure_all(s: Settings, host_of: Callable[[str], str], log: Log, compose_
     """host_of("radarr") -> "radarr:7878" as seen from the caller. Returns API keys and what was set up."""
     qbit_host = "gluetun" if s.vpn_provider else "qbittorrent"
     qbit_key = configure_qbittorrent(s, host_of("qbittorrent"), compose_out, log)
-    jellyfin_key, libraries = configure_jellyfin(s, host_of("jellyfin"), has_dri, log)
+    jellyfin_key, libraries = configure_jellyfin(s, host_of("jellyfin"), has_dri, log, compose_out)
     radarr = Arr("radarr", host_of("radarr"), "v3", compose_out)
     sonarr = Arr("sonarr", host_of("sonarr"), "v3", compose_out)
     configure_arr(radarr, s, MOVIES, "movieCategory", "movies", qbit_host, qbit_key, jellyfin_key, log)

@@ -555,3 +555,71 @@ class TuningTest(unittest.TestCase):
         self.assertEqual(extras["settings-general-subzero_mods"], ["OCR_fixes", "common"])
         self.assertEqual(extras["settings-general-ignore_pgs_subs"], "true")
         self.assertEqual(extras["settings-general-ignore_vobsub_subs"], "true")
+
+
+VAINFO_INTEL = """Trying display: drm
+vainfo: VA-API version: 1.22 (libva 2.22.0)
+      VAProfileH264Main               : VAEntrypointVLD
+      VAProfileH264High               : VAEntrypointVLD
+      VAProfileH264High               : VAEntrypointEncSliceLP
+      VAProfileHEVCMain               : VAEntrypointVLD
+      VAProfileHEVCMain10             : VAEntrypointVLD
+      VAProfileHEVCMain12             : VAEntrypointEncSlice
+      VAProfileVP9Profile0            : VAEntrypointVLD
+      VAProfileVP9Profile2            : VAEntrypointVLD
+      VAProfileAV1Profile0            : VAEntrypointVLD
+"""
+
+
+class DecodingTest(unittest.TestCase):
+    def test_codecs_the_gpu_decodes(self):
+        o = apps.decoding_options(VAINFO_INTEL)
+        self.assertEqual(o["HardwareDecodingCodecs"], ["h264", "hevc", "vp9", "av1"])
+        self.assertTrue(o["EnableDecodingColorDepth10Hevc"])
+        self.assertTrue(o["EnableDecodingColorDepth10Vp9"])
+        self.assertFalse(o["EnableDecodingColorDepth10HevcRext"])
+        self.assertFalse(o["EnableDecodingColorDepth12HevcRext"])  # only an encoder line
+        for key in ("EnableTonemapping", "EnableThrottling", "EnableSegmentDeletion"):
+            self.assertTrue(o[key], key)
+
+    def test_no_decoder_found_changes_nothing(self):
+        self.assertEqual(apps.decoding_options(""), {})
+        self.assertEqual(apps.decoding_options("vainfo: error: failed to initialize display"), {})
+
+    def jellyfin_with_gpu(self, compose_out):
+        posted = {}
+
+        def fake_call(method, url, body=None, headers=None, form=False):
+            path = url.split("8096", 1)[1]
+            if path == "/System/Info/Public":
+                return {"StartupWizardCompleted": True}
+            if path == "/Users/AuthenticateByName":
+                return {"AccessToken": "t", "User": {"Id": "u"}}
+            if path == "/Library/VirtualFolders":
+                return [{"Name": n} for n in apps.LIBRARY_NAMES["fr"]]
+            if path == "/System/Configuration/encoding" and method == "GET":
+                return {"HardwareAccelerationType": "none"}
+            if path == "/System/Configuration" and method == "GET":
+                return {}
+            if path == "/Auth/Keys":
+                return {"Items": [{"AppName": "arr", "AccessToken": "k"}]}
+            if method == "POST":
+                posted[path] = body
+            return None
+        with mock.patch("installer.apps.call", fake_call), mock.patch("installer.apps.wait_for"), \
+                mock.patch("sys.stderr"):
+            apps.configure_jellyfin(chosen(), "jellyfin:8096", True, lambda _: None, compose_out)
+        return posted
+
+    def test_jellyfin_gets_the_gpu_decoders(self):
+        posted = self.jellyfin_with_gpu(lambda *args: VAINFO_INTEL)
+        self.assertEqual(posted["/System/Configuration/encoding"]["HardwareAccelerationType"], "vaapi")
+        self.assertEqual(posted["/System/Configuration/encoding"]["HardwareDecodingCodecs"], ["h264", "hevc", "vp9", "av1"])
+        self.assertTrue(posted["/System/Configuration"]["TrickplayOptions"]["EnableHwAcceleration"])
+
+    def test_vainfo_failure_keeps_vaapi(self):
+        def broken(*args):
+            raise apps.DockerError("no vainfo")
+        encoding = self.jellyfin_with_gpu(broken)["/System/Configuration/encoding"]
+        self.assertEqual(encoding["HardwareAccelerationType"], "vaapi")
+        self.assertNotIn("HardwareDecodingCodecs", encoding)
