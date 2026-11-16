@@ -553,7 +553,8 @@ class TuningTest(unittest.TestCase):
         self.assertEqual(extras["settings-general-enabled_providers"],
                          ["podnapisi", "addic7ed", "gestdown", "soustitreseu", "subsynchro", "tvsubtitles",
                           "embeddedsubtitles"])
-        self.assertEqual(extras["settings-general-subzero_mods"], ["OCR_fixes", "common"])
+        self.assertNotIn("settings-general-subzero_mods", extras)  # Bazarr refuses it: one key per fix
+        self.assertEqual((extras["subzero-OCR_fixes"], extras["subzero-common"]), ("true", "true"))
         self.assertEqual(extras["settings-general-ignore_pgs_subs"], "true")
         self.assertEqual(extras["settings-general-ignore_vobsub_subs"], "true")
 
