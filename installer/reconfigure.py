@@ -4,16 +4,18 @@ from __future__ import annotations
 import copy
 import json
 import os
+import time
 from dataclasses import asdict, replace
 from types import SimpleNamespace
 from typing import Callable
 
-from installer import apps, docker, flow, media
+from installer import apps, docker, flow, media, people
+from installer.docker import DockerError
 from installer.compose import PORTS
 from installer.flow import Progress
 from installer.settings import Settings, is_absolute, validate
 
-STEPS_ORDER = ("step_folder", "step_compose", "step_vpn", "step_download_client", "step_tailscale",
+STEPS_ORDER = ("step_folder", "step_compose", "step_vpn", "step_download_client", "step_tailscale", "step_funnel",
                "step_rescan", "step_profiles", "step_subtitles", "step_metadata", "step_account", "step_save")
 MEDIA_FIELDS = ("audio_lang", "profiles", "default_profile", "subtitle_langs", "metadata_lang")
 
@@ -32,13 +34,15 @@ def merge(old: Settings, data: dict) -> Settings:
         else:
             fields = {**old.vpn_fields, **given}
     tailscale = "" if data.get("remove_tailscale") else text("tailscale_key", old.tailscale_key)
+    internet = bool(data["internet_access"]) if "internet_access" in data else old.internet_access
     chosen = {k: data[k] for k in MEDIA_FIELDS if k in data}  # absent: as it was (None stays never chosen)
     if "backup_dir" in data:  # blank: back to the default, in the media folder
         chosen["backup_dir"] = str(data["backup_dir"] or "").strip() or None
     return replace(old, **chosen, data_dir=text("data_dir", old.data_dir), username=text("username", old.username),
                    password=str(data.get("password") or "") or old.password, vpn_provider=provider,
                    vpn_fields=fields, timezone=text("timezone", old.timezone),
-                   lang=data["lang"] if data.get("lang") in ("en", "fr") else old.lang, tailscale_key=tailscale)
+                   lang=data["lang"] if data.get("lang") in ("en", "fr") else old.lang, tailscale_key=tailscale,
+                   internet_access=internet and bool(tailscale))  # Funnel lives in Plaid's Tailscale container
 
 
 def _kind(before, after) -> str | None:
@@ -54,6 +58,7 @@ def changes(old: Settings, new: Settings) -> dict[str, str]:
         "vpn": _kind(old.vpn_provider and (old.vpn_provider, old.vpn_fields),
                      new.vpn_provider and (new.vpn_provider, new.vpn_fields)),
         "tailscale": _kind(old.tailscale_key, new.tailscale_key),
+        "internet": _kind(old.internet_access, new.internet_access),
         "account": "change" if (old.username, old.password) != (new.username, new.password) else None,
         "folder": "change" if old.data_dir != new.data_dir else None,
         "backup": "change" if old.backup_dir != new.backup_dir else None,
@@ -86,6 +91,10 @@ def steps(chg: dict[str, str], vpn_after: bool) -> list[str]:
         wanted.add("step_compose")
         if chg["tailscale"] == "change":
             wanted.add("step_tailscale")
+    if "internet" in chg:
+        wanted.add("step_compose")
+        if chg["internet"] == "add":
+            wanted.add("step_funnel")
     for kind in ("profiles", "subtitles", "metadata"):
         if kind in chg:
             wanted.add(f"step_{kind}")
@@ -219,6 +228,8 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
                 dk.compose(state_dir, "rm", "-sf", "tailscale")
                 dk.remove("volume", f"{docker.PROJECT}_tailscale-state")
                 dk.compose(state_dir, "up", "-d", "tailscale")
+            elif step == "step_funnel":
+                _funnel_up(dk, state_dir)
             elif step == "step_rescan":
                 # Best effort: a scan that fails (Jellyfin still starting, password changed by hand) must not
                 # undo the new folder; the apps also scan on their own schedule.
@@ -235,7 +246,8 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
                 ops.metadata(old, new)
     except Exception as e:  # noqa: BLE001 - shown with its detail; the stack goes back to how it was
         arr_ids = _rollback(old, started, dk, state_dir, has_dri, ops, vpn_wait, arr_ids)
-        report(Progress(step, error="err_apply_failed", detail=str(e)))
+        error = "err_funnel_not_allowed" if isinstance(e, FunnelRefused) else "err_apply_failed"
+        report(Progress(step, error=error, detail=str(e)))
         return None
 
     not_changed: list[str] = []
@@ -254,6 +266,28 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
 
 
 ACCOUNT_APPS = ("radarr", "sonarr", "prowlarr", "bazarr", "qbittorrent", "jellyfin")
+
+
+FUNNEL_WAIT = 60  # seconds for the tailscale container to come back with its serve config
+
+
+class FunnelRefused(Exception):
+    """The tailnet does not allow it yet: HTTPS or the funnel attribute is off in the Tailscale console."""
+
+
+def _funnel_up(dk, state_dir: str) -> None:
+    deadline = time.time() + FUNNEL_WAIT
+    while True:
+        try:
+            out = dk.compose(state_dir, "exec", "-T", "tailscale", "tailscale", "status", "--json").stdout
+        except DockerError:  # the container is being recreated
+            out = ""
+        ready, url = people.funnel_status(out)
+        if ready:
+            return
+        if time.time() >= deadline:
+            raise FunnelRefused(f"Tailscale does not allow Funnel for {url or 'this machine'}")
+        time.sleep(3)
 
 
 def _vpn_up(dk, state_dir: str, vpn_wait: int) -> None:

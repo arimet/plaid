@@ -81,6 +81,7 @@ import os
 import tempfile
 from dataclasses import replace
 from types import SimpleNamespace
+from unittest import mock
 
 from installer import flow
 from installer.docker import DockerError
@@ -509,3 +510,47 @@ class MetadataOpTest(unittest.TestCase):
                 mock.patch("installer.apps.set_seerr_lang", lambda s, login, host: done.append(("seerr", host))):
             reconfigure.default_ops(settings(), FakeDocker(), "/state").metadata(settings(), settings(metadata_lang="es"))
         self.assertEqual(done, [("jellyfin", "jellyfin:8096"), ("seerr", "seerr:5055")])
+
+
+TS_READY = json.dumps({"Self": {"DNSName": "plaid.tail1234.ts.net.", "CapMap": {"https": None, "funnel": None}}})
+TS_NO_FUNNEL = json.dumps({"Self": {"DNSName": "plaid.tail1234.ts.net.", "CapMap": {"https": None}}})
+
+
+class TailscaleDocker(FakeDocker):
+    def __init__(self, status):
+        super().__init__()
+        self.status = status
+
+    def compose(self, state_dir, *args, timeout=None):
+        result = super().compose(state_dir, *args, timeout=timeout)
+        if args[-2:] == ("status", "--json"):
+            return SimpleNamespace(stdout=self.status)
+        return result
+
+
+class InternetAccessTest(ApplyTest):
+    def test_changes_and_steps(self):
+        on, off = settings(tailscale_key="tskey-a", internet_access=True), settings(tailscale_key="tskey-a")
+        self.assertEqual(reconfigure.changes(off, on), {"internet": "add"})
+        self.assertEqual(reconfigure.steps({"internet": "add"}, True), ["step_compose", "step_funnel", "step_save"])
+        self.assertEqual(reconfigure.steps({"internet": "remove"}, True), ["step_compose", "step_save"])
+
+    def test_removing_tailscale_turns_it_off(self):
+        new = reconfigure.merge(settings(tailscale_key="tskey-a", internet_access=True), {"remove_tailscale": True})
+        self.assertFalse(new.internet_access)
+
+    def test_turned_on_once_tailscale_allows_it(self):
+        old = settings(tailscale_key="tskey-a")
+        self.assertEqual(self.run_apply(old, settings(tailscale_key="tskey-a", internet_access=True),
+                                        dk=TailscaleDocker(TS_READY)), [])
+        self.assertTrue(self.saved().internet_access)
+        self.assertIn("TS_SERVE_CONFIG", self.compose_json()["services"]["tailscale"]["environment"])
+
+    def test_refused_by_the_tailnet_goes_back(self):
+        old = settings(tailscale_key="tskey-a")
+        with mock.patch("installer.reconfigure.FUNNEL_WAIT", 0):
+            self.assertIsNone(self.run_apply(old, settings(tailscale_key="tskey-a", internet_access=True),
+                                             dk=TailscaleDocker(TS_NO_FUNNEL)))
+        self.assertFalse(self.saved().internet_access)
+        self.assertNotIn("TS_SERVE_CONFIG", self.compose_json()["services"]["tailscale"]["environment"])
+        self.assertEqual((self.events[-1].error, self.events[-1].step), ("err_funnel_not_allowed", "step_funnel"))

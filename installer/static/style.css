@@ -160,6 +160,8 @@ label.l,legend.l{font:700 14px/1.2 Nunito,sans-serif;color:var(--text)}
 form.inline{display:inline}
 .person .btn.small{font-size:14px;padding:8px 12px}
 textarea.invite{width:100%;font:inherit;line-height:1.5;resize:vertical;margin:12px 0}
+pre.cmd{font:14px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--surface);padding:10px 12px;border-radius:8px;
+  overflow-x:auto;white-space:pre-wrap;word-break:break-all}
 .changes{padding-left:20px;line-height:1.7}
 
 /* ----------------------------------------------------------------- buttons */

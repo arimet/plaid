@@ -24,6 +24,11 @@ IMAGES = {
     "tailscale": "tailscale/tailscale:latest",
 }
 CONFIG_DIR = {"seerr": "/app/config"}  # linuxserver images all use /config
+SERVE_FILE = "tailscale-serve.json"  # in Plaid's state volume, read by the tailscale container
+# Tailscale Funnel: https on 443 to Jellyfin alone. Seerr and the apps that run the stack are never public.
+SERVE_CONFIG = {"TCP": {"443": {"HTTPS": True}},
+                "Web": {"${TS_CERT_DOMAIN}:443": {"Handlers": {"/": {"Proxy": f"http://127.0.0.1:{PORTS['jellyfin']}"}}}},
+                "AllowFunnel": {"${TS_CERT_DOMAIN}:443": True}}
 # Docker keeps every log line forever by default: on a NAS, the system disk fills up.
 LOGGING = {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}
 
@@ -76,6 +81,10 @@ def render_compose(s: Settings, data_source: str, has_dri: bool) -> dict:
             "restart": "unless-stopped", "labels": dict(LABELS),
         }
         volumes["tailscale-state"] = {"labels": dict(LABELS)}
+        if s.internet_access:  # the file sits in Plaid's own volume: written with compose.json, restored with it
+            services["tailscale"]["volumes"].append("plaid-state:/plaid-state:ro")
+            services["tailscale"]["environment"]["TS_SERVE_CONFIG"] = f"/plaid-state/{SERVE_FILE}"
+            volumes["plaid-state"] = {"external": True}
     for conf in services.values():
         conf["logging"] = LOGGING
     return {"services": services, "volumes": volumes, "networks": {"default": {"labels": dict(LABELS)}}}

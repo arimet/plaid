@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass, field, replace
 from typing import Callable
 
 from installer import apps, docker, media, people
-from installer.compose import PORTS, render_compose
+from installer.compose import PORTS, SERVE_CONFIG, SERVE_FILE, render_compose
 from installer.docker import DockerError
 from installer.settings import Settings, validate
 
@@ -93,9 +93,18 @@ def owner_unlock(state_dir: str = STATE_DIR) -> None:
     people.unlock_owner(JELLYFIN, key, s.username)
 
 
-def funnel_url(state_dir: str = STATE_DIR) -> str | None:
-    """The public address of Jellyfin, when the Internet access is on and works (filled by the Funnel task)."""
-    return None
+def funnel_url(state_dir: str = STATE_DIR, dk=docker) -> str | None:
+    """Jellyfin's public address, when the access from the Internet is on and Tailscale allows it."""
+    s = load_settings(state_dir)
+    if not (s and s.internet_access and s.tailscale_key):
+        return None
+    try:
+        out = dk.compose(state_dir, "exec", "-T", "tailscale", "tailscale", "status", "--json",
+                         timeout=docker.HELPER_TIMEOUT).stdout
+    except DockerError:
+        return None
+    ready, url = people.funnel_status(out)
+    return url if ready else None
 
 
 def seerr_owner_only(state_dir: str = STATE_DIR) -> None:
@@ -183,7 +192,7 @@ def disk_warnings(s: Settings, dk=docker) -> list[str]:
 def _write_state(s: Settings, state_dir: str, data_source: str, has_dri: bool) -> None:
     os.makedirs(state_dir, exist_ok=True)
     files = {"compose.json": json.dumps(render_compose(s, data_source, has_dri), indent=1, ensure_ascii=False),
-             "settings.json": s.to_json()}
+             "settings.json": s.to_json(), SERVE_FILE: json.dumps(SERVE_CONFIG)}
     for name, text in files.items():
         path = os.path.join(state_dir, name)
         with open(path, "w", encoding="utf-8") as f:

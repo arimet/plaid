@@ -122,3 +122,33 @@ class GuardComposeTest(unittest.TestCase):
         c = render_compose(s, "/srv/arr", False)
         for name, svc in c["services"].items():
             self.assertEqual(svc["restart"], "no" if name in DISK_APPS else "unless-stopped", name)
+
+
+class InternetAccessTest(unittest.TestCase):
+    def render(self, **kw):
+        from dataclasses import replace
+        return render_compose(replace(make(), **kw), "/srv/arr", has_dri=False)
+
+    def test_off_changes_nothing(self):
+        self.assertEqual(self.render(tailscale_key="tskey-x"), self.render(tailscale_key="tskey-x", internet_access=False))
+        self.assertNotIn("plaid-state", json.dumps(self.render(tailscale_key="tskey-x")))
+
+    def test_on_serves_jellyfin_through_funnel(self):
+        c = self.render(tailscale_key="tskey-x", internet_access=True)
+        ts = c["services"]["tailscale"]
+        self.assertIn("plaid-state:/plaid-state:ro", ts["volumes"])
+        self.assertEqual(ts["environment"]["TS_SERVE_CONFIG"], "/plaid-state/tailscale-serve.json")
+        self.assertEqual(c["volumes"]["plaid-state"], {"external": True})
+
+    def test_on_without_tailscale_does_nothing(self):
+        self.assertEqual(self.render(internet_access=True), self.render())
+
+
+class ServeConfigTest(unittest.TestCase):
+    def test_only_jellyfin_is_published(self):
+        from installer.compose import SERVE_CONFIG
+        text = json.dumps(SERVE_CONFIG)
+        self.assertIn("http://127.0.0.1:8096", text)
+        for port in (5055, 7878, 8989, 8080, 9696, 6767, 7575):
+            self.assertNotIn(str(port), text)
+        self.assertEqual(SERVE_CONFIG["AllowFunnel"], {"${TS_CERT_DOMAIN}:443": True})

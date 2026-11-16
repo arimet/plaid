@@ -2,6 +2,7 @@
 key, never with the owner's password, so an owner locked out by wrong attempts can still be unlocked from Plaid."""
 from __future__ import annotations
 
+import json
 import os
 import secrets
 
@@ -138,3 +139,15 @@ def invite_text(lang: str, s: Settings, host: str, name: str, password: str, fun
     if funnel_url:
         lines.append(t(lang, "invite_internet", url=funnel_url))
     return "\n".join(lines + ["", t(lang, "invite_apps"), t(lang, "invite_locked")])
+
+
+def funnel_status(out: str) -> tuple[bool, str | None]:
+    """(Funnel allowed, public address) from `tailscale status --json`: the tailnet must give this machine both
+    HTTPS certificates and the funnel attribute, which only its owner can switch on in the Tailscale console."""
+    try:
+        me = json.loads(out)["Self"]
+        caps = me.get("CapMap") or {}
+        url = "https://" + me["DNSName"].rstrip(".") if me.get("DNSName") else None
+        return "https" in caps and "funnel" in caps and url is not None, url
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return False, None

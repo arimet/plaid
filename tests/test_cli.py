@@ -614,3 +614,26 @@ class PeopleCliTest(TuiCliTest):
         t, out = self.term(self.PEOPLE, "\r", "\x1b[A\r")  # people · Enter to go back · quit
         self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
         self.assertIn("Plaid n’a pas pu se connecter à Jellyfin", out.getvalue())
+
+
+class InternetCliTest(TuiCliTest):
+    REMOTE = "\x1b[B\x1b[B\r"
+
+    def test_switch_on_with_tailscale(self):
+        from dataclasses import replace
+        flow = installed_flow()
+        flow.settings = replace(flow.settings, tailscale_key="tskey-a")
+        t, out = self.term(self.REMOTE, "\r", "\r")  # remote · turn on · apply
+        self.assertEqual(cli.run_panel_tui(t, flow, ENV, flow.settings), 0)
+        self.assertTrue(flow.started.internet_access)
+        self.assertEqual(flow.started.tailscale_key, "tskey-a")
+        self.assertIn("visible par tout Internet", out.getvalue())
+
+    def test_desktop_gets_the_commands(self):
+        from dataclasses import replace
+        flow = installed_flow()
+        flow.settings = replace(flow.settings, platform="mac")
+        t, out = self.term(self.REMOTE, "\r", "\x1b[A\r")  # remote · Enter to go back · quit
+        cli.run_panel_tui(t, flow, ENV, flow.settings)
+        self.assertIn("tailscale funnel --bg 8096", out.getvalue())
+        self.assertIsNone(flow.started)

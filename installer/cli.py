@@ -403,11 +403,10 @@ def run_panel_tui(term, flow, env: dict, s, complete: bool = True) -> int:
                     term.page(t(lang, "trackers_title"), t(lang, "trackers_help"))
                     _pick_trackers(term, flow, lang)
                 elif choice == "remote":
-                    key = "remote_done_steps" if s.tailscale_key else "remote_desktop_steps"
-                    term.page(t(lang, "remote_done_title"), t(lang, "nav_remote_desc"))
-                    for n, line in enumerate(t(lang, key).split("|"), 1):
-                        term.note(f"{n}. {line}")
-                    term.pause(t(lang, "cli_back"))
+                    result = _remote_tui(term, flow, lang, s, host)
+                    if result is not None:  # the Internet access changed: the panel closes on its outcome
+                        code, notes = result
+                        break
                 elif choice == "people":
                     flash = _people_tui(term, flow, lang, s, host)
                 elif choice == "settings":
@@ -501,6 +500,40 @@ def _restore_tui(term, flow, lang: str, s) -> str:
     return _follow(term, flow, lang, lambda: flow.start_restore(name),
                    ("step_restore_stop", "step_restore_copy", "step_restore_start"), "err_restore_failed",
                    lambda last: t(lang, "restore_back", date=backup_date(lang, last.get("detail") or name)))
+
+
+def _remote_tui(term, flow, lang: str, s, host: str) -> tuple[int, Notes] | None:
+    """Tailscale's steps, then the access from the Internet: a switch with Plaid's Tailscale, commands otherwise."""
+    from dataclasses import replace
+    from installer import reconfigure
+    from installer.web import FUNNEL_OFF, FUNNEL_ON
+    key = "remote_done_steps" if s.tailscale_key else "remote_desktop_steps"
+    term.page(t(lang, "remote_done_title"), t(lang, "nav_remote_desc"))
+    for n, line in enumerate(t(lang, key).split("|"), 1):
+        term.note(f"{n}. {line}")
+    term.line()
+    term.note(f'{t(lang, "internet_title")}. {t(lang, "internet_help")}')
+    term.note(t(lang, "internet_warning"), "warn")
+    if s.platform in ("mac", "windows") or not s.tailscale_key:
+        if s.platform in ("mac", "windows"):
+            term.note(t(lang, "internet_desktop"))
+            term.line("  " + FUNNEL_ON)
+            term.line("  " + FUNNEL_OFF)
+        else:
+            term.note(t(lang, "internet_no_tailscale"))
+        term.pause(t(lang, "cli_back"))
+        return None
+    if s.internet_access:
+        url = flow.funnel_url()
+        term.note(t(lang, "internet_is_on", url=url) if url else t(lang, "internet_is_on_pending"), "ok")
+    else:
+        term.note(t(lang, "internet_needs"))
+    toggle = ("toggle", t(lang, "internet_off_btn" if s.internet_access else "internet_on_btn"))
+    if term.select(t(lang, "menu_title"), [toggle, ("back", t(lang, "people_back"))],
+                   hint=t(lang, "cli_select_hint")) == "back":
+        return None
+    new = replace(s, internet_access=not s.internet_access)  # only this setting moves
+    return _apply_tui(term, flow, lang, s, new, reconfigure.changes(s, new), host)
 
 
 def _people_tui(term, flow, lang: str, s, host: str) -> str:

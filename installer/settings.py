@@ -33,6 +33,7 @@ class Settings:
     metadata_lang: str | None = None
     arr_ids: dict = field(default_factory=dict)  # {"radarr": {"formats": {...}, "profiles": {...}}, "sonarr": ...}
     backup_dir: str | None = None  # None: <data_dir>/backups (backup.py)
+    internet_access: bool = False  # Jellyfin on a public https://plaid.<tailnet>.ts.net (Tailscale Funnel)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)

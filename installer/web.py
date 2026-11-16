@@ -10,7 +10,7 @@ import secrets
 import threading
 import time
 import urllib.parse
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -597,7 +597,7 @@ def change_lines(lang: str, chg: dict[str, str], new: Settings) -> list[str]:
     value = {"lang": LANG_NAMES[new.lang], "timezone": new.timezone, "folder": new.data_dir,
              "backup": backup_where(new),
              "vpn": PROVIDERS[new.vpn_provider].label if new.vpn_provider else ""}
-    return [t(lang, f"change_{key}" + (f"_{kind}" if key in ("vpn", "tailscale") else ""), value=value.get(key, ""))
+    return [t(lang, f"change_{key}" + (f"_{kind}" if key in ("vpn", "tailscale", "internet") else ""), value=value.get(key, ""))
             for key, kind in chg.items()]
 
 
@@ -755,9 +755,31 @@ def settings_progress(lang: str, status: dict, host: str = "localhost") -> str:
     return subpage(lang, f'<ul class="steps">{steps}</ul>{extra}', head=head, side=f'<h1>{E(title)}</h1>')
 
 
-def remote_page(lang: str, s: Settings) -> str:
+FUNNEL_ON, FUNNEL_OFF = "tailscale funnel --bg 8096", "tailscale funnel --https=443 off"
+
+
+def internet_html(lang: str, s: Settings, url: str | None) -> str:
+    """The Internet access switch (Linux and Synology, Plaid's Tailscale), or the commands for a desktop's own app."""
+    head = (f'<div class="tip"><h2>{E(t(lang, "internet_title"))}</h2><p>{E(t(lang, "internet_help"))}</p>'
+            f'<p class="note warn">{E(t(lang, "internet_warning"))}</p>')
+    if s.platform in ("mac", "windows"):
+        return (head + f'<p>{E(t(lang, "internet_desktop"))}</p>'
+                f'<pre class="cmd">{E(FUNNEL_ON)}</pre><pre class="cmd">{E(FUNNEL_OFF)}</pre></div>')
+    if not s.tailscale_key:
+        return head + f'<p>{E(t(lang, "internet_no_tailscale"))} <a href="/settings">{E(t(lang, "nav_settings"))}</a></p></div>'
+    if s.internet_access:
+        state = t(lang, "internet_is_on", url=url) if url else t(lang, "internet_is_on_pending")
+        return (head + f'<p><b>{E(state)}</b></p><form method="post" action="/remote/internet">'
+                f'<input type="hidden" name="on" value="0"><button class="btn danger" type="submit">'
+                f'{E(t(lang, "internet_off_btn"))}</button></form></div>')
+    return (head + f'<p class="hint">{E(t(lang, "internet_needs"))}</p><form method="post" action="/remote/internet">'
+            f'<input type="hidden" name="on" value="1"><button class="btn" type="submit">'
+            f'{E(t(lang, "internet_on_btn"))}</button></form></div>')
+
+
+def remote_page(lang: str, s: Settings, url: str | None = None) -> str:
     key = "remote_done_steps" if s.tailscale_key else "remote_desktop_steps"
-    return subpage(lang, f'<div class="tip">{steps_html(lang, key)}</div>',
+    return subpage(lang, f'<div class="tip">{steps_html(lang, key)}</div>{internet_html(lang, s, url)}',
                    side=f'<h1>{E(t(lang, "remote_done_title"))}</h1><p class="lead">{E(t(lang, "nav_remote_desc"))}</p>')
 
 
@@ -1053,7 +1075,7 @@ def make_handler(state: State):
             if path == "/people":
                 return self.send(200, self.people_listing(lang))
             if path == "/remote":
-                return self.send(200, remote_page(lang, s))
+                return self.send(200, remote_page(lang, s, state.flow.funnel_url() if s.internet_access else None))
             if path == "/settings":
                 return self.send(200, settings_page(lang, s))
             if path == "/settings/progress":
@@ -1162,6 +1184,20 @@ def make_handler(state: State):
                     return self.json(401, {})
                 state.flow.confirm_disk(s)
                 return self.send(303, "", headers={"Location": "/"})
+            if path == "/remote/internet":
+                if self.locked() or s is None:
+                    return self.json(401, {})
+                on = data.get("on") == "1"
+                if (on and not s.tailscale_key) or s.platform in ("mac", "windows") or \
+                        state.flow.apply_status()["state"] == "running":
+                    return self.json(409, {})
+                if on == s.internet_access:
+                    return self.send(303, "", headers={"Location": "/remote"})
+                try:  # only this setting moves: the settings form would also send the VPN fields
+                    state.flow.start_apply(replace(s, internet_access=on), {})
+                except WorkerBusy:
+                    pass
+                return self.send(303, "", headers={"Location": "/settings/progress"})
             if path.startswith("/people/"):
                 if self.locked() or s is None:
                     return self.json(401, {})

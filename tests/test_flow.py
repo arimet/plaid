@@ -510,3 +510,35 @@ class PeopleFlowTest(unittest.TestCase):
         self.assertEqual(key.call_args[0][1:], ("jellyfin:8096", d))
         listing.assert_called_with("jellyfin:8096", "key")
         self.assertEqual(add.call_args[0][1:], ("jellyfin:8096", "key", "Papi"))
+
+
+class ServeFileTest(unittest.TestCase):
+    def test_state_holds_the_serve_file(self):
+        from installer.compose import SERVE_CONFIG
+        from installer.docker import RESTORED_STATE
+        with tempfile.TemporaryDirectory() as d:
+            flow._write_state(settings(), d, "/srv/arr", False)
+            with open(os.path.join(d, flow.SERVE_FILE), encoding="utf-8") as f:
+                self.assertEqual(json.load(f), SERVE_CONFIG)
+        self.assertIn(flow.SERVE_FILE, RESTORED_STATE)  # a restored stack with Internet access must find it
+
+
+class FunnelUrlTest(unittest.TestCase):
+    def run_url(self, status_out, **kw):
+        class Dk(FakeDocker):
+            def compose(self, state_dir, *args, timeout=None):
+                if args[-2:] == ("status", "--json"):
+                    return SimpleNamespace(stdout=status_out)
+                return super().compose(state_dir, *args, timeout=timeout)
+        with tempfile.TemporaryDirectory() as d:
+            flow._write_state(settings(**kw), d, "/srv/arr", False)
+            return flow.funnel_url(d, dk=Dk())
+
+    def test_on_and_allowed(self):
+        out = '{"Self": {"DNSName": "plaid.t.ts.net.", "CapMap": {"https": null, "funnel": null}}}'
+        self.assertEqual(self.run_url(out, tailscale_key="k", internet_access=True), "https://plaid.t.ts.net")
+
+    def test_off_or_refused(self):
+        out = '{"Self": {"DNSName": "plaid.t.ts.net.", "CapMap": {"https": null}}}'
+        self.assertIsNone(self.run_url(out, tailscale_key="k", internet_access=True))
+        self.assertIsNone(self.run_url("{}", tailscale_key="k"))

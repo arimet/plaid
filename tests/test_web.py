@@ -1169,3 +1169,38 @@ class PeopleWebTest(WebTest):
         status, _, html = self.get("/people")
         self.assertEqual(status, 200)
         self.assertIn("Plaid n’a pas pu se connecter à Jellyfin", html)
+
+
+class InternetWebTest(PeopleWebTest):
+    def flow_for(self, **kw):
+        from dataclasses import replace
+        flow = PeopleFlow()
+        flow.installed = replace(flow.installed, **kw)
+        flow.apply_state = {"state": "idle", "events": []}
+        flow.started = None
+        return flow
+
+    def test_linux_with_tailscale_has_the_switch(self):
+        self.open(self.flow_for(tailscale_key="tskey-a"))
+        html = self.get("/remote")[2]
+        self.assertIn('action="/remote/internet"', html)
+        self.assertIn("visible par tout Internet", html)
+
+    def test_switching_on_starts_the_change(self):
+        flow = self.flow_for(tailscale_key="tskey-a")
+        self.open(flow)
+        status, headers, _ = self.post("/remote/internet", "on=1")
+        self.assertEqual((status, headers["Location"]), (303, "/settings/progress"))
+        self.assertTrue(flow.started.internet_access)
+        self.assertEqual(flow.started.vpn_provider, flow.installed.vpn_provider)  # nothing else moves
+
+    def test_without_tailscale_there_is_no_switch(self):
+        self.open(self.flow_for())
+        self.assertNotIn('action="/remote/internet"', self.get("/remote")[2])
+        self.assertEqual(self.post("/remote/internet", "on=1")[0], 409)
+
+    def test_a_desktop_gets_the_command(self):
+        self.open(self.flow_for(platform="mac"))
+        html = self.get("/remote")[2]
+        self.assertIn("tailscale funnel --bg 8096", html)
+        self.assertNotIn('action="/remote/internet"', html)

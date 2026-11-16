@@ -169,3 +169,16 @@ class InviteTest(unittest.TestCase):
     def test_internet_address(self):
         text = people.invite_text("en", owner(lang="en"), "192.168.1.10", "Gran", "pw", "https://plaid.tail1.ts.net")
         self.assertIn("https://plaid.tail1.ts.net", text)
+
+
+class FunnelStatusTest(unittest.TestCase):
+    def test_ready(self):
+        out = '{"Self": {"DNSName": "plaid.tail1234.ts.net.", "CapMap": {"https": null, "funnel": null}}}'
+        self.assertEqual(people.funnel_status(out), (True, "https://plaid.tail1234.ts.net"))
+
+    def test_not_allowed(self):
+        out = '{"Self": {"DNSName": "plaid.tail1234.ts.net.", "CapMap": {"https": null}}}'
+        self.assertEqual(people.funnel_status(out), (False, "https://plaid.tail1234.ts.net"))
+
+    def test_unreadable(self):
+        self.assertEqual(people.funnel_status("Logged out."), (False, None))
