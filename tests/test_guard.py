@@ -294,3 +294,14 @@ class VpnDownTimeTest(unittest.TestCase):
         dk, fl = self.down()
         fl.key_days = 340
         self.assertEqual(guard.cycle(dk, fl, "/state")["vpn_key_days"], 340)
+
+    def test_a_broken_key_file_still_saves_the_status(self):
+        dk, fl = self.down()
+
+        def broken(s, state_dir):
+            raise AttributeError("'list' object has no attribute 'get'")
+        fl.vpn_key_days = broken
+        with mock.patch("sys.stderr"):
+            status = guard.cycle(dk, fl, "/state")
+        self.assertIsNone(status["vpn_key_days"])
+        self.assertEqual(fl.saved[-1], status)

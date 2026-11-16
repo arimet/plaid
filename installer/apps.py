@@ -291,9 +291,12 @@ def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log,
     existing = {lib["Name"] for lib in call("GET", base + "/Library/VirtualFolders", headers=auth)}
     names = LIBRARY_NAMES[s.lang]
     shows = None
-    if names[1] not in existing and _bonus("jellyfin plugins", lambda: jellyfin_plugins(base, auth)):
-        shows = _bonus("jellyfin thetvdb", lambda: tvdb_first(
-            call("GET", base + "/Libraries/AvailableOptions?libraryContentType=tvshows", headers=auth)))
+    if names[1] not in existing:
+        tvdb = _bonus("jellyfin plugins", lambda: jellyfin_plugins(base, auth))
+        wait_for(base + "/System/Info/Public")  # a restart slower than the plugin step's wait: the libraries need it
+        if tvdb:
+            shows = _bonus("jellyfin thetvdb", lambda: tvdb_first(
+                call("GET", base + "/Libraries/AvailableOptions?libraryContentType=tvshows", headers=auth)))
     for name, kind, path in ((names[0], "movies", MOVIES), (names[1], "tvshows", TV)):
         if name not in existing:
             query = urllib.parse.urlencode({"name": name, "collectionType": kind, "refreshLibrary": "false"})
@@ -305,8 +308,11 @@ def configure_jellyfin(s: Settings, host: str, has_dri: bool, log: Log,
     if has_dri:
         encoding = call("GET", base + "/System/Configuration/encoding", headers=auth)
         encoding.update(HardwareAccelerationType="vaapi", VaapiDevice="/dev/dri/renderD128")
-        encoding.update(_bonus("jellyfin decoders", lambda: decoding_options(compose_out(*VAINFO))) or {})
         call("POST", base + "/System/Configuration/encoding", encoding, auth)
+        decoders = _bonus("jellyfin decoders", lambda: decoding_options(compose_out(*VAINFO)))
+        if decoders:  # on their own: a field a newer Jellyfin refuses must not fail the install
+            _bonus("jellyfin decoders", lambda: call("POST", base + "/System/Configuration/encoding",
+                                                     {**encoding, **decoders}, auth))
 
         def trickplay():
             config = call("GET", base + "/System/Configuration", headers=auth)

@@ -588,11 +588,13 @@ class DecodingTest(unittest.TestCase):
         self.assertEqual(apps.decoding_options(""), {})
         self.assertEqual(apps.decoding_options("vainfo: error: failed to initialize display"), {})
 
-    def jellyfin_with_gpu(self, compose_out):
+    def jellyfin_with_gpu(self, compose_out, refuse_decoders=False):
         posted = {}
 
         def fake_call(method, url, body=None, headers=None, form=False):
             path = url.split("8096", 1)[1]
+            if refuse_decoders and method == "POST" and "HardwareDecodingCodecs" in (body or {}):
+                raise apps.HttpError(400, url, "a newer Jellyfin refuses a field")
             if path == "/System/Info/Public":
                 return {"StartupWizardCompleted": True}
             if path == "/Users/AuthenticateByName":
@@ -618,6 +620,10 @@ class DecodingTest(unittest.TestCase):
         self.assertEqual(posted["/System/Configuration/encoding"]["HardwareAccelerationType"], "vaapi")
         self.assertEqual(posted["/System/Configuration/encoding"]["HardwareDecodingCodecs"], ["h264", "hevc", "vp9", "av1"])
         self.assertTrue(posted["/System/Configuration"]["TrickplayOptions"]["EnableHwAcceleration"])
+
+    def test_refused_decoders_do_not_fail_the_install(self):
+        encoding = self.jellyfin_with_gpu(lambda *args: VAINFO_INTEL, refuse_decoders=True)["/System/Configuration/encoding"]
+        self.assertEqual(encoding["HardwareAccelerationType"], "vaapi")
 
     def test_vainfo_failure_keeps_vaapi(self):
         def broken(*args):
@@ -680,3 +686,31 @@ class JellyfinPluginsTest(unittest.TestCase):
         self.assertEqual(options["Series"]["ImageFetchers"], ["TheTVDB", "TheMovieDb"])
         self.assertEqual(options["Episode"]["MetadataFetchers"], ["TheTVDB", "TheMovieDb"])
         self.assertEqual(options["Episode"]["ImageFetcherOrder"], ["Screen Grabber"])
+
+
+class JellyfinRestartTest(unittest.TestCase):
+    def test_libraries_wait_for_jellyfin_after_a_failed_plugin_step(self):
+        events = []
+
+        def fake_call(method, url, body=None, headers=None, form=False):
+            path = url.split("8096", 1)[1]
+            events.append((method, path))
+            if path == "/System/Info/Public":
+                return {"StartupWizardCompleted": True}
+            if path == "/Users/AuthenticateByName":
+                return {"AccessToken": "t", "User": {"Id": "u"}}
+            if path == "/Library/VirtualFolders" and method == "GET":
+                return []
+            if path == "/Auth/Keys":
+                return {"Items": [{"AppName": "arr", "AccessToken": "k"}]}
+            return None
+
+        def restarting(base, auth):
+            raise ConnectionRefusedError("jellyfin restarting")
+        with mock.patch("installer.apps.call", fake_call), mock.patch("installer.apps.jellyfin_plugins", restarting), \
+                mock.patch("installer.apps.wait_for", lambda url, **kw: events.append(("wait", url))), \
+                mock.patch("sys.stderr"):
+            apps.configure_jellyfin(chosen(), "jellyfin:8096", False, lambda _: None, None)
+        first_library = events.index(("POST", next(p for m, p in events if m == "POST" and p.startswith("/Library/VirtualFolders"))))
+        waits = [i for i, e in enumerate(events) if e == ("wait", "http://jellyfin:8096/System/Info/Public")]
+        self.assertTrue(any(i < first_library for i in waits[1:]), events)  # the first wait is the startup one

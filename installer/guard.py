@@ -96,9 +96,18 @@ def _cycle(dk, fl, state_dir: str) -> dict | None:
         if time.time() - since >= STUCK:
             vpn = "stuck"
     status = {"disk": disk, "vpn": vpn, "apps": app_states(containers), "free": free, "total": total,
-              "vpn_down_since": since, "vpn_key_days": fl.vpn_key_days(s, state_dir)}
+              "vpn_down_since": since, "vpn_key_days": _key_days(fl, s, state_dir)}
     fl.save_guard_status(status, state_dir)
     return status
+
+
+def _key_days(fl, s, state_dir: str) -> int | None:
+    """A reminder: a broken key file must never stop the round that saves the disk's and the VPN's alerts."""
+    try:
+        return fl.vpn_key_days(s, state_dir)
+    except Exception as e:  # noqa: BLE001
+        print(f"guard: VPN key age unknown: {e}", file=sys.stderr)
+        return None
 
 
 def _loop(interval: int) -> None:
