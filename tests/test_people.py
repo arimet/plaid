@@ -43,6 +43,8 @@ class FakeJellyfin:
         assert headers == {"Authorization": 'MediaBrowser Token="key-plaid"'}, headers
         if method != "GET":
             self.writes.append((method, path))
+        if path == "/System/Info":
+            return {}
         if path == "/Users" and method == "GET":
             return list(self.users.values())
         if path == "/Users/New":
@@ -187,3 +189,18 @@ class FunnelStatusTest(unittest.TestCase):
 
     def test_unreadable(self):
         self.assertEqual(people.funnel_status("Logged out."), (False, None))
+
+
+class StaleKeyTest(unittest.TestCase):
+    def test_a_key_jellyfin_no_longer_knows_is_made_again(self):
+        jf = FakeJellyfin(keys=["plaid"])
+        real = jf.__call__
+
+        def call(method, url, body=None, headers=None, form=False):
+            if headers == {"Authorization": 'MediaBrowser Token="old-key"'}:
+                raise apps.HttpError(401, url, "")
+            return real(method, url, body, headers, form)
+        with tempfile.TemporaryDirectory() as d, mock.patch("installer.apps.call", call):
+            open(os.path.join(d, people.KEY_FILE), "w").write("old-key")
+            self.assertEqual(people.api_key(owner(), HOST, d), "key-plaid")
+            self.assertEqual(open(os.path.join(d, people.KEY_FILE)).read(), "key-plaid")

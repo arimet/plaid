@@ -179,3 +179,13 @@ class CustomFolderGoneTest(BackupTest):
         dk.backup_folder_state = lambda dest: "empty"
         self.assertTrue(backup.run(self.report, dk=dk, state_dir=self.dir, now=lambda: NIGHT))
         self.assertEqual(backup.status(self.dir)["dir"], "/mnt/usb")
+
+
+class ExternalVolumeTest(unittest.TestCase):
+    def test_plaids_own_volume_is_not_a_stack_volume(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as d:
+            flow._write_state(settings(tailscale_key="k", internet_access=True), d, "/srv/arr", False)
+            _, volumes = backup._stack(d, SimpleNamespace(PROJECT="plaid"))
+        self.assertNotIn("plaid_plaid-state", volumes)
+        self.assertIn("plaid_jellyfin-config", volumes)

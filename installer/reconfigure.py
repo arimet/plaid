@@ -212,6 +212,8 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
             if step == "step_folder":
                 dk.ensure_data_dirs(src_new, new.puid, new.pgid, create=False)
             elif step == "step_compose":
+                if chg.get("internet") == "add":  # before the new compose can make the sign-in page public
+                    ops.protect_owner(old)
                 if chg.get("tailscale") == "remove":  # off the user's tailnet before its state goes
                     logout()
                 # The apps still have the old account until step_account: keep signing in with it meanwhile.
@@ -220,6 +222,8 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
                 dk.compose(state_dir, "up", "-d", "--remove-orphans")
                 if chg.get("tailscale") == "remove":
                     dk.remove("volume", f"{docker.PROJECT}_tailscale-state")
+                if chg.get("internet") == "remove":
+                    _serve_reset(dk, state_dir)
             elif step == "step_vpn":
                 _vpn_up(dk, state_dir, vpn_wait)
             elif step == "step_download_client":
@@ -231,7 +235,6 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
                 dk.remove("volume", f"{docker.PROJECT}_tailscale-state")
                 dk.compose(state_dir, "up", "-d", "tailscale")
             elif step == "step_funnel":
-                ops.protect_owner(old)  # before the sign-in page goes public; the account changes last
                 _funnel_up(dk, state_dir)
             elif step == "step_rescan":
                 # Best effort: a scan that fails (Jellyfin still starting, password changed by hand) must not
@@ -248,7 +251,8 @@ def apply(old: Settings, new: Settings, current: dict[str, str], report: flow.Re
             elif step == "step_metadata":
                 ops.metadata(old, new)
     except Exception as e:  # noqa: BLE001 - shown with its detail; the stack goes back to how it was
-        arr_ids = _rollback(old, started, dk, state_dir, has_dri, ops, vpn_wait, arr_ids)
+        arr_ids = _rollback(old, started, dk, state_dir, has_dri, ops, vpn_wait, arr_ids,
+                            funnel_added=chg.get("internet") == "add")
         error = "err_funnel_not_allowed" if isinstance(e, FunnelRefused) else "err_apply_failed"
         report(Progress(step, error=error, detail=str(e)))
         return None
@@ -278,6 +282,20 @@ class FunnelRefused(Exception):
     """The tailnet does not allow it yet: HTTPS or the funnel attribute is off in the Tailscale console."""
 
 
+def _serve_reset(dk, state_dir: str) -> None:
+    """tailscaled keeps the serve config in its own state: a container recreated without TS_SERVE_CONFIG would go on
+    serving Jellyfin to the Internet. Retried while the container comes back."""
+    deadline = time.time() + FUNNEL_WAIT
+    while True:
+        try:
+            dk.compose(state_dir, "exec", "-T", "tailscale", "tailscale", "serve", "reset")
+            return
+        except DockerError:
+            if time.time() >= deadline:
+                raise
+            time.sleep(3)
+
+
 def _funnel_up(dk, state_dir: str) -> None:
     deadline = time.time() + FUNNEL_WAIT
     while True:
@@ -300,7 +318,7 @@ def _vpn_up(dk, state_dir: str, vpn_wait: int) -> None:
 
 
 def _rollback(old: Settings, started: list[str], dk, state_dir: str, has_dri: bool, ops, vpn_wait: int,
-              arr_ids: dict) -> dict:
+              arr_ids: dict, funnel_added: bool = False) -> dict:
     """Best effort: the error the user sees is the one that stopped the change, not one from here. Returns the
     profile IDs Plaid now has in Radarr/Sonarr: kept even when the old choices were never made, so a new try
     updates those profiles instead of making them twice."""
@@ -316,6 +334,8 @@ def _rollback(old: Settings, started: list[str], dk, state_dir: str, has_dri: bo
     flow._write_state(replace(old, arr_ids=arr_ids), state_dir, dk.host_path(old.data_dir, old.platform), has_dri)
     if "step_compose" in started:
         _try(lambda: dk.compose(state_dir, "up", "-d", "--remove-orphans"))
+        if funnel_added:  # a Funnel turned on, then refused: closed again
+            _try(lambda: _serve_reset(dk, state_dir))
         if old.vpn_provider:
             _try(lambda: _vpn_up(dk, state_dir, vpn_wait))
     if "step_download_client" in started:

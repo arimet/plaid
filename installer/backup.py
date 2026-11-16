@@ -60,7 +60,9 @@ def _stack(state_dir: str, dk) -> tuple[list[str], list[str]]:
     with open(os.path.join(state_dir, "compose.json"), encoding="utf-8") as f:
         spec = json.load(f)
     return ([svc for svc in spec["services"] if svc in SERVICES],
-            [f"{dk.PROJECT}_{v}" for v in spec.get("volumes", {}) if v != "tailscale-state"])
+            # Not Plaid's own state volume either (external, mounted for Tailscale Funnel): settings are saved apart.
+            [f"{dk.PROJECT}_{v}" for v, conf in spec.get("volumes", {}).items()
+             if v != "tailscale-state" and not (conf or {}).get("external")])
 
 
 def _start_again(s: Settings, dk, state_dir: str) -> None:

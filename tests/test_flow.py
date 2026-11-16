@@ -542,3 +542,15 @@ class FunnelUrlTest(unittest.TestCase):
         out = '{"Self": {"DNSName": "plaid.t.ts.net.", "CapMap": {"https": null}}}'
         self.assertIsNone(self.run_url(out, tailscale_key="k", internet_access=True))
         self.assertIsNone(self.run_url("{}", tailscale_key="k"))
+
+
+class OwnerProtectedAtStartTest(unittest.TestCase):
+    def test_panel_start_protects_the_owner_everywhere(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d, mock.patch("installer.apps.seerr_owner_only"), \
+                mock.patch("installer.people.api_key", return_value="key"), \
+                mock.patch("installer.people.protect_owner") as protect:
+            flow._write_state(settings(platform="mac"), d, "/srv/arr", False)
+            open(os.path.join(d, "complete"), "w").close()
+            flow.seerr_owner_only(d)
+        protect.assert_called_once_with("jellyfin:8096", "key", "admin")

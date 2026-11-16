@@ -568,3 +568,28 @@ class InternetAccessTest(ApplyTest):
         self.assertFalse(self.saved().internet_access)
         self.assertNotIn("TS_SERVE_CONFIG", self.compose_json()["services"]["tailscale"]["environment"])
         self.assertEqual((self.events[-1].error, self.events[-1].step), ("err_funnel_not_allowed", "step_funnel"))
+
+
+class FunnelCloseTest(ApplyTest):
+    def execs(self):
+        return [c for c in self.composes() if c[:4] == ("exec", "-T", "tailscale", "tailscale")]
+
+    def test_turning_off_resets_tailscales_stored_serve_config(self):
+        on, off = settings(tailscale_key="tskey-a", internet_access=True), settings(tailscale_key="tskey-a")
+        self.assertEqual(self.run_apply(on, off, dk=TailscaleDocker(TS_READY)), [])
+        self.assertIn(("exec", "-T", "tailscale", "tailscale", "serve", "reset"), self.execs())
+
+    def test_a_refused_funnel_is_reset_too(self):
+        with mock.patch("installer.reconfigure.FUNNEL_WAIT", 0):
+            self.run_apply(settings(tailscale_key="tskey-a"), settings(tailscale_key="tskey-a", internet_access=True),
+                           dk=TailscaleDocker(TS_NO_FUNNEL))
+        self.assertIn(("exec", "-T", "tailscale", "tailscale", "serve", "reset"), self.execs())
+
+    def test_owner_is_protected_before_the_page_can_go_public(self):
+        old = settings(tailscale_key="tskey-a")
+        dk = TailscaleDocker(TS_READY)
+        order = []
+        ops = Ops()
+        ops.protect_owner = lambda s: order.append(("protect", list(dk.calls)))
+        self.run_apply(old, settings(tailscale_key="tskey-a", internet_access=True), ops=ops, dk=dk)
+        self.assertEqual(order[0][1], [])  # nothing recreated yet

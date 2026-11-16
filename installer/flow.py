@@ -113,6 +113,10 @@ def seerr_owner_only(state_dir: str = STATE_DIR) -> None:
     s = load_settings(state_dir)
     if s is not None and is_complete(state_dir):
         apps._bonus("seerr owner only", lambda: apps.seerr_owner_only(s, f"seerr:{PORTS['seerr']}"))
+        # Jellyfin never locks an administrator by default; the owner gets the same 5 tries as the people they add,
+        # on every platform (a desktop opens Funnel with its own Tailscale app, out of Plaid's sight).
+        apps._bonus("owner lockout", lambda: people.protect_owner(JELLYFIN, people.api_key(s, JELLYFIN, state_dir),
+                                                                  s.username))
 
 
 def reattach(dk=docker, state_dir: str = STATE_DIR) -> None:

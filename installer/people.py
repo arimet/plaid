@@ -33,9 +33,14 @@ def api_key(s: Settings, host: str, state_dir: str) -> str:
         with open(path, encoding="utf-8") as f:
             key = f.read().strip()
         if key:
+            # A restored backup brings back a Jellyfin without this key, or the owner deleted it in the dashboard.
+            apps.call("GET", f"http://{host}/System/Info", headers=_auth(key))
             return key
     except OSError:
         pass
+    except apps.HttpError as e:
+        if e.status not in (401, 403):
+            raise
     try:
         auth, _ = apps._jellyfin_auth(host, s.username, s.password)
     except apps.HttpError as e:
