@@ -474,3 +474,24 @@ class VpnKeyAgeTest(unittest.TestCase):
             flow.vpn_key_renewed(settings(), d)
             self.assertEqual(flow.vpn_key_days(settings(), d), 0)
             self.assertEqual(flow.guard_status(d)["vpn_key_days"], 0)
+
+
+class SeerrOwnerOnlyTest(unittest.TestCase):
+    def test_runs_on_a_finished_install_only(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d, mock.patch("installer.apps.seerr_owner_only") as close:
+            flow.seerr_owner_only(d)
+            close.assert_not_called()
+            flow._write_state(settings(), d, "/srv/arr", False)
+            open(os.path.join(d, "complete"), "w").close()
+            flow.seerr_owner_only(d)
+            close.assert_called_once()
+            self.assertEqual(close.call_args[0][1], "seerr:5055")
+
+    def test_a_failure_is_only_logged(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d, mock.patch("installer.apps.seerr_owner_only", side_effect=OSError("down")), \
+                mock.patch("sys.stderr"):
+            flow._write_state(settings(), d, "/srv/arr", False)
+            open(os.path.join(d, "complete"), "w").close()
+            flow.seerr_owner_only(d)

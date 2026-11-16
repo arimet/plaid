@@ -586,6 +586,14 @@ def set_seerr_lang(s: Settings, login: Settings, host: str) -> None:
     call("POST", base + "/settings/main", _seerr_lang(s))
 
 
+def seerr_owner_only(s: Settings, host: str) -> None:
+    """Installs made before the people page: their Jellyfin accounts must not sign in to Seerr."""
+    base = f"http://{host}/api/v1"
+    wait_for(base + "/status")
+    call("POST", base + "/auth/jellyfin", {"username": s.username, "password": s.password})
+    call("POST", base + "/settings/main", {"newPlexLogin": False})
+
+
 def set_metadata_lang(s: Settings, login: Settings, host: str) -> None:
     """Jellyfin's fiches in the chosen language: server, each library, then a full refresh in the background."""
     base = f"http://{host}"
@@ -616,7 +624,9 @@ def configure_seerr(s: Settings, host: str, radarr: Arr, sonarr: Arr, log: Log, 
         login.update(hostname="jellyfin", port=8096, useSsl=False, urlBase="", serverType=2,
                      email=f"{s.username}@localhost")
     call("POST", base + "/auth/jellyfin", login)
-    call("POST", base + "/settings/main", _seerr_lang(s))  # the descriptions' language, as Jellyfin's
+    # The descriptions' language, as Jellyfin's; and only accounts Seerr knows sign in: the people the owner adds
+    # in Jellyfin only watch.
+    call("POST", base + "/settings/main", {**_seerr_lang(s), "newPlexLogin": False})
 
     call("POST", base + "/settings/jellyfin/library/sync")
     for lib in call("GET", base + "/settings/jellyfin/library"):

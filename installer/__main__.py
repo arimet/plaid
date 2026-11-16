@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import threading
 
 from installer import cli, flow, guard, tui, web
 
@@ -50,6 +51,7 @@ def main(argv=None) -> int:
         return cli.run_uninstall(input, print, flow, lang, path, size)
     flow.reattach()
     guard.start()  # the assistant container is the one Docker restarts at boot: it watches the disk and the VPN
+    threading.Thread(target=flow.seerr_owner_only, daemon=True, name="seerr").start()  # Seerr may still be starting
     web.serve(args.port)
     return 0
 

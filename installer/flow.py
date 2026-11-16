@@ -57,6 +57,14 @@ def _prowlarr(dk, state_dir: str):
                     lambda *args: dk.compose(state_dir, *args).stdout)
 
 
+def seerr_owner_only(state_dir: str = STATE_DIR) -> None:
+    """At each start of the panel: stacks installed before the people page let any Jellyfin account into Seerr.
+    Setting it again changes nothing, so a restored backup is caught up the same way."""
+    s = load_settings(state_dir)
+    if s is not None and is_complete(state_dir):
+        apps._bonus("seerr owner only", lambda: apps.seerr_owner_only(s, f"seerr:{PORTS['seerr']}"))
+
+
 def reattach(dk=docker, state_dir: str = STATE_DIR) -> None:
     """A recreated assistant (new image) starts outside the stack network; the panel needs Prowlarr."""
     if load_settings(state_dir) is None:

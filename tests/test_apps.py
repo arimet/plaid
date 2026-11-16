@@ -462,6 +462,13 @@ class SeerrLanguageTest(MediaAppsTest):
                                                             arr("sonarr"), lambda *a: None, {}))
         main = next(c for c in self.seen if c[1].endswith("/settings/main"))
         self.assertEqual(main[2]["locale"], "it")
+        self.assertIs(main[2]["newPlexLogin"], False)  # Seerr is the owner's: the people who watch cannot sign in
+
+    def test_seerr_owner_only(self):
+        self.run_patched(self.fake_call(), lambda: apps.seerr_owner_only(acct(username="zoe", password="pw"), "seerr:5055"))
+        login = next(c for c in self.seen if c[1].endswith("/auth/jellyfin"))
+        self.assertEqual(login[2], {"username": "zoe", "password": "pw"})
+        self.assertIn(("POST", "http://seerr:5055/api/v1/settings/main", {"newPlexLogin": False}), self.seen)
 
 
 class DeleteErrorTest(unittest.TestCase):
