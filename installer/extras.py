@@ -33,6 +33,22 @@ CATALOG = [
     {"id": "genremapper", "packages": [("Genre Mapper", _REPO["Genre Mapper"])]},
 ]
 BY_ID = {x["id"]: x for x in CATALOG}
+# Jellyfin Enhanced features turned on when Plaid installs it: its pages (in the side menu, through Plugin Pages) and
+# what needs no outside account. Left off: links to Sonarr and Radarr (Plaid cannot know the address the browser
+# uses), automatic requests, 4K, its theme picker, maintenance and dev modes, analytics.
+ENHANCED_FEATURES = (
+    "CalendarPageEnabled", "CalendarUsePluginPages", "CalendarHighlightFavorites", "CalendarHighlightWatchedSeries",
+    "DownloadsPageEnabled", "DownloadsUsePluginPages", "DownloadsPageShowIssues",
+    "RecommendationsPageEnabled", "RecommendationsUsePluginPages", "HiddenContentEnabled", "HiddenContentUsePluginPages",
+    "CatchUpEnabled", "CatchUpUsePluginPages", "ActivityFeedEnabled", "ActivityFeedUsePluginPages",
+    "ActiveStreamsEnabled", "BookmarksUsePluginPages",
+    "JellyseerrEnabled", "JellyseerrShowReportButton", "JellyseerrShowIssueIndicator", "JellyseerrShowAdvanced",
+    "TriggerSeerrScanOnItemAdded", "AddRequestedMediaToWatchlist",
+    "QualityTagsEnabled", "GenreTagsEnabled", "LanguageTagsEnabled", "RatingTagsEnabled", "AgeRatingTagsEnabled",
+    "ShowFileSizes", "ShowWatchProgress", "ShowAwards", "ShowUserReviews", "LetterboxdEnabled", "MetadataIconsEnabled",
+    "ColoredRatingsEnabled", "ColoredActivityIconsEnabled", "PluginIconsEnabled", "EnableLoginImage",
+    "RemoveContinueWatchingEnabled", "LongPress2xEnabled", "SubtitleSyncButtonEnabled", "SpoilerBlurEnabled",
+)
 
 
 def packages_for(chosen: list[str]) -> set[str]:
@@ -84,9 +100,28 @@ def _jellyfin(s, state_dir: str, host: str):
     return lambda method, path, body=None: apps.call(method, f"http://{host}{path}", body, people._auth(key))
 
 
-def apply(s, chosen: list[str], report, state_dir: str, host: str = "jellyfin:8096", wait: int = WAIT) -> list[str]:
+def setup_enhanced(jf, compose_out) -> None:
+    """Turns Jellyfin Enhanced's features on and wires it to Seerr, Sonarr and Radarr, which Jellyfin reaches on the
+    stack's network. The keys are read in each app's own files."""
+    from installer.compose import PORTS
+    plugin = next(p for p in jf("GET", "/Plugins") if p["Name"] == "Jellyfin Enhanced")
+    path = f"/Plugins/{plugin['Id']}/Configuration"
+    config = jf("GET", path)
+    config.update(dict.fromkeys(ENHANCED_FEATURES, True))
+    for app in ("sonarr", "radarr"):
+        xml = compose_out("exec", "-T", app, "cat", "/config/config.xml")
+        config[f"{app.capitalize()}Url"] = f"http://{app}:{PORTS[app]}"
+        config[f"{app.capitalize()}ApiKey"] = xml.split("<ApiKey>", 1)[1].split("</ApiKey>", 1)[0]
+    seerr = json.loads(compose_out("exec", "-T", "seerr", "cat", "/app/config/settings.json"))
+    config.update(JellyseerrUrls=f"http://seerr:{PORTS['seerr']}", JellyseerrApiKey=seerr["main"]["apiKey"])
+    jf("POST", path, config)
+
+
+def apply(s, chosen: list[str], report, state_dir: str, host: str = "jellyfin:8096", wait: int = WAIT,
+          compose_out=None) -> list[str]:
     """Installs what is ticked and removes what was unticked. Returns the ticked extras that could not be installed;
-    the others are done. Plaid only ever removes the packages it installed itself."""
+    the others are done. Plaid only ever removes the packages it installed itself. Jellyfin Enhanced gets its
+    features turned on once, when Plaid installs it: the owner's later choices in its settings stay."""
     import time
     from installer import apps
     from installer.flow import Progress
@@ -138,6 +173,11 @@ def apply(s, chosen: list[str], report, state_dir: str, host: str = "jellyfin:80
     if themed != (css.get("CustomCss") or ""):
         jf("POST", "/System/Configuration/branding", {**css, "CustomCss": themed})
     failed = [x for x in chosen if not {n for n, _ in BY_ID[x]["packages"]} <= active]
+    if "Jellyfin Enhanced" in tried and "enhanced" not in failed:
+        if compose_out is None:
+            from installer import docker
+            compose_out = lambda *args: docker.compose(state_dir, *args).stdout  # noqa: E731
+        apps._bonus("Jellyfin Enhanced settings", lambda: setup_enhanced(jf, compose_out))
     state["chosen"] = [x for x in chosen if x not in failed]
     state["removed_for_update"] = [x for x in state["removed_for_update"] if x not in state["chosen"]]
     save_state(state, state_dir)

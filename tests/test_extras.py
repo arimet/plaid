@@ -43,6 +43,29 @@ class ThemeTest(unittest.TestCase):
         self.assertEqual(extras.with_theme("", False), "")
 
 
+class EnhancedTest(unittest.TestCase):
+    def test_a_fresh_install_turns_its_pages_on_and_wires_the_apps(self):
+        jf = FakeJellyfin()
+        ApplyTest.run_apply(self, jf, ["enhanced"])
+        c = jf.enhanced
+        self.assertTrue(all(c[k] for k in extras.ENHANCED_FEATURES))
+        self.assertFalse(c["AutoSkipIntro"])  # the rest stays as it was
+        self.assertEqual((c["SonarrUrl"], c["SonarrApiKey"]), ("http://sonarr:8989", "sonarr-key"))
+        self.assertEqual((c["RadarrUrl"], c["RadarrApiKey"]), ("http://radarr:7878", "radarr-key"))
+        self.assertEqual((c["JellyseerrUrls"], c["JellyseerrApiKey"]), ("http://seerr:5055", "seerr-key"))
+
+    def test_the_owners_own_choices_survive_the_next_apply(self):
+        jf = FakeJellyfin(plugins=["Jellyfin Enhanced", "Custom Tabs", "Plugin Pages", "File Transformation"])
+        ApplyTest.run_apply(self, jf, ["enhanced"])
+        self.assertFalse(jf.enhanced["CalendarPageEnabled"])
+
+    def test_a_missing_app_key_does_not_fail_the_extra(self):
+        jf = FakeJellyfin()
+        with mock.patch("tests.test_extras.fake_compose", side_effect=OSError("seerr down")):
+            failed, _ = ApplyTest.run_apply(self, jf, ["enhanced"])
+        self.assertEqual(failed, [])
+
+
 class StateTest(unittest.TestCase):
     def test_empty_state_and_round_trip(self):
         with tempfile.TemporaryDirectory() as d:
@@ -61,6 +84,7 @@ class FakeJellyfin:
         self.plugins = {n: "Active" for n in plugins}
         self.missing, self.down = set(missing), down
         self.branding = {"SplashscreenEnabled": True, **({"CustomCss": css} if css is not None else {})}
+        self.enhanced = {"CalendarPageEnabled": False, "AutoSkipIntro": False}
         self.calls = []
 
     def __call__(self, method, url, body=None, headers=None, form=False):
@@ -87,6 +111,10 @@ class FakeJellyfin:
             plugin_id = path.split("/")[2]
             self.plugins = {n: st for n, st in self.plugins.items() if n.lower().replace(" ", "") != plugin_id}
             return None
+        if path == "/Plugins/jellyfinenhanced/Configuration":
+            if method == "POST":
+                self.enhanced = body
+            return dict(self.enhanced)
         if path == "/System/Restart":
             self.plugins = {n: "Active" for n in self.plugins}
             return None
@@ -97,6 +125,13 @@ class FakeJellyfin:
         raise AssertionError(path)
 
 
+def fake_compose(*args):
+    """`docker compose exec -T <service> cat <file>` as the stack's apps answer it."""
+    return {"sonarr": "<Config><ApiKey>sonarr-key</ApiKey></Config>",
+            "radarr": "<Config><ApiKey>radarr-key</ApiKey></Config>",
+            "seerr": json.dumps({"main": {"apiKey": "seerr-key"}, "radarr": [{"apiKey": "radarr-key"}]})}[args[2]]
+
+
 class ApplyTest(unittest.TestCase):
     def run_apply(self, jf, chosen, state=None):
         self.events = []
@@ -104,7 +139,7 @@ class ApplyTest(unittest.TestCase):
             open(os.path.join(d, "jellyfin-key"), "w").write("key")
             if state:
                 extras.save_state(state, d)
-            failed = extras.apply(owner(), chosen, self.events.append, d, host=HOST)
+            failed = extras.apply(owner(), chosen, self.events.append, d, host=HOST, compose_out=fake_compose)
             return failed, extras.load_state(d)
 
     def test_install_adds_missing_repositories_and_restarts(self):
